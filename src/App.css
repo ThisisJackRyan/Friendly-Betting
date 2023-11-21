@@ -1,16 +1,35 @@
 .CreateNewBet{
   margin:2em;
+  
+}
+.CreateNewBet>div{
+  border: solid black 2px;
+  border-radius: 5px;
+  padding: 1em;
+  background-color: rgb(100, 63, 128);
+  
+}
+.CreateNewBet input, .CreateNewBet textarea{
+  background-color: rgb(18, 183, 117);
 }
 
 .name{
-  gap:1em;
+  border: solid black 2px;
+  border-radius: 5px;
+  padding: 1em;
+  margin-bottom: 0.5rem;
 }
 
 .nameInput{
   padding: 1em .5em;
   width: 30em;
 }
-
+.range{
+  border: solid black 2px;
+  border-radius: 5px;
+  padding: 1em;
+  margin-top: 0.5rem;
+}
 
 .rangeLabel span{
   margin-left:1em;

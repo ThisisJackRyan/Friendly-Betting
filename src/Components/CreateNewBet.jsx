@@ -4,14 +4,14 @@
 const CreateNewBet = () => {
     return (
         <div className="CreateNewBet">
-            <form action="">
+            <div>
                 <div className="flex name">
                     <div className="nameLabel">Name: </div>
                     <textarea className="nameInput" placeholder="How many times will grandpa bring up politics this Thanksgiving"></textarea>
                 </div>
-                <div>
+                <div className="range">
                     <div className="rangeLabel">
-                        Range
+                        Range:
                     </div>
                     <div className="rangeLabel">
                     <span>Lower Bound</span>
@@ -22,7 +22,7 @@ const CreateNewBet = () => {
                         <input type="text" />
                     </div>
                 </div>
-            </form>
+            </div>
         </div>
     )
 }
