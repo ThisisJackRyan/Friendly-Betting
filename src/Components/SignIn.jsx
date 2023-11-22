@@ -1,3 +1,4 @@
+import CreateAccount from "./CreateAccount";
 
 
 
@@ -8,7 +9,7 @@ const SignIn = () => {
             <input type="text" placeholder="Email or Number" />
             <input type="password" placeholder="password" name="" id="" />
             <div>
-                <a href="">Don't have account? Create One!</a>
+                <a href={CreateAccount}>Don't have account? Create One!</a>
             </div>
         </div>
     )
