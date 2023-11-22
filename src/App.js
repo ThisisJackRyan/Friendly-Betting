@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import './App.css';
 import CreateNewBet from './Components/CreateNewBet';
+import SignIn from './Components/SignIn';
 
 
 
@@ -21,7 +22,7 @@ const [displayCreateNewButton, setDisplayCreateNewButton] = useState(false);
           
           }
           <div>
-            
+          <SignIn />
           </div>
         </div>
         <div className='x1'>

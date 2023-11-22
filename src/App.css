@@ -1,3 +1,30 @@
+.signIn{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  border: solid 2px black;
+  margin: 4rem 15rem;
+  padding:2rem ;
+}
+.signIn input{
+  padding: 1rem 0.5rem;
+  margin: 0.5rem;
+  width: 75%;
+  font-size: 1rem;
+}
+
+
+.signInLabel{
+  text-align: center;
+  border-bottom: black 2px solid;
+  padding-bottom: 0px;
+  font-size: 2rem;
+}
+
+
+
+
 .CreateNewBet{
   margin:2em;
   
@@ -6,12 +33,9 @@
   border: solid black 2px;
   border-radius: 5px;
   padding: 1em;
-  background-color: rgb(100, 63, 128);
   
 }
-.CreateNewBet input, .CreateNewBet textarea{
-  background-color: rgb(18, 183, 117);
-}
+
 
 .name{
   border: solid black 2px;
