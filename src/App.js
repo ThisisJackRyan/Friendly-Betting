@@ -6,23 +6,24 @@ import Header from './Components/Header';
 import NewBet from './Components/NewBet';
 import NotFound from './Components/NotFound';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Format from './Components/MainPages/Format';
+import Welcome from './Components/MainPages/Welcome';
+
 
 
 
 
 function App() {
 
-const [displayCreateNewButton, setDisplayCreateNewButton] = useState(false);
+  
  
     return (
       <Router>
         <Header />
         <Routes>
-          <Route path="/" element={<Format />} />
+          <Route path="/" element={<Welcome />} />
           <Route path="/SignIn" element={<SignIn />} />
           <Route path="/CreateAccount" element={<CreateAccount />} />
-          <Route path="/NewBet" element={displayCreateNewButton ? <NewBet /> : <NotFound />} />
+          <Route path="/NewBet" element={<NewBet />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>

@@ -35,6 +35,7 @@
 }
 
 .swapSignIn{
+  text-decoration: none;
   border-bottom:solid  2px;
   color: blue;
   font-size: 0.75rem;

@@ -2,7 +2,8 @@ import React from 'react';
 import SignIn from '../SignIn';
 import CreateAccount from '../CreateAccount';
 import { useState } from 'react';  
-const Format = () => {
+
+const Welcome = () => {
 
     const [signUp, setSignUp] = useState(true);
 
@@ -11,11 +12,12 @@ const Format = () => {
       }
     return (
         <div>
+            <div>Hello</div>
             {
-              signUp ? <SignIn swap = {toggleForm}/> :<CreateAccount swap = {toggleForm} />
+              //signUp ? <SignIn swap = {toggleForm}/> :<CreateAccount swap = {toggleForm} />
             }
         </div>
     );
 };
 
-export default Format;
+export default Welcome;

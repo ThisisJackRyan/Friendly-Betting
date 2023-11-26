@@ -1,4 +1,5 @@
-import { Outlet, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
+
 
 
 const Header = () => {
@@ -9,12 +10,11 @@ const Header = () => {
             </div>
             <div className="x1">Title of website</div>
             <div className="flex pages x1">
-                <div>other pages</div>
+                <Link to="/SignIn">signIn</Link>
                 <Link to="/NewBet">Create New Bet</Link>
                 {//<button onClick={props.newBet}>Create New Bet</button>
                 }
             </div>
-            <Outlet/>
         </div>
     )
 }

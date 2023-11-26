@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { auth } from "../Config/firebase-config";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { Link } from "react-router-dom";
 
 
 
-const SignIn = (props) => {
+const SignIn = () => {
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -44,7 +45,7 @@ const SignIn = (props) => {
             />
             <button onClick={singInUser}>Sign In</button>
             <div>
-                <div className="swapSignIn" onClick={props.swap}>Don't have account? Create One!</div>
+                <Link to="/CreateAccount" className="swapSignIn" >Don't have account? Create One!</Link>
             </div>
             <br />
             <br />

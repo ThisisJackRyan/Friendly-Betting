@@ -1,8 +1,9 @@
+import { Link } from "react-router-dom";
 
 
 
 
-const CreateAccount = (props) => {
+const CreateAccount = () => {
     return (
         <div className="signIn">
             <div className="signInLabel">Create Account</div>
@@ -13,7 +14,7 @@ const CreateAccount = (props) => {
             <input type="password" placeholder="confirm password" name="" id="" />
             <button>Create Account</button>
             <div>
-                <div className="swapSignIn" onClick={props.swap}>Already have account? Sign in!</div>
+                <Link to="/SignIn" className="swapSignIn" >Already have account? Sign in!</Link>
             </div>
         </div>
     )
