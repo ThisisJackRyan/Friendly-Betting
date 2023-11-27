@@ -1,14 +1,24 @@
-
+import AddFriend from "./AddFreind"
+import React, { useState } from 'react';
 
 
 const Players = () => {
+
+    const [displayPlayers,setDisplayPlayers] = useState(false)
+    
     return (
         <div>
             <div>add friends</div>
             <div>Profile ID</div>
             <div>Number</div>
             <div>
-            <button>Add Friend</button>
+            {
+              displayPlayers ?
+              <AddFriend />
+              :
+              <button onClick={() => {setDisplayPlayers((current) => !current)}} >Add Friend</button>
+            }
+            
             </div>
         </div>
     )
