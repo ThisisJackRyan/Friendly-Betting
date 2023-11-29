@@ -112,13 +112,10 @@ body{
 
 .CreateNewBet{
   margin:2em;
-  
-}
-.CreateNewBet>div{
   border: solid black 2px;
+  background-color: var(--cadet-gray);
   border-radius: 5px;
   padding: 1em;
-  
 }
 
 
@@ -144,4 +141,10 @@ body{
   margin-left:1em;
   margin-right:1em;
   border-bottom: 1px black solid ;
+}
+.or{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }

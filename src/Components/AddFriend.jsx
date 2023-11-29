@@ -36,6 +36,9 @@ const AddFriend = () => {
         <input type="text" value={accountNumber} onChange={handleAccountNumberChange} />
       </label>
       <br />
+      <br />
+      <div className="or">or</div>
+      <br />
       <label>
         Phone:
         <input type="text" value={phone} onChange={handlePhoneChange} />

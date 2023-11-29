@@ -1,16 +1,52 @@
-import AddFriend from "./AddFreind"
+import AddFriend from "./AddFriend"
 import React, { useState } from 'react';
 
 
 const Players = () => {
 
+    let json = {
+        "friends": [
+            
+            {
+               
+            
+                "name": "John",
+                "email": "johnRyan@gmail.com",
+                "phone": "1234567890"
+                    
+                
+            },
+            {
+                
+                "name": "Jack",
+                "email": "JackRyan@gmail.com",
+                "phone": "1234567890"
+                    
+                
+            },
+            {
+                
+                "name": "Matt",
+                "email": "Wilson@gmail.com",
+                "phone": "1234567890"
+                    
+                
+            }
+            
+        ]
+    }
+    console.log(json["friends"])
     const [displayPlayers,setDisplayPlayers] = useState(false)
     
     return (
         <div>
-            <div>add friends</div>
-            <div>Profile ID</div>
-            <div>Number</div>
+            {json["friends"].map((friend) => (
+                <div >
+                <h3>{friend["name"]}</h3>
+                <p>Email: {friend["email"]}</p>
+                <p>Phone Number: {friend["phone"]}</p>
+                </div>
+            ))}
             <div>
             {
               displayPlayers ?

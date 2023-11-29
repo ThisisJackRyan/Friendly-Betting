@@ -5,7 +5,7 @@ import Players from "./Players";
 
 const NewBet = () => {
     return (
-        <div className="flex">
+        <div className="flex ">
             <div className="x2">
                 <CreateNewBet />
             </div>
