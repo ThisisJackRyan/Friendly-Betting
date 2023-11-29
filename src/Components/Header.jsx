@@ -1,5 +1,4 @@
 import { Link, useLocation} from "react-router-dom";
-import { CSSTransition } from 'react-transition-group';
 
 
 
@@ -13,7 +12,7 @@ const Header = () => {
                 
                 </div>
             </div>
-            <div className="x1">Title of website</div>
+            <div className="x1">Friendly Bets</div>
             <div className="flex pages x1">
             {location.pathname !== "/SignIn" ? <Link className="Link" to="/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
             

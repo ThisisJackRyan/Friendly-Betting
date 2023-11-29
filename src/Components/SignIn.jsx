@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { auth } from "../Config/firebase-config";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { Link } from "react-router-dom";
@@ -10,6 +10,7 @@ const SignIn = () => {
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [signInTransition, setSignInTransition] = useState(false);
 
     console.log(auth?.currentUser?.email)
 
@@ -30,9 +31,20 @@ const SignIn = () => {
     }
 
 
+    
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSignInTransition(true);
+    }, 2);
+
+    return () => clearTimeout(timeout);
+  }, []);
+    
+
     return (
        
-        <div className="signIn">
+        <div className={`signIn ${signInTransition ? "" : "signInTransition"}`}>
             <div className="signInLabel">Sign in</div>
             <input 
                 type="text" 
