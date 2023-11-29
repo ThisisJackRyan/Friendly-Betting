@@ -1,13 +1,61 @@
+/* CSS HEX */
+:root{
+  --midnight-green: #114b5fff;
+  --cardinal: #ba3b46ff;
+  --cadet-gray: #95a3a4ff;
+  --dark-purple: #170a1cff;
+  --alabaster: #e2e8ddff;
+  --dark-spring-green: #007a45ff;
+  
+  /* CSS HSL */
+  /*
+  --midnight-green: hsla(195, 70%, 22%, 1);
+  --cardinal: hsla(355, 52%, 48%, 1);
+  --cadet-gray: hsla(184, 8%, 61%, 1);
+  --dark-purple: hsla(283, 47%, 7%, 1);
+  --alabaster: hsla(93, 19%, 89%, 1);
+  */
+  --gradient-top: linear-gradient(0deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-right: linear-gradient(90deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-bottom: linear-gradient(180deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-left: linear-gradient(270deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-top-right: linear-gradient(45deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-bottom-right: linear-gradient(135deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-top-left: linear-gradient(225deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-bottom-left: linear-gradient(315deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+  --gradient-radial: radial-gradient(#114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
+}
+
+
+body{
+  background-color: var(--midnight-green);
+  color: var(--alabaster);
+  font-family: 'Roboto', sans-serif;
+  font-size: 1.25em;
+  height: 100vh;
+  width: 100vw;
+
+}
 .header{
   display: flex;
-  border-bottom: solid 2px ;
   padding: 1rem;
   padding-top: 2rem;
+  background-color: var(--cadet-gray);
+  color:  var(--alabaster);
+  font-size: 1.25em;
 }
 .pages{
   justify-content: center;
   align-items: center;
-  gap:1rem;
+  gap:1em;
+}
+.Link{
+  text-decoration: none;
+  color: var(--alabaster);
+
+}
+.Link:hover{
+  color: var(--dark-purple);
 }
 .signIn{
   display: flex;
@@ -18,6 +66,10 @@
   border-radius: 5px;
   margin: 4rem 15rem;
   padding:2rem ;
+  background-color: var(--cadet-gray);
+  color:var(--alabaster);
+  box-shadow: 10px 10px 10px 5px rgba(0,0,0,0.75);
+  transition: all 0.5s ease-in-out;
 }
 .signIn input{
   padding: 1rem 0.5rem;
@@ -29,7 +81,7 @@
 
 .signInLabel{
   text-align: center;
-  border-bottom: black 2px solid;
+  border-bottom: var(--alabaster) 2px solid;
   padding-bottom: 0px;
   font-size: 2rem;
 }
@@ -44,7 +96,33 @@
   border-bottom:solid  2px;
   color: darkblue;
 }
+/*sign In Transition*/
 
+.transition-exit{
+  opacity: 0;
+}
+.transition-exit-active{
+  opacity: 0;
+  transition: opacity 500ms;
+}
+.transition-exit-done{
+  opacity: 0;
+}
+.transition-enter{
+  opacity: 0;
+}
+/*-- Transition Enter--*/
+.transition-enter-active{
+  opacity: 0;
+  transition: opacity 500ms;
+}
+.transition-enter-done{
+  opacity: 1;
+}
+/*--Transition Appear --*/
+.transition-appear{
+  opacity: 1;
+}
 
 
 

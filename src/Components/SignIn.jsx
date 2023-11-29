@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 
 
+
 const SignIn = () => {
 
     const [email, setEmail] = useState("");
@@ -30,6 +31,7 @@ const SignIn = () => {
 
 
     return (
+       
         <div className="signIn">
             <div className="signInLabel">Sign in</div>
             <input 
@@ -51,6 +53,8 @@ const SignIn = () => {
             <br />
             <button onClick={logOut}>Log Out</button>
         </div>
+        
+
     )
 }
 
