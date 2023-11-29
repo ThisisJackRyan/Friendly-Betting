@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 
-const AddFriend = () => {
+const AddFriend = (props) => {
   const [accountNumber, setAccountNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -25,9 +25,15 @@ const AddFriend = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    props.addNewPlayers({
+      "name": name,
+      "email": email,
+      "phone": phone
+    })
     // Handle form submission here
     // You can access the values using the state variables (accountNumber, phone, email, name)
   };
+
 
   return (
     <form onSubmit={handleSubmit}>
@@ -40,8 +46,8 @@ const AddFriend = () => {
       <div className="or">or</div>
       <br />
       <label>
-        Phone:
-        <input type="text" value={phone} onChange={handlePhoneChange} />
+        Name:
+        <input type="text" value={name} onChange={handleNameChange} />
       </label>
       <br />
       <label>
@@ -50,8 +56,8 @@ const AddFriend = () => {
       </label>
       <br />
       <label>
-        Name:
-        <input type="text" value={name} onChange={handleNameChange} />
+        Phone:
+        <input type="text" value={phone} onChange={handlePhoneChange} />
       </label>
       <br />
       <button type="submit">Add Friend</button>

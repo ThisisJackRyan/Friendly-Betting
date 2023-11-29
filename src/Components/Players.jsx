@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 
 const Players = () => {
 
-    let json = {
+    const [json,setJson] = useState({
         "friends": [
             
             {
@@ -34,14 +34,19 @@ const Players = () => {
             }
             
         ]
+    });
+    const addJson = (newJson) => {
+        setJson(prevJson => ({
+            ...prevJson,
+            friends: [...prevJson.friends, newJson]
+        }));
+       
     }
-    console.log(json["friends"])
     const [displayPlayers,setDisplayPlayers] = useState(false)
-    
     return (
         <div>
             {json["friends"].map((friend) => (
-                <div >
+                <div key={friend.id}>
                 <h3>{friend["name"]}</h3>
                 <p>Email: {friend["email"]}</p>
                 <p>Phone Number: {friend["phone"]}</p>
@@ -50,7 +55,7 @@ const Players = () => {
             <div>
             {
               displayPlayers ?
-              <AddFriend />
+              <AddFriend addNewPlayers ={addJson} />
               :
               <button onClick={() => {setDisplayPlayers((current) => !current)}} >Add Friend</button>
             }
