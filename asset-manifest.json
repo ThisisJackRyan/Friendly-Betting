@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/Friendly-Betting/static/css/main.611065d0.css",
+    "main.js": "/Friendly-Betting/static/js/main.5db97279.js",
+    "static/js/787.7e4c938d.chunk.js": "/Friendly-Betting/static/js/787.7e4c938d.chunk.js",
+    "index.html": "/Friendly-Betting/index.html",
+    "main.611065d0.css.map": "/Friendly-Betting/static/css/main.611065d0.css.map",
+    "main.5db97279.js.map": "/Friendly-Betting/static/js/main.5db97279.js.map",
+    "787.7e4c938d.chunk.js.map": "/Friendly-Betting/static/js/787.7e4c938d.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.611065d0.css",
+    "static/js/main.5db97279.js"
+  ]
+}
