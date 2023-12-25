@@ -25,20 +25,23 @@ const AddFriend = (props) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    props.addNewPlayers({
-      "name": name,
-      "email": email,
-      "phone": phone
-    })
+    if(name !== "" && email !== "" && phone !== ""){
+      props.addNewPlayers({
+        "name": name,
+        "email": email,
+        "phone": phone
+      })
+    }
     // Handle form submission here
     // You can access the values using the state variables (accountNumber, phone, email, name)
   };
 
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className="addFiendForm"onSubmit={handleSubmit}>
+      <div className='x'><span onClick={props.disable}>x</span></div>
       <label>
-        Account Number:
+        <span>Account Number:</span>
         <input type="text" value={accountNumber} onChange={handleAccountNumberChange} />
       </label>
       <br />
@@ -46,7 +49,7 @@ const AddFriend = (props) => {
       <div className="or">or</div>
       <br />
       <label>
-        Name:
+        <span>Name:</span>
         <input type="text" value={name} onChange={handleNameChange} />
       </label>
       <br />
@@ -56,11 +59,11 @@ const AddFriend = (props) => {
       </label>
       <br />
       <label>
-        Phone:
+        <span>Phone:</span>
         <input type="text" value={phone} onChange={handlePhoneChange} />
       </label>
       <br />
-      <button type="submit">Add Friend</button>
+      <button type="submit" >Add Friend</button>
     </form>
   );
 };

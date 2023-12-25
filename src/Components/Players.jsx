@@ -39,10 +39,15 @@ const Players = () => {
         setJson(prevJson => ({
             ...prevJson,
             friends: [...prevJson.friends, newJson]
+            
         }));
+        swapDisplayPlayers();
        
     }
-    const [displayPlayers,setDisplayPlayers] = useState(false)
+    const [displayPlayers, setDisplayPlayers] = useState(false)
+    const swapDisplayPlayers = () => {
+        setDisplayPlayers((current) => !current)
+    }
     return (
         <div>
             {json["friends"].map((friend) => (
@@ -55,9 +60,12 @@ const Players = () => {
             <div>
             {
               displayPlayers ?
-              <AddFriend addNewPlayers ={addJson} />
+              <div>
+                <AddFriend addNewPlayers ={addJson} disable={swapDisplayPlayers}/>
+                <button className="disable" >Add Friend</button>
+              </div>
               :
-              <button onClick={() => {setDisplayPlayers((current) => !current)}} >Add Friend</button>
+            <button onClick={swapDisplayPlayers} >Add Friend</button>
             }
             
             </div>

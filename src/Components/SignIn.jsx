@@ -59,7 +59,7 @@ const SignIn = () => {
             />
             <button onClick={singInUser}>Sign In</button>
             <div>
-                <Link to="/CreateAccount" className="swapSignIn" >Don't have account? Create One!</Link>
+                <Link to="Friendly-Betting/CreateAccount" className="swapSignIn" >Don't have account? Create One!</Link>
             </div>
             <br />
             <br />

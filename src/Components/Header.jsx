@@ -8,18 +8,18 @@ const Header = () => {
     return(
         <div className="header">
             <div className="x1">
-                <div className="logo"><Link className="Link" to="/">logo</Link>
+                <div className="logo"><Link className="Link" to="Friendly-Betting/">logo</Link>
                 
                 </div>
             </div>
             <div className="x1">Friendly Bets</div>
             <div className="flex pages x1">
-            {location.pathname !== "/SignIn" ? <Link className="Link" to="/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
+            {location.pathname !== "/SignIn" ? <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
             
             
             
             }
-                <Link className="Link" to="/NewBet">Create New Bet</Link>
+                <Link className="Link" to="Friendly-Betting/NewBet">Create New Bet</Link>
             </div>
         </div>
     )

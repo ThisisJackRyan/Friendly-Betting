@@ -148,3 +148,38 @@ body{
   align-items: center;
   text-align: center;
 }
+
+.addFiendForm{
+  position:absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: solid black 2px;
+  border-radius: 5px;
+  background-color: var(--cadet-gray);
+  padding:1em;
+  font-size: 1.5em;
+}
+.addFiendForm label span{
+  
+}
+
+.disable{
+  background-color: darkgray;
+  
+}
+.addFiendForm .x{
+  display: flex;
+  justify-content: right;
+  margin-bottom: 0.5rem;
+}
+.addFiendForm .x span{
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
+  font-size: smaller;
+}
+
+.addFiendForm .x span:hover{
+  cursor: pointer;
+  color: black;
+}

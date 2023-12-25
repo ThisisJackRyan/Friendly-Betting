@@ -28,7 +28,7 @@ useEffect(() => {
             <input type="password" placeholder="confirm password" name="" id="" />
             <button>Create Account</button>
             <div>
-                <Link to="/SignIn" className="swapSignIn" >Already have account? Sign in!</Link>
+                <Link to="Friendly-Betting/SignIn" className="swapSignIn" >Already have account? Sign in!</Link>
             </div>
         </div>
     )

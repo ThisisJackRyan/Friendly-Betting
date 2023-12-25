@@ -21,13 +21,13 @@ function App() {
       <Router>
         <Header />
         <Routes>
-          <Route path="/" element={<Welcome />} />
+          <Route path="Friendly-Betting/" element={<Welcome />} />
           
-          <Route path="/SignIn" element={ <SignIn />} />
+          <Route path="Friendly-Betting/SignIn" element={ <SignIn />} />
          
-          <Route path="/CreateAccount" element={<CreateAccount />} />
-          <Route path="/NewBet" element={<NewBet />} />
-          <Route path="*" element={<NotFound />} />
+          <Route path="Friendly-Betting/CreateAccount" element={<CreateAccount />} />
+          <Route path="Friendly-Betting/NewBet" element={<NewBet />} />
+          <Route path="/*" element={<NotFound />} />
         </Routes>
       </Router>
     );
