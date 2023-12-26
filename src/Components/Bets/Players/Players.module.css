@@ -1,0 +1,47 @@
+
+
+
+
+.disable{
+    background-color: darkgray;
+    
+  }
+
+
+
+
+.addFiendForm{
+    position:absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: solid black 2px;
+    border-radius: 5px;
+    background-color: var(--cadet-gray);
+    padding:1em;
+    font-size: 1.5em;
+  }
+  
+  
+.x{
+    display: flex;
+    justify-content: right;
+    margin-bottom: 0.5rem;
+  }
+.x span{
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+    font-size: smaller;
+  }
+  
+.x span:hover{
+    cursor: pointer;
+    color: black;
+  }
+
+.or{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }

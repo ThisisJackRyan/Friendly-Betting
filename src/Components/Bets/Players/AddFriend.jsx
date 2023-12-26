@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import css from "./Players.module.css";
 
 const AddFriend = (props) => {
   const [accountNumber, setAccountNumber] = useState('');
@@ -38,15 +39,15 @@ const AddFriend = (props) => {
 
 
   return (
-    <form className="addFiendForm"onSubmit={handleSubmit}>
-      <div className='x'><span onClick={props.disable}>x</span></div>
+    <form className={css.addFiendForm} onSubmit={handleSubmit}>
+      <div className={css.x}><span onClick={props.disable}>x</span></div>
       <label>
         <span>Account Number:</span>
         <input type="text" value={accountNumber} onChange={handleAccountNumberChange} />
       </label>
       <br />
       <br />
-      <div className="or">or</div>
+      <div className={css.or}>or</div>
       <br />
       <label>
         <span>Name:</span>

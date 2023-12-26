@@ -1,6 +1,7 @@
-import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Link, useNavigate} from "react-router-dom";
+import { useEffect, useState} from "react";
 
+import css from "./SignIn.module.css";
 
 
 
@@ -9,7 +10,10 @@ import { useEffect, useState } from "react";
 const CreateAccount = () => {
 
     const [signInTransition, setSignInTransition] = useState(false);
-
+    const navigate = useNavigate();
+    const toSignIn = () => {
+        navigate("/Friendly-Betting/SignIn");
+    }
 
 useEffect(() => {
     const timeout = setTimeout(() => {
@@ -19,8 +23,8 @@ useEffect(() => {
     return () => clearTimeout(timeout);
   }, []);
     return (
-        <div className={`signIn ${signInTransition ? "" : "signInTransition"}`}>
-            <div className="signInLabel">Create Account</div>
+        <div className={`${css.signIn} ${signInTransition ? "" : css.signInTransition}`}>
+            <div className={css.signInLabel}>Create Account</div>
             <input type="text" placeholder="Email" />
             <input type="text" placeholder="Phone" />
             <br />
@@ -28,7 +32,7 @@ useEffect(() => {
             <input type="password" placeholder="confirm password" name="" id="" />
             <button>Create Account</button>
             <div>
-                <Link to="Friendly-Betting/SignIn" className="swapSignIn" >Already have account? Sign in!</Link>
+                <div onClick={toSignIn} className={css.swapSignIn} >Already have account? Sign in!</div>
             </div>
         </div>
     )

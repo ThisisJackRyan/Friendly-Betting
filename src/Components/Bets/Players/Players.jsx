@@ -1,5 +1,6 @@
 import AddFriend from "./AddFriend"
 import React, { useState } from 'react';
+import css from "./Players.module.css";
 
 
 const Players = () => {
@@ -62,7 +63,7 @@ const Players = () => {
               displayPlayers ?
               <div>
                 <AddFriend addNewPlayers ={addJson} disable={swapDisplayPlayers}/>
-                <button className="disable" >Add Friend</button>
+                <button className={css.disable} >Add Friend</button>
               </div>
               :
             <button onClick={swapDisplayPlayers} >Add Friend</button>

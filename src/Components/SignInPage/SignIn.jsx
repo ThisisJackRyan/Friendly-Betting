@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { auth } from "../../Config/firebase-config";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { Link } from "react-router-dom";
+import {useNavigate} from "react-router-dom";
+import css from "./SignIn.module.css";
 
 
 
@@ -30,6 +31,11 @@ const SignIn = () => {
         }
     }
 
+    const navigate = useNavigate();
+    const toCreateAccount = () => {
+        navigate("/Friendly-Betting/CreateAccount");
+    }
+
 
     
 
@@ -44,8 +50,8 @@ const SignIn = () => {
 
     return (
        
-        <div className={`signIn ${signInTransition ? "" : "signInTransition"}`}>
-            <div className="signInLabel">Sign in</div>
+        <div className={`${css.signIn} ${signInTransition ? "" : css.signInTransition}`}>
+            <div className={css.signInLabel}>Sign in</div>
             <input 
                 type="text" 
                 placeholder="Email or Number"  
@@ -59,7 +65,7 @@ const SignIn = () => {
             />
             <button onClick={singInUser}>Sign In</button>
             <div>
-                <Link to="Friendly-Betting/CreateAccount" className="swapSignIn" >Don't have account? Create One!</Link>
+                <div onClick={toCreateAccount} className={css.swapSignIn} >Don't have account? Create One!</div>
             </div>
             <br />
             <br />

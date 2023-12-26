@@ -1,4 +1,3 @@
-import CreateNewBet from "./CreateNewBet";
 import Players from "./Players/Players";
 import DisplayAllBets from "./DisplayAllBets";
 
