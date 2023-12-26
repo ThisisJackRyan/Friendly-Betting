@@ -1,5 +1,6 @@
 import CreateNewBet from "./CreateNewBet";
-import Players from "./Players";
+import Players from "./Players/Players";
+import DisplayAllBets from "./DisplayAllBets";
 
 
 
@@ -7,7 +8,7 @@ const NewBet = () => {
     return (
         <div className="flex ">
             <div className="x2">
-                <CreateNewBet />
+                <DisplayAllBets />
             </div>
             <div className="x1">
                 <Players />

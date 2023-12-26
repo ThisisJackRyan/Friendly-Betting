@@ -1,12 +1,12 @@
 
 import './App.css';
-import SignIn from './Components/SignIn';
-import CreateAccount from './Components/CreateAccount';
+import SignIn from './Components/SignInPage/SignIn';
+import CreateAccount from './Components/SignInPage/CreateAccount';
 import Header from './Components/Header';
-import NewBet from './Components/NewBet';
+import NewBet from './Components/Bets/NewBet';
 import NotFound from './Components/NotFound';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Welcome from './Components/MainPages/Welcome';
+import Welcome from './Components/Welcome';
 
 
 
