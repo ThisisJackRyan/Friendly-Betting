@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import {useNavigate } from 'react-router-dom';
 
-const BetNav = () => {
+const BetNav = (props) => {
     const navigate = useNavigate();
 
     const goToMoneyLine = () => {
@@ -15,6 +15,7 @@ const BetNav = () => {
     }
   return (
     <div className='betNav'>
+        <div className='x'><span onClick={props.swap} >x</span></div>
         <h1><span>Bets</span></h1>
         <div className='BettingLinks'>
             <div>

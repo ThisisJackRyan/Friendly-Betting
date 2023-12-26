@@ -20,7 +20,7 @@ const DisplayAllBets = () => {
         <div>
           <h3>You are not in any bets yet</h3>
           <button onClick={swapDisplay}>Create One!</button>
-          {display ? <BetNav /> : null}
+          {display ? <BetNav swap={swapDisplay}/> : null}
 
         </div>
       ) : (

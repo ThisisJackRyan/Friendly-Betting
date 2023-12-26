@@ -195,7 +195,7 @@ body{
   text-align: center;
   margin-bottom: 1em;
 }
-.betNav span{
+.betNav h1 span{
   border-bottom: solid var(--alabaster) 2px;
 
 }
@@ -206,4 +206,13 @@ body{
   gap: 1em;
   margin: 1em;
   flex-direction: column;
+}
+.betNav .x{
+  display: flex;
+  justify-content: right;
+  margin-bottom: 0.5rem;
+}
+.betNav .x span:hover{
+  cursor: pointer;
+  color: black;
 }
