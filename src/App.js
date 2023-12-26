@@ -7,6 +7,9 @@ import NewBet from './Components/Bets/NewBet';
 import NotFound from './Components/NotFound';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Welcome from './Components/Welcome';
+import MoneyLine from './Components/Bets/MoneyLineBets/MoneyLine';
+import OverUnder from './Components/Bets/OverUnderBets/OverUnder';
+import Prop from './Components/Bets/PropBets/Prop';
 
 
 
@@ -27,6 +30,12 @@ function App() {
          
           <Route path="Friendly-Betting/CreateAccount" element={<CreateAccount />} />
           <Route path="Friendly-Betting/NewBet" element={<NewBet />} />
+
+          <Route path="Friendly-Betting/MoneyLineBets" element={<MoneyLine />} />
+          <Route path="Friendly-Betting/OverUnderBets" element={<OverUnder />} />
+          <Route path="Friendly-Betting/PropBets" element={<Prop />} />
+
+
           <Route path="/*" element={<NotFound />} />
         </Routes>
       </Router>

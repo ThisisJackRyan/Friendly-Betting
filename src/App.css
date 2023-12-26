@@ -180,3 +180,30 @@ body{
   cursor: pointer;
   color: black;
 }
+.betNav{
+  background-color: var(--cadet-gray);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1em;
+  border-radius: 5px;
+  border: solid black 2px;
+
+}
+.betNav h1{
+  text-align: center;
+  margin-bottom: 1em;
+}
+.betNav span{
+  border-bottom: solid var(--alabaster) 2px;
+
+}
+.BettingLinks{
+  display: flex;
+  justify-content: center;
+  align-items: left;
+  gap: 1em;
+  margin: 1em;
+  flex-direction: column;
+}
