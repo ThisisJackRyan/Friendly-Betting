@@ -5,7 +5,7 @@ import DisplayAllBets from "./DisplayAllBets";
 
 const NewBet = () => {
     return (
-        <div className="flex ">
+        <div className="flex pad">
             <div className="x2">
                 <DisplayAllBets />
             </div>

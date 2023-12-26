@@ -46,6 +46,10 @@ body{
 .x2{flex: 2;}
 .x3{flex: 3;}
 
+.pad{
+  padding: 1rem;
+}
+
 
 .header{
   display: flex;
