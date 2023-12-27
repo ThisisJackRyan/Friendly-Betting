@@ -62,3 +62,18 @@
     cursor: pointer;
     color: black;
 }
+
+.option{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap:0.5rem;
+    padding: 0.5rem;
+}
+.optionInput{
+    height: 2rem;
+    background-color: var(--alabaster);
+    border-radius: 5px;
+    border: 1px solid;
+    padding: 0.25rem 0.5rem;
+}

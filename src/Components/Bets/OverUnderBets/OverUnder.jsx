@@ -1,9 +1,11 @@
 import React from 'react';
+import CreateOverUnder from './CreateOverUnder';
 
 const OverUnder = () => {
   return (
-    <div>
+    <div className='pad'>
       <h1>OverUnder Component</h1>
+      <CreateOverUnder />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import css from './Prop.module.css';
 
-const PreSetBettingOptions = () => {
+const PreSetBettingOptions = (prop) => {
     const [howMany, setHowMany] = useState(0);
     const [howManyOptions, setHowManyOptions] = useState([]);
 
@@ -18,23 +18,24 @@ const PreSetBettingOptions = () => {
     }, [howMany]);
 
     const handleSubmit = (e) => {
-
+        e.preventDefault();
+        console.log('Saving preset betting options');
     }
 
     return (
         <div className={css.PreSetBetting}>
-            <div className={css.x}><span>x</span></div>
+            <div className={css.x}><span onClick={prop.display}>x</span></div>
             <div className={css.title}><span>Preset Betting Options</span></div>
             <form onSubmit={handleSubmit}>
                 {howManyOptions.map((option, index) => (
-                    <div key={index}>
+                    <div className={css.option} key={index}>
                         <span className={css.label}>{option+1}:</span>
-                        <input type="text" placeholder='Who or what' />
+                        <input className={css.optionInput} type="text" placeholder='Who or what' />
                     </div>
                 ))}
+                <button type="submit">Save</button>
             </form>
-            <button onClick={addOneMore}>Add Option</button>
-            <button type="submit">Save</button>
+                <button onClick={addOneMore}>Add Option</button>
         </div>
     );
 };

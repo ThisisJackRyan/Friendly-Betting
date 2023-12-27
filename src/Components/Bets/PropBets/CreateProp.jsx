@@ -25,15 +25,14 @@ const CreateProp = () => {
                 </div>
             </div>
             <div className={css.settings}>
-                <input type="checkbox" id="preSetBetting" onChange={handleCheckboxChange} />
+                <input type="checkbox" id="preSetBetting" checked={isChecked} onChange={handleCheckboxChange} />
                 <label htmlFor="preSetBetting">Pre Set Betting Options</label>
-                <button type="submit">Create bet</button>
             </div>
+            <button type="submit">Create bet</button>
         </form>
         <div>
-            {isChecked ? <PreSetBettingOptions /> : null}
+            {isChecked ? <PreSetBettingOptions display={handleCheckboxChange}/> : null}
         </div>
-        
     </div>
   );
 };
