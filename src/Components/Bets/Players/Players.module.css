@@ -48,3 +48,24 @@
     align-items: center;
     text-align: center;
   }
+
+
+  .shareBet{
+    font-size: 1.5em;
+    background-color: var(--cadet-gray);
+    position: absolute;
+    top:50%;
+    left:50%;
+    transform: translate(-50%, -50%);
+    border: solid black 2px;
+    padding: 2em;
+  }
+
+  .friendsLabel{
+    font-size: 1.5em;
+    margin-bottom: 1.5rem;
+  }
+
+  .friendsLabel span{
+    border-bottom: solid var(--alabaster) 2px;
+  }

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
+import ShareBet from '../Players/ShareBet';
 
 const CreateMoneyLine = () => {
   const [team, setTeam] = useState('');
   const [odds, setOdds] = useState('');
+  const [shareDisplay, setShareDisplay] = useState(false);
 
   const handleTeamChange = (e) => {
     setTeam(e.target.value);
@@ -16,6 +18,7 @@ const CreateMoneyLine = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setShareDisplay(true);
     // Logic to create the moneyline bet using the team and odds values
     console.log('Creating moneyline bet:', team, odds);
   };
@@ -76,6 +79,10 @@ const CreateMoneyLine = () => {
         </div>
         <div className="x1">
             <Players />
+        </div>
+        <div>
+            {shareDisplay ? <ShareBet /> : null}
+            
         </div>
     </div>
   );
