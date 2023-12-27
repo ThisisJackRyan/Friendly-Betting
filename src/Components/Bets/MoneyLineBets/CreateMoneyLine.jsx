@@ -23,7 +23,7 @@ const CreateMoneyLine = () => {
   return (
     <div className='flex'>
         <div className='x2'>
-            <form className={css.MoneyLine}onSubmit={handleSubmit}>
+            <form className={css.MoneyLine} onSubmit={handleSubmit}>
             <div className={css.betContainer}>
                 Bet:
                 <div className={css.bet}>

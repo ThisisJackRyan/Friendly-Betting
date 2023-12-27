@@ -1,0 +1,64 @@
+
+
+.prop{
+    font-size: 2em;
+}
+
+.betContainer{
+    padding-bottom: 2rem;
+    border-bottom:dashed 1px var(--alabaster);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.bet textarea{
+    width: 20em;
+    height: 6em;
+    font-size: .5em;
+    text-align: left;
+    padding: .5rem;;
+    border-radius: 5px;
+    border: 1px solid var(--alabaster);
+    background-color: var(--cadet-gray);
+    color: var(--alabaster);
+}
+
+.PreSetBetting{
+    position: absolute;
+    top:50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--cadet-gray);
+    border-radius: 5px;
+    padding: 1em;
+    box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
+    border:solid black 1px;
+}
+.settings{
+    display: flex;
+    gap:1rem;
+    margin:1em;
+}
+.settings label{
+    font-size: .75em;
+}
+.title{
+    text-align: center;
+    font-size:0.75em ;
+    margin-bottom: 1rem;
+}
+.title span{
+    border-bottom: solid var(--alabaster) 2px;
+}
+.label{
+    font-size: 1em;
+}
+.x{
+    display: flex;
+    justify-content: right;
+    margin-bottom: 0.5rem;
+}
+.x span:hover{
+    cursor: pointer;
+    color: black;
+}
