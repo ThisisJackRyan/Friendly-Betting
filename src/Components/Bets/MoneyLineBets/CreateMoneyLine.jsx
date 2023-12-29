@@ -16,9 +16,13 @@ const CreateMoneyLine = () => {
     setOdds(e.target.value);
   };
 
+  const handleShare = () => {
+    setShareDisplay((current) => !current);
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    setShareDisplay(true);
+    handleShare();
     // Logic to create the moneyline bet using the team and odds values
     console.log('Creating moneyline bet:', team, odds);
   };
@@ -81,7 +85,7 @@ const CreateMoneyLine = () => {
             <Players />
         </div>
         <div>
-            {shareDisplay ? <ShareBet /> : null}
+            {shareDisplay ? <ShareBet display={handleShare} /> : null}
             
         </div>
     </div>

@@ -7,8 +7,6 @@ import {useState} from 'react';
 
 const ShareBet = (props) => {
 
-
-
     const [json,setJson] = useState({
         "friends": [
             
@@ -41,31 +39,35 @@ const ShareBet = (props) => {
         ]
     });
 
-
-
+    
 
     const handleSubmit = (e) => {
         e.preventDefault();
         // Logic to share the bet
         console.log('Sharing bet');
     }
+
+    
     return (
         <div className={css.shareBet}>
-            <div className={css.x}><span>x</span></div>
+            <div className={css.x}><span onClick={props.display}>x</span></div>
             <div className={css.friendsLabel}><span>friends</span></div>
             <form onSubmit={handleSubmit}>
                 {//props.friends.map((friend ) => (
                 json["friends"].map((friend) => (
-                    <div>
-                        <input type="checkbox" name="" id="" />
-                        <label htmlFor="">{friend.name}</label>
-                    </div>
+                    <label className={css.container}>
+                        {friend.name}
+                        <input className={css.input} type="checkbox" name="" id="" />
+                        <span className={css.checkmark}></span>
+                        
+                    </label>
                 ))}
 
             
                     <button type="submit">Send</button>
             </form>
         </div>
+        
     );
 };
 

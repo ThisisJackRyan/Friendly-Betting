@@ -56,12 +56,12 @@ const AddFriend = (props) => {
       <br />
       <label>
         Email:
-        <input type="text" value={email} onChange={handleEmailChange} />
+        <input type="email" value={email} onChange={handleEmailChange} />
       </label>
       <br />
       <label>
         <span>Phone:</span>
-        <input type="text" value={phone} onChange={handlePhoneChange} />
+        <input type="phone" value={phone} onChange={handlePhoneChange} />
       </label>
       <br />
       <button type="submit" >Add Friend</button>
