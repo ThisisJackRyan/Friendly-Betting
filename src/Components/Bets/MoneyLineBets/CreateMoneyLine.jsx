@@ -32,7 +32,7 @@ const CreateMoneyLine = () => {
     handleShare();
     try {
       await addDoc(collection(db, "bets"), {
-          type: "MoneyLine",
+          type: "Money Line",
           bet: bet,
       })
   

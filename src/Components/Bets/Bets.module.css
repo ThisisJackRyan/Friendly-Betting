@@ -32,13 +32,25 @@
     gap: 1em;
     margin: 1em;
     flex-direction: column;
-  }
+}
 .x{
     display: flex;
     justify-content: right;
     margin-bottom: 0.5rem;
-  }
+}
 .x span:hover{
     cursor: pointer;
     color: black;
-  }
+}
+
+.bet{
+  background-color: var(--cadet-gray);
+  padding: 0.5rem 2em;
+  margin: 1em 2em;
+  border-radius: 5px;
+  border: solid black 2px;
+  box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
+}
+.bet:hover{
+  box-shadow: 3px 3px 3px 0px rgba(0,0,0,0.75) inset;
+}

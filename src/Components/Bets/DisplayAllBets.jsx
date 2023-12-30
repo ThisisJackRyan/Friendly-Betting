@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import BetNav from './BetNav';
 import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
+import DisplayBet from './DisplayBet';
+
 
 const DisplayAllBets = () => {
 
@@ -10,14 +12,13 @@ const DisplayAllBets = () => {
     const [display, setDisplay] = useState(false)
     const [bets, setBets] = useState([])
 
-    const betsCollectionRef = collection(db, "bets");
 
     useEffect(() => {
       const getBets = async () => {
         //read
         //set
         try{
-          const data = await getDocs(betsCollectionRef);
+          const data = await getDocs(collection(db, "bets"));
           const filteredData = data.docs.map(doc => ({
             ...doc.data(), 
             id: doc.id,
@@ -32,10 +33,6 @@ const DisplayAllBets = () => {
       getBets();
     }, [])
 
-
-    const addJson = (newJson) => {
-
-    }
     const swapDisplay = () => {
         setDisplay((current) => !current)
     }
@@ -51,10 +48,7 @@ const DisplayAllBets = () => {
       ) : (
         <div>
           {bets.map((bet) => (
-            <div key={bet.id}>
-              <h3>{bet.type}</h3>
-              <p>{bet.bet}</p>
-            </div>
+            <DisplayBet bet={bet} />
           ))}
           <button onClick={swapDisplay}>Create One!</button>
           {display ? <BetNav swap={swapDisplay}/> : null}
