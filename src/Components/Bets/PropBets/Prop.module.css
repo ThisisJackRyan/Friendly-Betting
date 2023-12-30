@@ -78,3 +78,13 @@
     border: 1px solid;
     padding: 0.25rem 0.5rem;
 }
+
+.options{
+    padding-left: 2em;
+}
+h4 span{
+    font-size: 1em;
+    margin-bottom: 0.5rem;
+    border-bottom:solid var(--alabaster) 2px;
+    padding-bottom: 0.05em;
+}

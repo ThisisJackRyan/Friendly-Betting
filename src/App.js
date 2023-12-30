@@ -11,6 +11,8 @@ import MoneyLine from './Components/Bets/MoneyLineBets/MoneyLine';
 import OverUnder from './Components/Bets/OverUnderBets/OverUnder';
 import Prop from './Components/Bets/PropBets/Prop';
 import ViewMoneyLine from './Components/Bets/MoneyLineBets/ViewMoneyLine';
+import ViewOverUnder from './Components/Bets/OverUnderBets/ViewOverUnder';
+import ViewProp from './Components/Bets/PropBets/ViewProp';
 
 
 
@@ -35,7 +37,11 @@ function App() {
           <Route path="Friendly-Betting/MoneyLineBets" element={<MoneyLine />} />
           <Route path="Friendly-Betting/OverUnderBets" element={<OverUnder />} />
           <Route path="Friendly-Betting/PropBets" element={<Prop />} />
-          <Route path="/Friendly-Betting/Bet/MoneyBets/" element={<ViewMoneyLine />} />
+
+          <Route path="/Friendly-Betting/Bet/MoneyLineBets/" element={<ViewMoneyLine />} />
+          <Route path="/Friendly-Betting/Bet/OverUnderBets/" element={<ViewOverUnder />} />
+          <Route path="/Friendly-Betting/Bet/PropBets/" element={<ViewProp />} />
+
 
 
           <Route path="/*" element={<NotFound />} />

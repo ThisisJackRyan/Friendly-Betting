@@ -10,6 +10,8 @@ import { collection, getDocs, where , query } from 'firebase/firestore';
 const ViewMoneyLine = (props) => {
 
     const [bets, setBets] = useState([])
+
+
     const location = useLocation()
     const { bet } = location.state
 
@@ -20,9 +22,6 @@ const ViewMoneyLine = (props) => {
                 const MoneyLineBetCollection = collection(db, "MoneyLineBets");
                 const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
                 const querySnapshot = await getDocs(q);
-                querySnapshot.forEach((doc) => {
-                    //console.log(doc.data().bet);
-                });
                setBets(querySnapshot.docs[0].data());
 
             } catch (e) {
@@ -31,11 +30,13 @@ const ViewMoneyLine = (props) => {
         }
         fetchBet();
     }, [])
+
+
     return (
         <div className='flex pad'>
             <div className='x2'>
                <div>
-                     <h1>{bet.bet}</h1>
+                     <h1>{bets.bet}</h1>
                      <div className={css.ViewLabel}>
                         <h2>{bets.contestant1} </h2>
                         {bets.contestant1Odds > 0 ? <p>(+{bets.contestant1Odds})</p> : <p>({bets.contestant1Odds})</p>}
