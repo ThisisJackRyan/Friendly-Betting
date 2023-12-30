@@ -4,14 +4,21 @@ import { useState } from 'react';
 import PreSetBettingOptions from './PreSetBettingOptions';
 import Players from '../Players/Players';
 import ShareBet from '../Players/ShareBet';
+import {db} from '../../../Config/firebase-config';
+import { addDoc, collection } from 'firebase/firestore';
 
 const CreateProp = () => {
 
-    
+    const [bet, setBet] = useState('');
+    const [Options, setOptions] = useState([]);
 
 
     const [isChecked, setIsChecked] = useState(false);
     const [shareDisplay, setShareDisplay] = useState(false);
+
+    const handlesSetOptions = (options) => {
+        setOptions(options);
+    }
     
     const handleShare = () => {
         setShareDisplay((current) => !current);
@@ -22,9 +29,22 @@ const CreateProp = () => {
         setIsChecked(event.target.checked);
     };
 
-    const handelSubmit = (e) => {   
+    const handelSubmit = async (e) => {   
         e.preventDefault();
         handleShare();
+        try {
+            await addDoc(collection(db, "bets"), {
+                type: "Prop",
+                bet: bet,
+            })
+        
+            await addDoc(collection(db, "PropBets"), {
+                bet: bet,
+                options: Options,
+            })
+          } catch (e) {
+            console.error(e);
+          }
         console.log('Creating prop bet');
     }
   return (
@@ -34,7 +54,7 @@ const CreateProp = () => {
                 <div className={css.betContainer}>
                     Proposition:
                     <div className={css.bet}>
-                        <textarea type="text" name="" id="" />
+                        <textarea type="text" onChange={(e) => {setBet(e.target.value)}} />
                     </div>
                 </div>
                 <div className={css.settings}>
@@ -45,7 +65,7 @@ const CreateProp = () => {
             </form>
         </div>
             <div>
-                {isChecked ? <PreSetBettingOptions display={handleCheckboxChange}/> : null}
+                {isChecked ? <PreSetBettingOptions setOptions={handlesSetOptions} display={handleCheckboxChange}/> : null}
             </div>
             <div className="x1">
                 <Players />

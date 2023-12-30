@@ -5,6 +5,13 @@ const PreSetBettingOptions = (prop) => {
     const [howMany, setHowMany] = useState(0);
     const [howManyOptions, setHowManyOptions] = useState([]);
 
+    const [options, setOptions] = useState([]);
+
+
+    const addOptions = (e, i) => {
+        setOptions((current) => {options[i] = e.target.value; return options});
+    }
+
     const addOneMore = () => {
         setHowMany(howMany + 1);
     }
@@ -19,6 +26,7 @@ const PreSetBettingOptions = (prop) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        prop.setOptions(options);
         console.log('Saving preset betting options');
     }
 
@@ -30,7 +38,7 @@ const PreSetBettingOptions = (prop) => {
                 {howManyOptions.map((option, index) => (
                     <div className={css.option} key={index}>
                         <span className={css.label}>{option+1}:</span>
-                        <input className={css.optionInput} type="text" placeholder='Who or what' />
+                        <input className={css.optionInput} type="text" onChange={(e) => addOptions(e, index)} placeholder='Who or what' />
                     </div>
                 ))}
                 <button type="submit">Save</button>
