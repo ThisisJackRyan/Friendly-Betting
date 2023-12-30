@@ -62,8 +62,6 @@ const ShareBet = (props) => {
                         
                     </label>
                 ))}
-
-            
                     <button type="submit">Send</button>
             </form>
         </div>

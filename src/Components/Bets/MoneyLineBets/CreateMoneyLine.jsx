@@ -2,29 +2,52 @@ import React, { useState } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
 import ShareBet from '../Players/ShareBet';
+import {db} from '../../../Config/firebase-config';
+import { addDoc, collection } from 'firebase/firestore';
 
 const CreateMoneyLine = () => {
-  const [team, setTeam] = useState('');
-  const [odds, setOdds] = useState('');
+  const [bet, setBet] = useState('');
+  const [contestant1, setContestant1] = useState('');
+  const [contestant2, setContestant2] = useState('');
+
+  
+  const [odds1, setOdds1] = useState(0);
+  const [odds2, setOdds2] = useState(0);
+
+
+
+
   const [shareDisplay, setShareDisplay] = useState(false);
 
-  const handleTeamChange = (e) => {
-    setTeam(e.target.value);
-  };
+  
 
-  const handleOddsChange = (e) => {
-    setOdds(e.target.value);
-  };
+
 
   const handleShare = () => {
     setShareDisplay((current) => !current);
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     handleShare();
+    try {
+      await addDoc(collection(db, "bets"), {
+          type: "MoneyLine",
+          bet: bet,
+      })
+  
+      await addDoc(collection(db, "MoneyLineBets"), {
+          bet: bet,
+          contestant1: contestant1,
+          contestant1Odds: odds1,
+          contestant2: contestant2,
+          contestant2Odds: odds2,
+      })
+    } catch (e) {
+      console.error(e);
+    }
     // Logic to create the moneyline bet using the team and odds values
-    console.log('Creating moneyline bet:', team, odds);
+    console.log('Creating moneyline bet:');
   };
 
   return (
@@ -34,7 +57,7 @@ const CreateMoneyLine = () => {
             <div className={css.betContainer}>
                 Bet:
                 <div className={css.bet}>
-                    <textarea type="text" name="" id="" />
+                    <textarea type="text" name="" id="" onChange={(e) => setBet(e.target.value)} />
                 </div>
             </div>
             <div className='flex'>
@@ -43,18 +66,14 @@ const CreateMoneyLine = () => {
                     <input
                         type="text"
                         name=""
-                        value={team}
+                        value={contestant1}
                         className={css.contestantInput}
-                        onChange={handleTeamChange}
+                        onChange={(e) => setContestant1(e.target.value)}
+                        
                     />
                     <div className={css.odds}>
                         <span>(+ or - odds)</span>
-                        <select name="" id="">
-                            <option value="nothing">Select...</option>
-                            <option value="Contestant2+">+</option>
-                            <option value="Contestant2-">-</option>
-                        </select>
-                        <input type="number" name="" id="" />
+                        <input type="number" onChange={(e) => setOdds1(Number(e.target.value))}/>
                     </div>
                 </div>
                 <div className={css.contestant}>
@@ -62,18 +81,14 @@ const CreateMoneyLine = () => {
                     <input 
                         type="text"
                         name=""
-                        value={team}
+                        value={contestant2}
                         className={css.contestantInput}
-                        onChange={handleTeamChange}
+                        onChange={(e) => setContestant2(e.target.value)}
+                        
                     /> 
                     <div className={css.odds}>
                         <span>(+ or - odds)</span>
-                        <select name="" id="">
-                            <option value="nothing">Select...</option>
-                            <option value="Contestant2+">+</option>
-                            <option value="Contestant2-">-</option>
-                        </select>
-                        <input type="number" />
+                        <input type="number"  onChange={(e) => setOdds2(Number(e.target.value))}/>
                     </div>
                 </div>
             </div>
