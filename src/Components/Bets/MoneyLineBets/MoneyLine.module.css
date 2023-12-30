@@ -67,3 +67,13 @@
 .odds input{
     width: 4rem;
 }
+
+
+
+.ViewLabel{
+    display: flex;
+    justify-content: left;
+    align-items: center;
+    gap: 2em;
+    margin: 1rem 2rem;
+}

@@ -32,36 +32,20 @@ const ViewMoneyLine = (props) => {
         fetchBet();
     }, [])
     return (
-        <div className='flex'>
+        <div className='flex pad'>
             <div className='x2'>
-                <form className={css.MoneyLine}>
-                <div className={css.betContainer}>
-                    Bet:
-                    <div className={css.bet}>
-                        <h3>{bets.bet}</h3>
-                    </div>
-                </div>
-                <div className='flex'>
-                    <div className={css.contestant}>
-                        <div><span className={css.label}>Contestant 1</span></div>
-                        <h4><span>{bets.contestant1}</span></h4>
-                        <div className={css.odds}>
-                            <span>(+ or - odds)</span>
-                            <p><span>{bets.contestant1Odds}</span></p>
+               <div>
+                     <h1>{bet.bet}</h1>
+                     <div className={css.ViewLabel}>
+                        <h2>{bets.contestant1} </h2>
+                        {bets.contestant1Odds > 0 ? <p>(+{bets.contestant1Odds})</p> : <p>({bets.contestant1Odds})</p>}
+                     </div>
+                        <div className={css.ViewLabel}>
+                            <h2>{bets.contestant2} </h2>
+                            {bets.contestant2Odds > 0 ? <p>(+{bets.contestant2Odds})</p> : <p>({bets.contestant2Odds})</p>}
                         </div>
-                    </div>
-                    <div className={css.contestant}>
-                        <div><span className={css.label}>Contestant 2</span></div>
-                        <h4><span>{bets.contestant2}</span></h4>
-                        <div className={css.odds}>
-                            <span>(+ or - odds)</span>
-                            <p><span>{bets.contestant2Odds}</span></p>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit">Create Bet</button>
-                </form>
+                    
+               </div>
             </div>
             <div className="x1">
                 <Players />
