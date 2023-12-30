@@ -7,6 +7,9 @@ import ShareBet from '../Players/ShareBet';
 
 const CreateProp = () => {
 
+    
+
+
     const [isChecked, setIsChecked] = useState(false);
     const [shareDisplay, setShareDisplay] = useState(false);
     
