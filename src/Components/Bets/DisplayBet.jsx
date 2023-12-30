@@ -15,15 +15,14 @@ const DisplayBet = (props) => {
     return (
         <div onClick={viewBet}>
             <Link 
-                to={{
-                    pathname:"/Friendly-Betting/Bet/MoneyBets/",
-                    state: {bet: props.bet},
-                }}
+                to="/Friendly-Betting/Bet/MoneyBets/"
+                state={{"bet":props.bet}}
+                className={css.link}
             
             >
                 <div className={css.bet} key={props.bet.id}>
-                <h4>{props.bet.type}</h4>
-                <p>{props.bet.bet}</p>
+                    <h4>{props.bet.type}</h4>
+                    <p>{props.bet.bet}</p>
                 </div>
             </Link>
         </div>

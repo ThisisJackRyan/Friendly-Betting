@@ -15,8 +15,6 @@ const DisplayAllBets = () => {
 
     useEffect(() => {
       const getBets = async () => {
-        //read
-        //set
         try{
           const data = await getDocs(collection(db, "bets"));
           const filteredData = data.docs.map(doc => ({
