@@ -14,12 +14,13 @@ const Header = () => {
             </div>
             <div className="x1">Friendly Bets</div>
             <div className="flex pages x1">
-            {location.pathname !== "/SignIn" ? <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
-            
-            
-            
-            }
-                <Link className="Link" to="Friendly-Betting/NewBet">Create New Bet</Link>
+                {location.pathname !== "/SignIn" ? <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
+                
+                
+                
+                }
+                    <Link className="Link" to="Friendly-Betting/Bet">Create New Bet</Link>
+                    <Link className="Link" to="Friendly-Betting/Friends">Friends</Link>
             </div>
         </div>
     )

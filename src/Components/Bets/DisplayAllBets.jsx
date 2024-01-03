@@ -4,6 +4,7 @@ import BetNav from './BetNav';
 import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
+import Players from './Players/Players';
 
 
 const DisplayAllBets = () => {
@@ -35,23 +36,28 @@ const DisplayAllBets = () => {
         setDisplay((current) => !current)
     }
   return (
-    <div>
-      {json === " " ? (
-        <div>
-          <h3>You are not in any bets yet</h3>
-          <button onClick={swapDisplay}>Create One!</button>
-          {display ? <BetNav swap={swapDisplay}/> : null}
+    <div className='flex pad'>
+      <div className='x2'>
+        {json === " " ? (
+          <div>
+            <h3>You are not in any bets yet</h3>
+            <button onClick={swapDisplay}>Create One!</button>
+            {display ? <BetNav swap={swapDisplay}/> : null}
 
-        </div>
-      ) : (
-        <div>
-          {bets.map((bet) => (
-            <DisplayBet bet={bet} />
-          ))}
-          <button onClick={swapDisplay}>Create One!</button>
-          {display ? <BetNav swap={swapDisplay}/> : null}
-        </div>
-      ) }
+          </div>
+        ) : (
+          <div>
+            {bets.map((bet) => (
+              <DisplayBet bet={bet} />
+            ))}
+            <button onClick={swapDisplay}>Create One!</button>
+            {display ? <BetNav swap={swapDisplay}/> : null}
+          </div>
+        ) }
+      </div>
+      <div className='x1'>
+        <Players />
+      </div>
     </div>
   );
 }
