@@ -29,8 +29,8 @@ const ShareBet = (props) => {
             },
             {
                 
-                "name": "Matt",
-                "email": "Wilson@gmail.com",
+                "name": "Another Person",
+                "email": "Person@gmail.com",
                 "phone": "1234567890"
                     
                 
