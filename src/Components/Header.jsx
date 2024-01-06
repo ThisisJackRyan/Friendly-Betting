@@ -19,7 +19,7 @@ const Header = () => {
                 
                 
                 }
-                    <Link className="Link" to="Friendly-Betting/Bet">Create New Bet</Link>
+                    <Link className="Link" to="Friendly-Betting/Bet">Bets</Link>
                     <Link className="Link" to="Friendly-Betting/Friends">Friends</Link>
             </div>
         </div>

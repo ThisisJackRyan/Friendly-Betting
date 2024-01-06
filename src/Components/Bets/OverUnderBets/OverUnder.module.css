@@ -32,3 +32,47 @@
     height: 1.5rem;
     width: 3rem;
 }
+
+.betLabel{
+    font-weight: normal;
+    border-bottom: dashed 1px var(--alabaster);
+    padding-bottom: 1rem;
+    padding-left: 1em;
+}
+
+.lineLabel span{
+    border-bottom: solid 1px var(--alabaster);
+}
+.line{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    margin: 1em ;
+    gap:1rem;
+    padding: 0em 1.5em;
+    border-left: solid 1px var(--alabaster);
+    border-right: solid 1px var(--alabaster);
+}
+.actualLine{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5em;
+}
+.remain{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    word-wrap: break-word
+}
+.section{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+.section p {
+    text-align: center;
+}

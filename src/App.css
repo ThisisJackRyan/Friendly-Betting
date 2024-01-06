@@ -87,6 +87,7 @@ body{
   border-radius: 5px;
   box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
   margin: 6rem 10rem;
+  padding: 1em;
 }
 
 .betButton{
@@ -102,10 +103,14 @@ body{
 .green{
   color: rgb(3, 255, 3);
 }
+
 .red{
   color: red;
 }
 
+.row{
+  flex-direction: row;
+}
 
 
 
