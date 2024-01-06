@@ -76,3 +76,6 @@
 .section p {
     text-align: center;
 }
+.pad{
+    padding: 4rem;
+}

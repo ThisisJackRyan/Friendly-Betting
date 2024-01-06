@@ -34,7 +34,7 @@ const ViewOverUnder = () => {
             <div className='x2'>
                 <div >
                    <h1 className={css.betLabel} >{bets.bet}</h1>
-                   <div className='blob row'>
+                   <div className={`blob row ${css.pad}`}>
                         <div className={css.section}>
                             <button className={`betButton ${css.button}`}>Under</button>
                             <p>8 others have taken the under</p>
