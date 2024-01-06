@@ -50,6 +50,10 @@ body{
   padding: 3rem;
 }
 
+.flex.center{
+  justify-content: center;
+  align-items: center;
+}
 
 .header{
   display: flex;
@@ -74,10 +78,33 @@ body{
 }
 
 
+.blob{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  background-color: rgba(149, 163, 164, .2);
+  border-radius: 5px;
+  box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
+  margin: 6rem 10rem;
+}
 
+.betButton{
+  background-color: #9DC9A4;
+  padding:1rem 2.25rem;
+  border-radius: 5px;
+  border: none;
+  box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
+  font-size: 1.1rem;
+  font-weight: 100;
+}
 
-
-
+.green{
+  color: rgb(3, 255, 3);
+}
+.red{
+  color: red;
+}
 
 
 

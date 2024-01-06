@@ -53,9 +53,9 @@ const Players = () => {
         <div className={css.friends}>
             {json["friends"].map((friend) => (
                 <div key={friend.id}>
-                <h3>{friend["name"]}</h3>
-                <p>Email: {friend["email"]}</p>
-                <p>Phone Number: {friend["phone"]}</p>
+                    <h3>{friend["name"]}</h3>
+                    <p>Email: {friend["email"]}</p>
+                    <p>Phone: {friend["phone"]}</p>
                 </div>
             ))}
             <div>

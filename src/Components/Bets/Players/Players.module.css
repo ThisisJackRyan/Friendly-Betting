@@ -8,7 +8,17 @@
 }
 
 .friends{
-  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  background-color: rgba(149, 163, 164, .2);
+  border-radius: 5px;
+  box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
+  margin: 1em 2.5em;
+  padding: 1em 3em;
+  font-size: .9em;
+
+
 }
 
 
@@ -64,8 +74,8 @@
 }
 
 .friendsLabel{
-    font-size: 1.5em;
-    margin-bottom: 1.5rem;
+  font-size: 1.5em;
+  margin-bottom: 1.5rem;
 }
 
 .friendsLabel span{
