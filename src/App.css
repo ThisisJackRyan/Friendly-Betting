@@ -1,3 +1,7 @@
+/* @tailwind base;
+@tailwind components;
+@tailwind utilities; */
+
 /* CSS HEX */
 :root{
   --midnight-green: #114b5fff;

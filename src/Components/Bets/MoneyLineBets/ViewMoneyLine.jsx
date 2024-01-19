@@ -35,8 +35,6 @@ const ViewMoneyLine = () => {
     return (
         <div className='flex pad'>
             <div className='x2'>
-
-
                <div>
                      <h1 className={css.betLabel}>{bets.bet}</h1>
 
