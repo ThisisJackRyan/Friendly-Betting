@@ -30,11 +30,11 @@ const ViewOverUnder = () => {
         fetchBet();
     }, [])
     return (
-        <div className='flex pad'>
+        <div className='flex p-12'>
             <div className='x2'>
                 <div >
                    <h1 className={css.betLabel} >{bets.bet}</h1>
-                   <div className={`blob row ${css.pad}`}>
+                   <div className={`blob row p-16`}>
                         <div className={css.section}>
                             <button className={`betButton ${css.button}`}>Under</button>
                             <p>8 others have taken the under</p>

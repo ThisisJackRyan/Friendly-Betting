@@ -36,7 +36,7 @@ const DisplayAllBets = () => {
         setDisplay((current) => !current)
     }
   return (
-    <div className='flex pad'>
+    <div className='flex p-12'>
       <div className='x2'>
         {json === " " ? (
           <div>

@@ -54,14 +54,14 @@ const CreateMoneyLine = () => {
     <div className='flex'>
         <div className='x2'>
             <form className={css.MoneyLine} onSubmit={handleSubmit}>
-            <div className={css.betContainer}>
+            <div className={`pb-8 ${css.betContainer}`}>
                 Bet:
-                <div className={css.bet}>
-                    <textarea type="text" name="" id="" onChange={(e) => setBet(e.target.value)} />
+                <div className="pl-8">
+                    <textarea className={css.betTextArea}type="text" name="" id="" onChange={(e) => setBet(e.target.value)} />
                 </div>
             </div>
             <div className='flex'>
-                <div className={css.contestant}>
+                <div className="flex flex-col my-4 mx-8">
                     <div><span className={css.label}>Contestant 1</span></div>
                     <input
                         type="text"
@@ -73,10 +73,10 @@ const CreateMoneyLine = () => {
                     />
                     <div className={css.odds}>
                         <span>(+ or - odds)</span>
-                        <input type="number" onChange={(e) => setOdds1(Number(e.target.value))}/>
+                        <input className="justify-center items-center" type="number" onChange={(e) => setOdds1(Number(e.target.value))}/>
                     </div>
                 </div>
-                <div className={css.contestant}>
+                <div className="flex flex-col my-4 mx-8">
                     <div><span className={css.label}>Contestant 2</span></div>
                     <input 
                         type="text"
@@ -86,8 +86,8 @@ const CreateMoneyLine = () => {
                         onChange={(e) => setContestant2(e.target.value)}
                         
                     /> 
-                    <div className={css.odds}>
-                        <span>(+ or - odds)</span>
+                    <div className="flex justify-center items-center gap-2 p-2">
+                        <span className={css.odds}>(+ or - odds)</span>
                         <input type="number"  onChange={(e) => setOdds2(Number(e.target.value))}/>
                     </div>
                 </div>

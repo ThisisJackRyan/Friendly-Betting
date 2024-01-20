@@ -33,20 +33,18 @@ const ViewMoneyLine = () => {
 
 
     return (
-        <div className='flex pad'>
+        <div className='flex p-12'>
             <div className='x2'>
                <div>
-                     <h1 className={css.betLabel}>{bets.bet}</h1>
-
+                     <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
                     <div className='blob'>
-
-                        <div className={css.ViewLabel}>
+                        <div className="flex justify-center items-center gap-8 my-4 mx-8 ">
                             <button className="betButton">Bet</button>
                             <h2>{bets.contestant1} </h2>
                             {bets.contestant1Odds > 0 ? <p className='green'>(+{bets.contestant1Odds})</p> : <p className="red">({bets.contestant1Odds})</p>}
                         </div>
                         <hr />
-                        <div className={css.ViewLabel}>
+                        <div className="flex justify-center items-center gap-8 my-4 mx-8">
                             <button className="betButton">Bet</button>
                             <h2>{bets.contestant2} </h2>
                             {bets.contestant2Odds > 0 ? <p className='green'>(+{bets.contestant2Odds})</p> : <p className='red'>({bets.contestant2Odds})</p>}
@@ -58,7 +56,7 @@ const ViewMoneyLine = () => {
 
 
             </div>
-            <div className="x1">
+            <div className="flex-1">
                 <Players />
             </div>
     </div>

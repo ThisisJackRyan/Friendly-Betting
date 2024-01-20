@@ -4,13 +4,12 @@
     font-size: 2em;
 }
 .betContainer{
-    padding-bottom: 2rem;
     border-bottom:dashed 1px var(--alabaster);
 }
 .bet{
     padding-left:2rem
 }
-.bet textarea{
+.betTextArea {
     width: 20em;
     height: 6em;
     font-size: .5em;
@@ -21,20 +20,11 @@
     background-color: var(--cadet-gray);
     color: var(--alabaster);
 }
-.bet textarea:focus{
+.betTextArea:focus{
     outline:none;
     border: solid 2px var(--alabaster);
 }
-.contestant{
-    display: flex;
-    flex-direction: column;
-    margin: 1rem 2rem;
-}
-.contestant input{
-    
-    justify-content: center;
-    align-items: center;
-}
+
 .contestantInput{
     height: 3rem;
     background-color: var(--cadet-gray);
@@ -52,38 +42,18 @@
     border-bottom: 1px solid var(--alabaster);
     color: var(--alabaster);
 }
-.odds span{
+.odds{
     font-size: .5em;
     padding-left: .5rem;
     color: var(--alabaster);
-}
-.odds {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap:0.5rem;
-    padding: 0.5rem;
 }
 .odds input{
     width: 4rem;
 }
 
-
-
-.ViewLabel{
-    display: flex;
-    justify-content: left;
-    align-items: center;
-    gap: 2em;
-    margin: 1rem 2rem;
-}
-
-
 .betLabel{
     font-weight: normal;
     border-bottom: dashed 1px var(--alabaster);
-    padding-bottom: 1rem;
-    padding-left: 1em;
 }
 hr {
     border: none;

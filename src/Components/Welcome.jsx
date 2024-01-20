@@ -22,7 +22,7 @@ const Welcome = () => {
     };
 
     return (
-    <div className='pad'>
+    <div className='p-12'>
         {signedIn ? (
         <div>
             

@@ -35,7 +35,7 @@ const ViewProp = () => {
 
     return (
         <div>
-            <div className='flex pad'>
+            <div className='flex p-12'>
             <div className='x2'>
                 <div>
                    <h1>{bets.bet}</h1>

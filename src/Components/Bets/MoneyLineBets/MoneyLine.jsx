@@ -5,7 +5,7 @@ const MoneyLine = () => {
   
 
   return (
-    <div className='pad'>
+    <div className='p-12'>
       <h1>Money Line Bets</h1>
       <CreateMoneyLine />
     </div>
