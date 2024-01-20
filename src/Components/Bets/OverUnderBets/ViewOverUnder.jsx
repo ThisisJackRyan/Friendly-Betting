@@ -32,21 +32,21 @@ const ViewOverUnder = () => {
     return (
         <div className='flex p-12'>
             <div className='x2'>
-                <div >
+                <div>
                    <h1 className={css.betLabel} >{bets.bet}</h1>
                    <div className={`blob row p-16`}>
                         <div className={css.section}>
-                            <button className={`betButton ${css.button}`}>Under</button>
+                            <button className="betButton">Under</button>
                             <p>8 others have taken the under</p>
                         </div>
                         <div className={css.line}>
                             <div className={css.lineLabel}><span>Line</span></div>
                             <div className={css.actualLine}>{bets.line}</div> 
-                            <div className={css.remain}>3 people have not voted</div>
+                            <div className="flex justify-center items-center break-words text-center">3 people have not voted</div>
                         </div>
-                        <div className={css.section}>
+                        <div className="flex flex-col justify-center items-center">
                             <button className='betButton'>Over</button>
-                            <p>12 others have taken the over</p>
+                            <p className="text-center">12 others have taken the over</p>
                         </div>
                    </div>
                 </div>

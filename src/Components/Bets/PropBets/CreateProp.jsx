@@ -51,15 +51,15 @@ const CreateProp = () => {
     <div className='flex'>
         <div className={css.prop} >
             <form onSubmit={handelSubmit}>
-                <div className={css.betContainer}>
+                <div className={`flex flex-col gap-4 pb-8 ${css.betContainer}`}>
                     Proposition:
-                    <div className={css.bet}>
-                        <textarea type="text" onChange={(e) => {setBet(e.target.value)}} />
+                    <div>
+                        <textarea className="betTextarea" type="text" onChange={(e) => {setBet(e.target.value)}} />
                     </div>
                 </div>
-                <div className={css.settings}>
+                <div className="flex gap-4 m-4">
                     <input type="checkbox" id="preSetBetting" checked={isChecked} onChange={handleCheckboxChange} />
-                    <label htmlFor="preSetBetting">Pre Set Betting Options</label>
+                    <label className={css.settings} htmlFor="preSetBetting">Pre Set Betting Options</label>
                 </div>
                 <button type="submit">Create bet</button>
             </form>

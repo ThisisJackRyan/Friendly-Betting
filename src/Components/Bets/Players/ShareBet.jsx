@@ -50,7 +50,7 @@ const ShareBet = (props) => {
     
     return (
         <div className={css.shareBet}>
-            <div className={css.x}><span onClick={props.display}>x</span></div>
+            <div className="flex justify-center mb-2"><span className={css.x} onClick={props.display}>x</span></div>
             <div className={css.friendsLabel}><span>friends</span></div>
             <form onSubmit={handleSubmit}>
                 {//props.friends.map((friend ) => (

@@ -6,13 +6,9 @@
 }
 
 .betContainer{
-    padding-bottom: 2rem;
     border-bottom:dashed 1px var(--alabaster);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
 }
-.bet textarea{
+.betTextarea{
     width: 20em;
     height: 6em;
     font-size: .5em;
@@ -35,42 +31,29 @@
     box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
     border:solid black 1px;
 }
+
 .settings{
-    display: flex;
-    gap:1rem;
-    margin:1em;
-}
-.settings label{
     font-size: .75em;
 }
+
 .title{
     text-align: center;
     font-size:0.75em ;
     margin-bottom: 1rem;
 }
+
 .title span{
     border-bottom: solid var(--alabaster) 2px;
 }
-.label{
+
+.label {
     font-size: 1em;
 }
-.x{
-    display: flex;
-    justify-content: right;
-    margin-bottom: 0.5rem;
-}
-.x span:hover{
+.x:hover {
     cursor: pointer;
     color: black;
 }
 
-.option{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap:0.5rem;
-    padding: 0.5rem;
-}
 .optionInput{
     height: 2rem;
     background-color: var(--alabaster);
@@ -79,9 +62,6 @@
     padding: 0.25rem 0.5rem;
 }
 
-.options{
-    padding-left: 2em;
-}
 h4 span{
     font-size: 1em;
     margin-bottom: 0.5rem;

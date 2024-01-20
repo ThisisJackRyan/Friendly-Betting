@@ -41,16 +41,16 @@ const CreateOverUnder = () => {
     <div className='flex'>
         <div className={css.OverUnder}>
         <form onSubmit={handelSubmit}>
-                <div className={css.betContainer}>
+                <div className={`flex flex-col gap-4 pb-8 ${css.betContainer}`}>
                     Proposition:
                     <div className={css.bet}>
-                        <textarea type="text" onChange={(e) => {setBet(e.target.value)}}/>
+                        <textarea className={css.BetTextArea} type="text" onChange={(e) => {setBet(e.target.value)}}/>
                     </div>
                 </div>
                 <div>
-                    <div className={css.setting}>
+                    <div className="flex items-center gap-4 m-2">
                         <span className={css.label}>Line:</span>
-                        <input className={css.input} type="number" step="0.5" onChange={(e) =>{setLine(Number(e.target.value))}} />
+                        <input className="h-6 w-12" type="number" step="0.5" onChange={(e) =>{setLine(Number(e.target.value))}} />
                     </div>
                 </div>
                 <button type="submit">Create bet</button>

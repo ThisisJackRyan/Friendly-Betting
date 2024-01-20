@@ -32,11 +32,11 @@ const PreSetBettingOptions = (prop) => {
 
     return (
         <div className={css.PreSetBetting}>
-            <div className={css.x}><span onClick={prop.display}>x</span></div>
+            <div className="flex justify-center mb-2"><span className="x" onClick={prop.display}>x</span></div>
             <div className={css.title}><span>Preset Betting Options</span></div>
             <form onSubmit={handleSubmit}>
                 {howManyOptions.map((option, index) => (
-                    <div className={css.option} key={index}>
+                    <div className="flex justify-center items-center gap-2 p-2" key={index}>
                         <span className={css.label}>{option+1}:</span>
                         <input className={css.optionInput} type="text" onChange={(e) => addOptions(e, index)} placeholder='Who or what' />
                     </div>

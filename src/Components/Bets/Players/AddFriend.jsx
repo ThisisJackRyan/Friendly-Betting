@@ -40,14 +40,14 @@ const AddFriend = (props) => {
 
   return (
     <form className={css.addFiendForm} onSubmit={handleSubmit}>
-      <div className={css.x}><span onClick={props.disable}>x</span></div>
+      <div className="flex justify-center mb-2"><span className={css.x} onClick={props.disable}>x</span></div>
       <label>
         <span>Account Number:</span>
         <input type="text" value={accountNumber} onChange={handleAccountNumberChange} />
       </label>
       <br />
       <br />
-      <div className={css.or}>or</div>
+      <div className="flex justify-center items-center text-center">or</div>
       <br />
       <label>
         <span>Name:</span>

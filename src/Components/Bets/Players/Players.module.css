@@ -36,29 +36,16 @@
 }
   
   
-.x{
-    display: flex;
-    justify-content: right;
-    margin-bottom: 0.5rem;
-}
-.x span{
+.x {
     margin-left: 0.5rem;
     margin-right: 0.5rem;
     font-size: smaller;
 }
   
-.x span:hover{
+.x:hover{
     cursor: pointer;
     color: black;
 }
-
-.or{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-}
-
 
 .shareBet{
     font-size: 1.5em;
