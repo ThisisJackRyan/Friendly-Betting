@@ -1,0 +1,39 @@
+.greenButton {
+    background-color: #9DC9A4;
+    
+    border-radius: 5px;
+    border: none;
+    box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
+    
+
+
+}
+
+.redSpring {
+    background-color: #FF9A9A;
+}
+
+.big{
+    padding:1rem 2.25rem;
+    font-size: 1.1rem;
+    font-weight: 100;
+}
+
+.small{
+    padding: 0;
+}
+
+.DeleteButton{
+    background-color: red;
+    border-radius: 5px;
+    border: none;
+    box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
+    padding: 1rem   2.25rem;
+}
+.DeleteButton:hover{
+    background-color: darkred;
+}
+
+.DeleteButton:active{
+    box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25) inset;
+}
