@@ -2,6 +2,7 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Players from '../Players/Players';
+import DeleteButton from '../../Components/DeleteButton';
 import css from './OverUnder.module.css';
 import {db} from '../../../Config/firebase-config';
 import { collection, getDocs, where , query } from 'firebase/firestore';
@@ -33,7 +34,10 @@ const ViewOverUnder = () => {
         <div className='flex p-12'>
             <div className='x2'>
                 <div>
-                   <h1 className={css.betLabel} >{bets.bet}</h1>
+                    <div className="flex justify-around">
+                        <h1 className={css.betLabel} >{bets.bet}</h1>
+                        <DeleteButton />  
+                    </div>
                    <div className={`blob row p-16`}>
                         <div className={css.section}>
                             <button className="betButton">Under</button>
