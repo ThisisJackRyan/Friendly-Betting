@@ -10,6 +10,7 @@
   --dark-purple: #170a1cff;
   --alabaster: #e2e8ddff;
   --dark-spring-green: #007a45ff;
+  --spring-green: #9DC9A4;
   
   /* CSS HSL */
   /*
@@ -68,13 +69,28 @@ body{
   align-items: center;
   gap:1em;
 }
-.Link{
+.link{
   text-decoration: none;
   color: var(--alabaster);
+  padding: .75rem 1.25rem;
+}
+.Link{
+  text-decoration: none;
+  background-color: rgba(110, 118, 119, .5);
+  color: var(--alabaster);
+  padding: .75rem 1.25rem;
+  border-radius: 5px;
+  border:solid rgb(104, 104, 104) 2px;
+  box-shadow: 2px 2px 2px 1px rgba(0,0,0,0.25);
+  transition: all .25s ease-in-out;
 
 }
 .Link:hover{
-  color: var(--dark-purple);
+  /* background-color: rgba(110, 118, 119, 1); */
+  box-shadow: 7px 7px 7px 2px rgba(0,0,0,0.25);
+}
+.Link:active{
+  box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.2) inset;
 }
 
 
@@ -103,6 +119,12 @@ body{
 }
 
 
+.betLink{
+  background-color:var(--spring-green);
+}
 
 
 
+.text-shadow{
+  text-shadow: rgb(100, 100, 100) 1px 1px 1px;
+}
