@@ -1,6 +1,7 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import Buttons from '../../Components/Buttons';
 import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
 import css from './OverUnder.module.css';
@@ -40,11 +41,11 @@ const ViewOverUnder = () => {
                 <div>
                     <div className="flex justify-around">
                         <h1 className={css.betLabel} >{bets.bet}</h1>
-                        <DeleteButton  collection={collectionName} docId={betId} />  
+                        <DeleteButton  collection={collectionName} docId={betId} />
                     </div>
                    <div className={`blob row p-16`}>
-                        <div className={css.section}>
-                            <button className="betButton">Under</button>
+                        <div className="flex flex-col justify-center items-center">
+                            <Buttons text="Under" a="greenButton" size="big"></Buttons>
                             <p>8 others have taken the under</p>
                         </div>
                         <div className={css.line}>
@@ -53,13 +54,14 @@ const ViewOverUnder = () => {
                             <div className="flex justify-center items-center break-words text-center">3 people have not voted</div>
                         </div>
                         <div className="flex flex-col justify-center items-center">
-                            <button className='betButton'>Over</button>
+                            <Buttons text="Over" a="greenButton" size="big"></Buttons>
                             <p className="text-center">12 others have taken the over</p>
                         </div>
                    </div>
                 </div>
             </div>
             <div className="x1">
+                
                 <Players />
             </div>
             

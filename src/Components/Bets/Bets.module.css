@@ -52,9 +52,15 @@
   box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
   
 }
+
 .bet:hover{
+  background-color: rgb(135, 148, 148);
+}
+
+.bet:active{
   box-shadow: 3px 3px 3px 0px rgba(0,0,0,0.75) inset;
 }
+
 .link{
   text-decoration: none;
   color: var(--alabaster);

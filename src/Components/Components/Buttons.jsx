@@ -5,7 +5,7 @@ import css from './Components.module.css';
 
 const Buttons = (props) => {
 
-    const buttonColor = props.class === "greenButton" ? css.greenSpring : css.redSpring
+    const buttonColor = props.a === "greenButton" ? css.greenButtons : css.redSpring
     const buttonType = props.size === "big" ? css.big : css.small
 
 
