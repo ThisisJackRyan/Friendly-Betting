@@ -22,7 +22,7 @@ const DisplayBet = (props) => {
         <div onClick={viewBet}>
             <Link 
                 to={`/Friendly-Betting/Bet/${viewBet()}`}
-                state={{"bet":props.bet}}x
+                state={{"bet":props.bet}}
                 className={css.link}
             
             >

@@ -22,7 +22,6 @@ const DisplayAllBets = () => {
             ...doc.data(), 
             id: doc.id,
           }));
-          console.log(filteredData);
           setBets(filteredData);
         } catch (e) {
           console.error(e);
@@ -38,7 +37,7 @@ const DisplayAllBets = () => {
   return (
     <div className='flex p-12'>
       <div className='x2'>
-        {json === " " ? (
+        {bets.length < 1 ? (
           <div>
             <h3>You are not in any bets yet</h3>
             <button onClick={swapDisplay}>Create One!</button>
@@ -47,8 +46,8 @@ const DisplayAllBets = () => {
           </div>
         ) : (
           <div>
-            {bets.map((bet) => (
-              <DisplayBet bet={bet} />
+            {bets.map((bet, id) => (
+              <DisplayBet key={id} bet={bet} />
             ))}
             <button onClick={swapDisplay}>Create One!</button>
             {display ? <BetNav swap={swapDisplay}/> : null}

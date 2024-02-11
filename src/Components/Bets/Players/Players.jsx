@@ -52,8 +52,8 @@ const Players = () => {
     return (
         <div className="pt-12 sticky top-0 bottom-0 right-0 left-0">       
             <div className={css.friends}>
-                {json["friends"].map((friend) => (
-                    <div key={friend.id}>
+                {json["friends"].map((friend, id) => (
+                    <div key={id}>
                         <h3>{friend["name"]}</h3>
                         <p>Email: {friend["email"]}</p>
                         <p>Phone: {friend["phone"]}</p>

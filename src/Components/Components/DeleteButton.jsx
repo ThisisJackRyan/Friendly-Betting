@@ -11,7 +11,6 @@ const DeleteButton = (props) => {
 
     const location = useLocation()
     const { bet } = location.state
-    console.log(bet);
 
     const handleDelete = () => {
         const deleteDocument  = async () => {
