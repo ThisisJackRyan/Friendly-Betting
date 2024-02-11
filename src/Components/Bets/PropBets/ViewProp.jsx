@@ -10,6 +10,9 @@ const ViewProp = () => {
 
     const [bets, setBets] = useState([])
     const [length, setLength] = useState(0)
+    const [betId, setBetId] = useState('')
+
+    const collectionName = "PropBets"
 
     const location = useLocation()
     const { bet } = location.state
@@ -24,6 +27,7 @@ const ViewProp = () => {
                 const querySnapshot = await getDocs(q);
                 setBets(querySnapshot.docs[0].data());
                 setLength(querySnapshot.docs[0].data().options.length)
+                setBetId(querySnapshot.docs[0].id);
                 
 
             } catch (e) {
@@ -41,7 +45,7 @@ const ViewProp = () => {
                 <div>
                     <div className="flex justify-around">
                         <h1 className={css.betLabel} >{bets.bet}</h1>
-                        <DeleteButton />  
+                        <DeleteButton collection={collectionName} docId={betId} />  
                     </div>
                    
                    {length > 0 ? (

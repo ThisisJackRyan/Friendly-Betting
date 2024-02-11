@@ -10,6 +10,9 @@ import { collection, getDocs, where , query } from 'firebase/firestore';
 const ViewOverUnder = () => {
 
     const [bets, setBets] = useState([])
+    const [betId, setBetId] = useState('')
+
+    const collectionName = "OverUnderBets"
 
     const location = useLocation()
     const { bet } = location.state
@@ -23,6 +26,7 @@ const ViewOverUnder = () => {
                 const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
                 const querySnapshot = await getDocs(q);
                setBets(querySnapshot.docs[0].data());
+               setBetId(querySnapshot.docs[0].id);
 
             } catch (e) {
                 console.error(e);
@@ -36,7 +40,7 @@ const ViewOverUnder = () => {
                 <div>
                     <div className="flex justify-around">
                         <h1 className={css.betLabel} >{bets.bet}</h1>
-                        <DeleteButton />  
+                        <DeleteButton  collection={collectionName} docId={betId} />  
                     </div>
                    <div className={`blob row p-16`}>
                         <div className={css.section}>

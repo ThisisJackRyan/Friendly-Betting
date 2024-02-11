@@ -12,19 +12,22 @@ import DeleteButton from '../../Components/DeleteButton';
 const ViewMoneyLine = () => {
 
     const [bets, setBets] = useState([])
+    const [betId, setBetId] = useState('')
 
+    const collectionName = "MoneyLineBets"
 
     const location = useLocation()
     const { bet } = location.state
-
     
     useEffect(() => {
         const fetchBet = async () => {
             try{
-                const MoneyLineBetCollection = collection(db, "MoneyLineBets");
+                const MoneyLineBetCollection = collection(db, collectionName);
                 const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
                 const querySnapshot = await getDocs(q);
                setBets(querySnapshot.docs[0].data());
+               setBetId(querySnapshot.docs[0].id);
+        
 
             } catch (e) {
                 console.error(e);
@@ -40,7 +43,7 @@ const ViewMoneyLine = () => {
                <div>
                     <div className="flex justify-around">
                         <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
-                        <DeleteButton />  
+                        <DeleteButton collection={collectionName} docId={betId}/>  
                     </div>
                     
                     <div className='blob'>
