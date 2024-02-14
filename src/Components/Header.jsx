@@ -11,7 +11,6 @@ const Header = () => {
                 <div className="logo"><Link className="link" to="Friendly-Betting/">
                     <img src="https://placehold.co/60x60" alt="" />
                 </Link>
-                
                 </div>
             </div>
             <div className="x1 text-shadow flex justify-start items-center text-5xl">
@@ -21,11 +20,7 @@ const Header = () => {
                 <span>Bets</span>
             </div>
             <div className="flex pages x1">
-                {location.pathname !== "/SignIn" ? <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>
-                
-                
-                
-                }
+                {location.pathname !== "/SignIn" ? <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>: <Link className="Link" to="/">Sign In</Link>}
                     <Link className="Link betLink" to="Friendly-Betting/Bet">Bets</Link>
                     <Link className="Link" to="Friendly-Betting/Friends">Friends</Link>
             </div>

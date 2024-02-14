@@ -5,6 +5,7 @@ import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
 import Players from './Players/Players';
+import css from './Bets.module.css';
 
 
 const DisplayAllBets = () => {
@@ -40,7 +41,7 @@ const DisplayAllBets = () => {
         {bets.length < 1 ? (
           <div>
             <h3>You are not in any bets yet</h3>
-            <button onClick={swapDisplay}>Create One!</button>
+            <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
             {display ? <BetNav swap={swapDisplay}/> : null}
 
           </div>
@@ -49,7 +50,7 @@ const DisplayAllBets = () => {
             {bets.map((bet, id) => (
               <DisplayBet key={id} bet={bet} />
             ))}
-            <button onClick={swapDisplay}>Create One!</button>
+            <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
             {display ? <BetNav swap={swapDisplay}/> : null}
           </div>
         ) }

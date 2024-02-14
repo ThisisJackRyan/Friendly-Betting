@@ -20,13 +20,13 @@ const BetNav = (props) => {
         <h1><span>Bets</span></h1>
         <div className={css.BettingLinks}>
             <div>
-                <div onClick={goToMoneyLine} className='Link' >Money Line Bets</div>
+                <div onClick={goToMoneyLine} className={css.betNavLinks} >Money Line Bets</div>
             </div>
             <div>
-                <div onClick={goToOverUnder} className='Link' >Over / Under Bets</div>
+                <div onClick={goToOverUnder} className={css.betNavLinks} >Over / Under Bets</div>
             </div>
             <div>
-                <div onClick={goToProps} className='Link' >Prop Bets</div>
+                <div onClick={goToProps} className={css.betNavLinks} >Prop Bets</div>
             </div>
         </div>
     </div>

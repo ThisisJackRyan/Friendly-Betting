@@ -45,7 +45,6 @@ const ViewMoneyLine = () => {
                         <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
                         <DeleteButton collection={collectionName} docId={betId}/>  
                     </div>
-                    
                     <div className='blob'>
                         <div className="flex justify-center items-center gap-8 my-4 mx-8 ">
                             <Buttons text="Bet" a="greenButton" size="big"></Buttons>
@@ -61,9 +60,6 @@ const ViewMoneyLine = () => {
                     </div>
                     
                </div>
-
-
-
             </div>
             <div className="flex-1">
                 <Players />
