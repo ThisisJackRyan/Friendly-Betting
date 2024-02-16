@@ -2,6 +2,7 @@ import React from 'react';
 import css from './OverUnder.module.css';
 import Players from '../Players/Players';
 import ShareBet from '../Players/ShareBet';
+import { getSignedInUserInfo } from '../../../Config/base';
 import {useState} from 'react';
 import {db} from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
@@ -22,15 +23,23 @@ const CreateOverUnder = () => {
         e.preventDefault();
         handleShare();
         try {
-            await addDoc(collection(db, "bets"), {
-                type: "Over Under",
-                bet: bet,
-            })
-        
-            await addDoc(collection(db, "OverUnderBets"), {
-                bet: bet,
-                line: line,
-            })
+            const userInfo = getSignedInUserInfo();
+            if(userInfo !== null) {
+                const betRef = await addDoc(collection(db, "OverUnderBets"), {
+                    bet: bet,
+                    line: line,
+                })
+                await addDoc(collection(db, "bets"), {
+                    id: betRef.id,
+                    type: "Over Under",
+                    bet: bet,
+                    createdByID: userInfo["uid"],
+                    createdByEmail: userInfo["email"],
+                })
+            } else {
+                alert("You must be signed in to create a bet")
+            }
+            
           } catch (e) {
             console.error(e);
           }

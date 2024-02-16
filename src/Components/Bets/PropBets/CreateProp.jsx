@@ -4,6 +4,7 @@ import { useState } from 'react';
 import PreSetBettingOptions from './PreSetBettingOptions';
 import Players from '../Players/Players';
 import ShareBet from '../Players/ShareBet';
+import { getSignedInUserInfo } from '../../../Config/base';
 import {db} from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
@@ -33,15 +34,24 @@ const CreateProp = () => {
         e.preventDefault();
         handleShare();
         try {
-            await addDoc(collection(db, "bets"), {
-                type: "Prop",
-                bet: bet,
-            })
+            const userInfo = getSignedInUserInfo();
+            if(userInfo !== null) {
+                const betRef = await addDoc(collection(db, "PropBets"), {
+                    bet: bet,
+                    options: Options,
+                })
+                await addDoc(collection(db, "bets"), {
+                    id: betRef.id,
+                    type: "Prop",
+                    bet: bet,
+                    createdByID: userInfo["uid"],
+                    createdByEmail: userInfo["email"],
+                })
+            } else {
+                alert("You must be signed in to create a bet")
+            }
         
-            await addDoc(collection(db, "PropBets"), {
-                bet: bet,
-                options: Options,
-            })
+            
           } catch (e) {
             console.error(e);
           }
