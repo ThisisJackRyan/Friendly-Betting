@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
 import ShareBet from '../Players/ShareBet';
-import {db} from '../../../Config/firebase-config';
+import { db } from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
+
+import  { getSignedInUserInfo }  from '../../../Config/base';
 
 const CreateMoneyLine = () => {
   const [bet, setBet] = useState('');
@@ -19,8 +21,6 @@ const CreateMoneyLine = () => {
 
   const [shareDisplay, setShareDisplay] = useState(false);
 
-  
-
 
 
   const handleShare = () => {
@@ -31,18 +31,30 @@ const CreateMoneyLine = () => {
     e.preventDefault();
     handleShare();
     try {
-      await addDoc(collection(db, "bets"), {
-          type: "Money Line",
-          bet: bet,
-      })
+        const userInfo = getSignedInUserInfo();
+        if(userInfo !== null) {
+            const betRef = await addDoc(collection(db, "MoneyLineBets"), {
+                bet: bet,
+                contestant1: contestant1,
+                contestant1Odds: odds1,
+                contestant2: contestant2,
+                contestant2Odds: odds2,
+            })
+            
+            await addDoc(collection(db, "bets"), {
+                id: betRef.id,
+                type: "Money Line",
+                bet: bet,
+                createdByID: userInfo["uid"],
+                createdByEmail: userInfo["email"],
+
+
+            })
+        } else {
+           alert("You must be signed in to create a bet")
+        }
   
-      await addDoc(collection(db, "MoneyLineBets"), {
-          bet: bet,
-          contestant1: contestant1,
-          contestant1Odds: odds1,
-          contestant2: contestant2,
-          contestant2Odds: odds2,
-      })
+      
     } catch (e) {
       console.error(e);
     }

@@ -6,6 +6,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
 import Players from './Players/Players';
 import css from './Bets.module.css';
+import { getSignedInUserInfo } from '../../Config/base';
 
 
 const DisplayAllBets = () => {
@@ -23,7 +24,9 @@ const DisplayAllBets = () => {
             ...doc.data(), 
             id: doc.id,
           }));
-          setBets(filteredData);
+          console.log(getSignedInUserInfo().uid)
+          const cleanedData = filteredData.filter(bet => bet.createdByID == getSignedInUserInfo().uid);
+          setBets(cleanedData);
         } catch (e) {
           console.error(e);
         }
@@ -35,12 +38,14 @@ const DisplayAllBets = () => {
     const swapDisplay = () => {
         setDisplay((current) => !current)
     }
+
   return (
     <div className='flex p-12'>
       <div className='x2'>
         {bets.length < 1 ? (
           <div>
-            <h3>You are not in any bets yet</h3>
+            <h3>hmmm.... Looks Like you haven't created any bets yet 🤷‍♂️ </h3>
+            <p> Create 1 \/</p>
             <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
             {display ? <BetNav swap={swapDisplay}/> : null}
 
