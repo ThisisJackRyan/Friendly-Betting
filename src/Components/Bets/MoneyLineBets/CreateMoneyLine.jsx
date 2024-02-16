@@ -42,7 +42,7 @@ const CreateMoneyLine = () => {
             })
             
             await addDoc(collection(db, "bets"), {
-                id: betRef.id,
+                betID: betRef.id,
                 type: "Money Line",
                 bet: bet,
                 createdByID: userInfo["uid"],

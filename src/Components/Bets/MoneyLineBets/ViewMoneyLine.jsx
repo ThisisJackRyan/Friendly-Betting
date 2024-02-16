@@ -5,7 +5,7 @@ import ShareBet from '../Players/ShareBet';
 import Buttons from '../../Components/Buttons';
 import { useLocation } from 'react-router-dom';
 import {db} from '../../../Config/firebase-config';
-import { collection, getDocs, where , query } from 'firebase/firestore';
+import { getDoc, doc } from 'firebase/firestore';
 import DeleteButton from '../../Components/DeleteButton';
 
 
@@ -22,13 +22,10 @@ const ViewMoneyLine = () => {
     useEffect(() => {
         const fetchBet = async () => {
             try{
-                const MoneyLineBetCollection = collection(db, collectionName);
-                const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
-                const querySnapshot = await getDocs(q);
-               setBets(querySnapshot.docs[0].data());
-               setBetId(querySnapshot.docs[0].id);
-        
-
+                const docRef = doc(db, collectionName, bet.betID);
+                const docSnap = await getDoc(docRef);
+                setBets(docSnap.data());
+                setBetId(docSnap.id);
             } catch (e) {
                 console.error(e);
             }

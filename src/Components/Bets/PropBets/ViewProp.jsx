@@ -5,7 +5,7 @@ import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
 import css from './Prop.module.css';
 import {db} from '../../../Config/firebase-config';
-import { collection, getDocs, where , query } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 const ViewProp = () => {
 
     const [bets, setBets] = useState([])
@@ -22,14 +22,11 @@ const ViewProp = () => {
 
         const fetchBet = async () => {
             try{
-                const MoneyLineBetCollection = collection(db, "PropBets");
-                const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
-                const querySnapshot = await getDocs(q);
-                setBets(querySnapshot.docs[0].data());
-                setLength(querySnapshot.docs[0].data().options.length)
-                setBetId(querySnapshot.docs[0].id);
-                
-
+                const docRef = doc(db, collectionName, bet.betID);
+                const docSnap = await getDoc(docRef);
+                setBets(docSnap.data());
+                setBetId(docSnap.id);
+                setLength(docSnap.data().options.length);
             } catch (e) {
                 console.error(e);
             }

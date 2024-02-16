@@ -41,7 +41,7 @@ const CreateProp = () => {
                     options: Options,
                 })
                 await addDoc(collection(db, "bets"), {
-                    id: betRef.id,
+                    betID: betRef.id,
                     type: "Prop",
                     bet: bet,
                     createdByID: userInfo["uid"],

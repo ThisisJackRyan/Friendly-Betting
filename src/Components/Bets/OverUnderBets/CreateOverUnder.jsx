@@ -30,7 +30,7 @@ const CreateOverUnder = () => {
                     line: line,
                 })
                 await addDoc(collection(db, "bets"), {
-                    id: betRef.id,
+                    betID: betRef.id,
                     type: "Over Under",
                     bet: bet,
                     createdByID: userInfo["uid"],

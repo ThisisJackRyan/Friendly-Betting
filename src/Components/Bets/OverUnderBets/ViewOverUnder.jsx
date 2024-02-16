@@ -6,7 +6,7 @@ import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
 import css from './OverUnder.module.css';
 import {db} from '../../../Config/firebase-config';
-import { collection, getDocs, where , query } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 const ViewOverUnder = () => {
 
@@ -23,11 +23,10 @@ const ViewOverUnder = () => {
 
         const fetchBet = async () => {
             try{
-                const MoneyLineBetCollection = collection(db, "OverUnderBets");
-                const q = query(MoneyLineBetCollection, where("bet", "==", bet.bet));
-                const querySnapshot = await getDocs(q);
-               setBets(querySnapshot.docs[0].data());
-               setBetId(querySnapshot.docs[0].id);
+                const docRef = doc(db, collectionName, bet.betID);
+                const docSnap = await getDoc(docRef);
+                setBets(docSnap.data());
+                setBetId(docSnap.id);
 
             } catch (e) {
                 console.error(e);

@@ -24,7 +24,6 @@ const DisplayAllBets = () => {
             ...doc.data(), 
             id: doc.id,
           }));
-          console.log(getSignedInUserInfo().uid)
           const cleanedData = filteredData.filter(bet => bet.createdByID == getSignedInUserInfo().uid);
           setBets(cleanedData);
         } catch (e) {

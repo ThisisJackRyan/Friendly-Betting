@@ -54,8 +54,8 @@ const ShareBet = (props) => {
             <div className={css.friendsLabel}><span>friends</span></div>
             <form onSubmit={handleSubmit}>
                 {//props.friends.map((friend ) => (
-                json["friends"].map((friend) => (
-                    <label className={css.container}>
+                json["friends"].map((friend, index) => (
+                    <label key={index} className={css.container}>
                         {friend.name}
                         <input className={css.input} type="checkbox" name="" id="" />
                         <span className={css.checkmark}></span>
