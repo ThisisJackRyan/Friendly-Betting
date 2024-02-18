@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { auth } from "../../Config/firebase-config";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import {useNavigate} from "react-router-dom";
+import { signInWithEmailAndPassword, signOut,  } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import css from "./SignIn.module.css";
 
 
@@ -9,18 +9,31 @@ import css from "./SignIn.module.css";
 
 const SignIn = () => {
 
+    const navigate = useNavigate();
+
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [signInTransition, setSignInTransition] = useState(false);
 
+
     console.log(auth?.currentUser?.email)
 
     const singInUser = async () => {
-        try{
-            await createUserWithEmailAndPassword(auth, email, password);
-        } catch (err){
-            console.error(err);
-        }
+        signInWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+            // Signed in 
+            const user = userCredential.user;
+            console.log("User signed in")
+            console.log(user);
+            navigate("/Friendly-Betting/");
+        })
+        .catch((error) => {
+        const errorCode = error.code;
+        const errorMessage = error.message;
+        console.error("ERROR --> " + errorCode)
+        console.error(errorMessage)
+        });
+         
     }
 
     const logOut = async () => {
@@ -31,7 +44,6 @@ const SignIn = () => {
         }
     }
 
-    const navigate = useNavigate();
     const toCreateAccount = () => {
         navigate("/Friendly-Betting/CreateAccount");
     }

@@ -11,7 +11,6 @@ import { getSignedInUserInfo } from '../../Config/base';
 
 const DisplayAllBets = () => {
 
-    const [json, setJson] = useState("")
     const [display, setDisplay] = useState(false)
     const [bets, setBets] = useState([])
 
@@ -44,7 +43,7 @@ const DisplayAllBets = () => {
         {bets.length < 1 ? (
           <div>
             <h3>hmmm.... Looks Like you haven't created any bets yet 🤷‍♂️ </h3>
-            <p> Create 1 \/</p>
+            <p> Create One!</p>
             <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
             {display ? <BetNav swap={swapDisplay}/> : null}
 
