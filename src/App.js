@@ -40,9 +40,9 @@ function App() {
           <Route path="Friendly-Betting/OverUnderBets" element={<OverUnder />} />
           <Route path="Friendly-Betting/PropBets" element={<Prop />} />
 
-          <Route path="/Friendly-Betting/Bet/MoneyLineBets/" element={<ViewMoneyLine />} />
-          <Route path="/Friendly-Betting/Bet/OverUnderBets/" element={<ViewOverUnder />} />
-          <Route path="/Friendly-Betting/Bet/PropBets/" element={<ViewProp />} />
+          <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id" element={<ViewMoneyLine />} />
+          <Route path="/Friendly-Betting/Bet/OverUnderBets/:id" element={<ViewOverUnder />} />
+          <Route path="/Friendly-Betting/Bet/PropBets/:id" element={<ViewProp />} />
 
 
 

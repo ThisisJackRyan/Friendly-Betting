@@ -21,7 +21,7 @@ const DisplayBet = (props) => {
     return (
         <div onClick={viewBet}>
             <Link 
-                to={`/Friendly-Betting/Bet/${viewBet()}`}
+                to={`/Friendly-Betting/Bet/${viewBet()}${props.bet.id}`}
                 state={{"bet":props.bet}}
                 className={css.link}
             
