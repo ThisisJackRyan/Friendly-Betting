@@ -10,7 +10,7 @@ const Buttons = (props) => {
 
 
     return (
-        <div className={buttonColor}>
+        <div className={buttonColor} onClick={props.click}>
             <div>{props.text}</div>
         </div>
     );

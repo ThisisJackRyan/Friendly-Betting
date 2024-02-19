@@ -6,7 +6,7 @@ import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
 import css from './OverUnder.module.css';
 import {db} from '../../../Config/firebase-config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc , updateDoc} from 'firebase/firestore';
 
 const ViewOverUnder = () => {
 
@@ -18,20 +18,44 @@ const ViewOverUnder = () => {
     const location = useLocation()
     const { bet } = location.state
 
+    const addUnder = async () => {
+        const docRef = doc(db, collectionName, betId);
+        const docSnap = await getDoc(docRef);
+        const under = docSnap.data().under
+        await updateDoc(docRef, {
+            under: under + 1
+        })
+        fetchBet();
+        
+    
+    }
+
+    const addOver = async () => {
+        const docRef = doc(db, collectionName, betId);
+        const docSnap = await getDoc(docRef);
+        const over = docSnap.data().over
+        console.log(over);
+        await updateDoc(docRef, {
+            over: over + 1
+        })
+        fetchBet();
+        
+       
+    }
+
+    const fetchBet = async () => {
+        try{
+            const docRef = doc(db, collectionName, bet.betID);
+            const docSnap = await getDoc(docRef);
+            setBets(docSnap.data());
+            setBetId(docSnap.id);
+
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     useEffect(() => {
-
-        const fetchBet = async () => {
-            try{
-                const docRef = doc(db, collectionName, bet.betID);
-                const docSnap = await getDoc(docRef);
-                setBets(docSnap.data());
-                setBetId(docSnap.id);
-
-            } catch (e) {
-                console.error(e);
-            }
-        }
         fetchBet();
     }, [])
     return (
@@ -44,8 +68,8 @@ const ViewOverUnder = () => {
                     </div>
                    <div className={`blob row p-16`}>
                         <div className="flex flex-col justify-center items-center">
-                            <Buttons text="Under" a="greenButton" size="big"></Buttons>
-                            <p>8 others have taken the under</p>
+                            <Buttons click={addUnder} text="Under" a="greenButton" size="big"></Buttons>
+                            <p>{bets.under || 0} others have taken the under</p>
                         </div>
                         <div className={css.line}>
                             <div className={css.lineLabel}><span>Line</span></div>
@@ -53,8 +77,8 @@ const ViewOverUnder = () => {
                             <div className="flex justify-center items-center break-words text-center">3 people have not voted</div>
                         </div>
                         <div className="flex flex-col justify-center items-center">
-                            <Buttons text="Over" a="greenButton" size="big"></Buttons>
-                            <p className="text-center">12 others have taken the over</p>
+                            <Buttons click={addOver} text="Over" a="greenButton" size="big"></Buttons>
+                            <p className="text-center">{bets.over } others have taken the over</p>
                         </div>
                    </div>
                 </div>

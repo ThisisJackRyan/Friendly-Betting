@@ -35,6 +35,8 @@ const CreateOverUnder = () => {
                     bet: bet,
                     createdByID: userInfo["uid"],
                     createdByEmail: userInfo["email"],
+                    under:0,
+                    over:0,
                 })
             } else {
                 alert("You must be signed in to create a bet")
