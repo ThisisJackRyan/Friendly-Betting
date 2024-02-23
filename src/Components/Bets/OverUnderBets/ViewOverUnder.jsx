@@ -33,8 +33,7 @@ const ViewOverUnder = () => {
     const addOver = async () => {
         const docRef = doc(db, collectionName, betId);
         const docSnap = await getDoc(docRef);
-        const over = docSnap.data().over
-        console.log(over);
+        const over = docSnap.data().over;
         await updateDoc(docRef, {
             over: over + 1
         })
@@ -84,7 +83,6 @@ const ViewOverUnder = () => {
                 </div>
             </div>
             <div className="x1">
-                
                 <Players />
             </div>
             
