@@ -1,6 +1,8 @@
 import React from 'react';
 import css from './Players.module.css';
+import QRCode from 'react-qr-code';
 import {useState} from 'react';
+
 
 
 
@@ -47,21 +49,22 @@ const ShareBet = (props) => {
         console.log('Sharing bet');
     }
 
+
+
     
     return (
         <div className={css.shareBet}>
             <div className="flex justify-center mb-2"><span className={css.x} onClick={props.display}>x</span></div>
             <div className={css.friendsLabel}><span>friends</span></div>
             <form onSubmit={handleSubmit}>
-                {//props.friends.map((friend ) => (
-                json["friends"].map((friend, index) => (
-                    <label key={index} className={css.container}>
-                        {friend.name}
-                        <input className={css.input} type="checkbox" name="" id="" />
-                        <span className={css.checkmark}></span>
-                        
-                    </label>
-                ))}
+            
+            <QRCode
+                title="qr-code"
+                value={window.location.href}
+                bgColor="#FFFFFF"
+                fgcolor="#000000"
+                size="254"
+            />
                     <button type="submit">Send</button>
             </form>
         </div>
