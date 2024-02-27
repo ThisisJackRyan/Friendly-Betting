@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
+import ShareButton from '../../Components/ShareButton';
 import css from './Prop.module.css';
 import {db} from '../../../Config/firebase-config';
 import { doc, getDoc } from 'firebase/firestore';
@@ -43,6 +44,7 @@ const ViewProp = () => {
                     <div className="flex justify-around">
                         <h1 className={css.betLabel} >{bets.bet}</h1>
                         <DeleteButton collection={collectionName} docId={betId} />  
+                        <ShareButton />
                     </div>
                    
                    {length > 0 ? (

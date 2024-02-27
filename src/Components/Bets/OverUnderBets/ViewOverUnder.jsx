@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import Buttons from '../../Components/Buttons';
 import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
+import ShareButton from '../../Components/ShareButton';
 import css from './OverUnder.module.css';
 import {db} from '../../../Config/firebase-config';
 import { doc, getDoc , updateDoc} from 'firebase/firestore';
@@ -62,8 +63,9 @@ const ViewOverUnder = () => {
             <div className='x2'>
                 <div>
                     <div className="flex justify-around">
-                        <h1 className={css.betLabel} >{bets.bet}</h1>
+                        <h1 className={`pb-4 bl-4 ${css.betLabel}`} >{bets.bet}</h1>
                         <DeleteButton  collection={collectionName} docId={betId} />
+                        <ShareButton />
                     </div>
                    <div className={`blob row p-16`}>
                         <div className="flex flex-col justify-center items-center">

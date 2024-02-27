@@ -1,5 +1,11 @@
 
 
+.betLabel{
+    font-weight: normal;
+    border-bottom: dashed 1px var(--alabaster);
+}
+
+
 .prop{
     font-size: 2em;
     flex:2;

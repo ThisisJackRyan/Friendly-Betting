@@ -3,7 +3,7 @@ import css from './Prop.module.css';
 import { useState } from 'react';
 import PreSetBettingOptions from './PreSetBettingOptions';
 import Players from '../Players/Players';
-import ShareBet from '../Players/ShareBet';
+
 import { getSignedInUserInfo } from '../../../Config/base';
 import {db} from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
@@ -15,16 +15,11 @@ const CreateProp = () => {
 
 
     const [isChecked, setIsChecked] = useState(false);
-    const [shareDisplay, setShareDisplay] = useState(false);
+
 
     const handlesSetOptions = (options) => {
         setOptions(options);
     }
-    
-    const handleShare = () => {
-        setShareDisplay((current) => !current);
-    }
-
     
     const handleCheckboxChange = (event) => {
         setIsChecked(event.target.checked);
@@ -32,7 +27,6 @@ const CreateProp = () => {
 
     const handelSubmit = async (e) => {   
         e.preventDefault();
-        handleShare();
         try {
             const userInfo = getSignedInUserInfo();
             if(userInfo !== null) {
@@ -79,10 +73,6 @@ const CreateProp = () => {
             </div>
             <div className="x1">
                 <Players />
-            </div>
-            <div>
-                {shareDisplay ? <ShareBet display={handleShare} /> : null}
-                
             </div>
     </div>
   );

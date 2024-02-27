@@ -21,8 +21,6 @@
 .betLabel{
     font-weight: normal;
     border-bottom: dashed 1px var(--alabaster);
-    padding-bottom: 1rem;
-    padding-left: 1em;
 }
 
 .lineLabel span{

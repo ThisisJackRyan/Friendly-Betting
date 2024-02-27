@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
-import ShareBet from '../Players/ShareBet';
 import Buttons from '../../Components/Buttons';
 import { useLocation } from 'react-router-dom';
 import {db} from '../../../Config/firebase-config';
 import { getDoc, doc } from 'firebase/firestore';
 import DeleteButton from '../../Components/DeleteButton';
+import ShareButton from '../../Components/ShareButton';
 
 
 const ViewMoneyLine = () => {
 
     const [bets, setBets] = useState([])
     const [betId, setBetId] = useState('')
+    
 
     const collectionName = "MoneyLineBets"
 
     const location = useLocation()
     const { bet } = location.state
+
+   
     
     useEffect(() => {
         const fetchBet = async () => {
@@ -40,7 +43,8 @@ const ViewMoneyLine = () => {
                <div>
                     <div className="flex justify-around">
                         <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
-                        <DeleteButton collection={collectionName} docId={betId}/>  
+                        <DeleteButton collection={collectionName} docId={betId}/>
+                        <ShareButton />
                     </div>
                     <div className='blob'>
                         <div className="flex justify-center items-center gap-8 my-4 mx-8 ">
@@ -61,6 +65,7 @@ const ViewMoneyLine = () => {
             <div className="flex-1">
                 <Players />
             </div>
+
     </div>
     );
 };

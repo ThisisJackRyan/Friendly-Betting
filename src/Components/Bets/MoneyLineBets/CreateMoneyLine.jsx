@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
-import ShareBet from '../Players/ShareBet';
 import { db } from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
@@ -19,17 +18,10 @@ const CreateMoneyLine = () => {
 
 
 
-  const [shareDisplay, setShareDisplay] = useState(false);
 
-
-
-  const handleShare = () => {
-    setShareDisplay((current) => !current);
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    handleShare();
     try {
         const userInfo = getSignedInUserInfo();
         if(userInfo !== null) {
@@ -53,6 +45,7 @@ const CreateMoneyLine = () => {
         } else {
            alert("You must be signed in to create a bet")
         }
+        //I should navigate right her to the bet view page so that the share button will be there. 
   
       
     } catch (e) {
@@ -110,10 +103,6 @@ const CreateMoneyLine = () => {
         </div>
         <div className="x1">
             <Players />
-        </div>
-        <div>
-            {shareDisplay ? <ShareBet display={handleShare} /> : null}
-            
         </div>
     </div>
   );

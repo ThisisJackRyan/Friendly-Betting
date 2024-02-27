@@ -1,7 +1,7 @@
 import React from 'react';
 import css from './OverUnder.module.css';
 import Players from '../Players/Players';
-import ShareBet from '../Players/ShareBet';
+
 import { getSignedInUserInfo } from '../../../Config/base';
 import {useState} from 'react';
 import {db} from '../../../Config/firebase-config';
@@ -12,16 +12,8 @@ const CreateOverUnder = () => {
     const [bet, setBet] = useState('');
     const [line, setLine] = useState(0);
 
-
-    const [shareDisplay, setShareDisplay] = useState(false);
-    
-    const handleShare = () => {
-        setShareDisplay((current) => !current);
-    }
-
     const handelSubmit = async (e) => {
         e.preventDefault();
-        handleShare();
         try {
             const userInfo = getSignedInUserInfo();
             if(userInfo !== null) {
@@ -70,10 +62,6 @@ const CreateOverUnder = () => {
 
         <div className="x1">
             <Players />
-        </div>
-        <div>
-            {shareDisplay ? <ShareBet display={handleShare} /> : null}
-            
         </div>
         
     </div>
