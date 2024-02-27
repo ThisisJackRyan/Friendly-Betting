@@ -69,69 +69,44 @@
     border-bottom: solid var(--alabaster) 2px;
 }
  
-/* The container */
-.container {
-  display: block;
-  position: relative;
-  padding-left: 35px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  font-size: 22px;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
+.border{
+  display: flex;
+  padding: .5rem;
+  max-width: 254px;
+  border: solid black 2px;
+  border-radius: 5px;
+  background-color: white;
 }
 
-/* Hide the browser's default checkbox */
-.container input {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
+.urlCopy{
+  overflow: scroll;
+  background-color: white;
+  font-size: 0.5em;
+  height: 100%;
+  overflow-x: auto; /* add horizontal scrollbar if content is wider than the container */
+  white-space: nowrap;
+  border: solid black 2px; ;
+  padding: 0.5rem;
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
 
-.checkmark {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 25px;
-    width: 25px;
-    background-color: #eee;
-}
-  
-  /* On mouse-over, add a grey background color */
-.container:hover input ~ .checkmark {
-    background-color: #ccc;
-}
-  
-  /* When the checkbox is checked, add a blue background */
-.container input:checked ~ .checkmark {
-    background-color: #2196F3;
-}
-  
-  /* Create the checkmark/indicator (hidden when not checked) */
-.checkmark:after {
-    content: "";
-    position: absolute;
+  ::-webkit-scrollbar {
     display: none;
- }
-  
-  /* Show the checkmark when checked */
-.container input:checked ~ .checkmark:after {
-    display: block;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+
 }
-  
-  /* Style the checkmark/indicator */
-.container .checkmark:after {
-    left: 9px;
-    top: 5px;
-    width: 5px;
-    height: 10px;
-    border: solid white;
-    border-width: 0 3px 3px 0;
-    -webkit-transform: rotate(45deg);
-    -ms-transform: rotate(45deg);
-    transform: rotate(45deg);
+
+.copyButton{
+  background: white;
+  border-top: solid black 2px;
+  border-bottom: solid black 2px;
+  border-right: solid black 2px;
+  border-left:none;
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
 }
+

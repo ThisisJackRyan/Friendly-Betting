@@ -42,7 +42,7 @@ const ViewProp = () => {
             <div className='x2'>
                 <div>
                     <div className="flex justify-around">
-                        <h1 className={css.betLabel} >{bets.bet}</h1>
+                        <h1 className={`pb-4 bl-4 ${css.betLabel}`} >{bets.bet}</h1>
                         <DeleteButton collection={collectionName} docId={betId} />  
                         <ShareButton />
                     </div>
