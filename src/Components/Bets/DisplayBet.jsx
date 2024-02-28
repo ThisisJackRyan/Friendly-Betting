@@ -1,27 +1,21 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import css from './Bets.module.css';
 import {Link} from 'react-router-dom';
+import {getCollectionName} from '../../Config/base';
 
 
 
 const DisplayBet = (props) => {
 
-    const viewBet = () => {
-        if(props.bet.type === "Money Line"){
-            return "MoneyLineBets/"
-        }
-        else if(props.bet.type === "Over Under"){
-            return "OverUnderBets/"
-        }
-        else if(props.bet.type === "Prop"){
-            return "PropBets/"
-        }
-    }
+    const [betType, setBetType] = useState('')
 
+    useEffect(() => {
+        setBetType(getCollectionName(props.bet.type));
+    }, [])
     return (
-        <div onClick={viewBet}>
+        <div>
             <Link 
-                to={`/Friendly-Betting/Bet/${viewBet()}${props.bet.id}/`}
+                to={`/Friendly-Betting/Bet/${betType}/${props.bet.id}/`}
                 state={{"bet":props.bet}}
                 className={css.link}
             

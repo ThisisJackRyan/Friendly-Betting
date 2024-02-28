@@ -1,75 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import css from './MoneyLine.module.css';
-import Players from '../Players/Players';
+import React from 'react';
 import Buttons from '../../Components/Buttons';
-import { useParams } from 'react-router-dom';
-import {db} from '../../../Config/firebase-config';
-import { getDoc, doc } from 'firebase/firestore';
-import DeleteButton from '../../Components/DeleteButton';
-import ShareButton from '../../Components/ShareButton';
 
-
-const ViewMoneyLine = () => {
-
-    const [bets, setBets] = useState([])
-    const [betId, setBetId] = useState('')
-
-    const collectionName = "MoneyLineBets"
-    
-    const bet = useParams();
-
-    
-    
-    
-    useEffect(() => {
-        const fetchBet = async () => {
-            try{
-                const betsDocRef = doc(db, "bets", bet.id);
-                const betsDocSnap = await getDoc(betsDocRef);
-                setBetId(betsDocSnap.data().betID);
-                
-                const docRef = doc(db, collectionName, betsDocSnap.data().betID);
-                const docSnap = await getDoc(docRef);
-                setBets(docSnap.data());
-                
-            } catch (e) {
-                console.error(e);
-            }
-        }
-        fetchBet();
-    }, [])
-
-
-    return (
-        <div className='flex p-12'>
-            <div className='x2'>
-               <div>
-                    <div className="flex justify-around">
-                        <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
-                        <DeleteButton collection={collectionName} docId={betId}/>
-                        <ShareButton />
-                    </div>
-                    <div className='blob'>
-                        <div className="flex justify-center items-center gap-8 my-4 mx-8 ">
-                            <Buttons text="Bet" a="greenButton" size="big"></Buttons>
-                            <h2>{bets.contestant1} </h2>
-                            {bets.contestant1Odds > 0 ? <p className='green'>(+{bets.contestant1Odds})</p> : <p className="red">({bets.contestant1Odds})</p>}
-                        </div>
-                        <hr />
-                        <div className="flex justify-center items-center gap-8 my-4 mx-8">
-                            <Buttons text="Bet" a="greenButton" size="big"></Buttons>
-                            <h2>{bets.contestant2} </h2>
-                            {bets.contestant2Odds > 0 ? <p className='green'>(+{bets.contestant2Odds})</p> : <p className='red'>({bets.contestant2Odds})</p>}
-                        </div>
-                    </div>
+const ViewMoneyLine = ({bets}) => {
+    return (     
+        <div className='blob'>
+            <div className="flex justify-center items-center gap-8 my-4 mx-8 ">
+                <Buttons text="Bet" a="greenButton" size="big"></Buttons>
+                <h2>{bets.contestant1} </h2>
+                {bets.contestant1Odds > 0 ? <p className='green'>(+{bets.contestant1Odds})</p> : <p className="red">({bets.contestant1Odds})</p>}
+            </div>
+            <hr />
+            <div className="flex justify-center items-center gap-8 my-4 mx-8">
+                <Buttons text="Bet" a="greenButton" size="big"></Buttons>
+                <h2>{bets.contestant2} </h2>
+                {bets.contestant2Odds > 0 ? <p className='green'>(+{bets.contestant2Odds})</p> : <p className='red'>({bets.contestant2Odds})</p>}
+            </div>
+        </div>
                     
-               </div>
-            </div>
-            <div className="flex-1">
-                <Players />
-            </div>
-
-    </div>
+              
     );
 };
 
