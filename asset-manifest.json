@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/Friendly-Betting/static/css/main.39c16368.css",
-    "main.js": "/Friendly-Betting/static/js/main.226fd543.js",
+    "main.css": "/Friendly-Betting/static/css/main.af01ff4a.css",
+    "main.js": "/Friendly-Betting/static/js/main.cc78ad19.js",
     "static/js/787.7e4c938d.chunk.js": "/Friendly-Betting/static/js/787.7e4c938d.chunk.js",
     "index.html": "/Friendly-Betting/index.html",
-    "main.39c16368.css.map": "/Friendly-Betting/static/css/main.39c16368.css.map",
-    "main.226fd543.js.map": "/Friendly-Betting/static/js/main.226fd543.js.map",
+    "main.af01ff4a.css.map": "/Friendly-Betting/static/css/main.af01ff4a.css.map",
+    "main.cc78ad19.js.map": "/Friendly-Betting/static/js/main.cc78ad19.js.map",
     "787.7e4c938d.chunk.js.map": "/Friendly-Betting/static/js/787.7e4c938d.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.39c16368.css",
-    "static/js/main.226fd543.js"
+    "static/css/main.af01ff4a.css",
+    "static/js/main.cc78ad19.js"
   ]
 }
