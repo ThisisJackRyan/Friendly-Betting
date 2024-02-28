@@ -9,39 +9,6 @@ import {useState} from 'react';
 
 const ShareBet = (props) => {
 
-    const [json,setJson] = useState({
-        "friends": [
-            
-            {
-               
-            
-                "name": "John",
-                "email": "johnRyan@gmail.com",
-                "phone": "1234567890"
-                    
-                
-            },
-            {
-                
-                "name": "Jack",
-                "email": "JackRyan@gmail.com",
-                "phone": "1234567890"
-                    
-                
-            },
-            {
-                
-                "name": "Another Person",
-                "email": "Person@gmail.com",
-                "phone": "1234567890"
-                    
-                
-            }
-            
-        ]
-    });
-
-    
     function copyToClipboard() {
         navigator.clipboard.writeText(window.location.href)
     }
@@ -51,9 +18,6 @@ const ShareBet = (props) => {
         console.log('Sharing bet');
     }
 
-
-
-    
     return (
         <div className={css.shareBet}>
             <div className="flex justify-end mb-2"><span className={css.x} onClick={props.display}>x</span></div>

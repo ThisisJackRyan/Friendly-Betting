@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import Buttons from '../../Components/Buttons';
 import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
@@ -16,8 +16,7 @@ const ViewOverUnder = () => {
 
     const collectionName = "OverUnderBets"
 
-    const location = useLocation()
-    const { bet } = location.state
+    const bet = useParams();
 
     const addUnder = async () => {
         const docRef = doc(db, collectionName, betId);
@@ -45,10 +44,13 @@ const ViewOverUnder = () => {
 
     const fetchBet = async () => {
         try{
-            const docRef = doc(db, collectionName, bet.betID);
+            const betsDocRef = doc(db, "bets", bet.id);
+            const betsDocSnap = await getDoc(betsDocRef);
+            setBetId(betsDocSnap.data().betID);
+            
+            const docRef = doc(db, collectionName, betsDocSnap.data().betID);
             const docSnap = await getDoc(docRef);
             setBets(docSnap.data());
-            setBetId(docSnap.id);
 
         } catch (e) {
             console.error(e);

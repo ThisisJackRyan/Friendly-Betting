@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
 import Buttons from '../../Components/Buttons';
-import { useLocation } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {db} from '../../../Config/firebase-config';
 import { getDoc, doc } from 'firebase/firestore';
 import DeleteButton from '../../Components/DeleteButton';
@@ -13,22 +13,25 @@ const ViewMoneyLine = () => {
 
     const [bets, setBets] = useState([])
     const [betId, setBetId] = useState('')
-    
 
     const collectionName = "MoneyLineBets"
+    
+    const bet = useParams();
 
-    const location = useLocation()
-    const { bet } = location.state
-
-   
+    
+    
     
     useEffect(() => {
         const fetchBet = async () => {
             try{
-                const docRef = doc(db, collectionName, bet.betID);
+                const betsDocRef = doc(db, "bets", bet.id);
+                const betsDocSnap = await getDoc(betsDocRef);
+                setBetId(betsDocSnap.data().betID);
+                
+                const docRef = doc(db, collectionName, betsDocSnap.data().betID);
                 const docSnap = await getDoc(docRef);
                 setBets(docSnap.data());
-                setBetId(docSnap.id);
+                
             } catch (e) {
                 console.error(e);
             }

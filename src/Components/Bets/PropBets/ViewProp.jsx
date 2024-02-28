@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import Players from '../Players/Players';
 import DeleteButton from '../../Components/DeleteButton';
 import ShareButton from '../../Components/ShareButton';
@@ -15,18 +15,20 @@ const ViewProp = () => {
 
     const collectionName = "PropBets"
 
-    const location = useLocation()
-    const { bet } = location.state
+    const bet = useParams();
 
 
     useEffect(() => {
 
         const fetchBet = async () => {
             try{
-                const docRef = doc(db, collectionName, bet.betID);
+                const betsDocRef = doc(db, "bets", bet.id);
+                const betsDocSnap = await getDoc(betsDocRef);
+                setBetId(betsDocSnap.data().betID);
+                
+                const docRef = doc(db, collectionName, betsDocSnap.data().betID);
                 const docSnap = await getDoc(docRef);
                 setBets(docSnap.data());
-                setBetId(docSnap.id);
                 setLength(docSnap.data().options.length);
             } catch (e) {
                 console.error(e);

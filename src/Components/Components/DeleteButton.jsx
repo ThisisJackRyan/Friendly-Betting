@@ -1,5 +1,5 @@
 import React from 'react';
-import {useLocation, useNavigate } from 'react-router-dom';
+import {useNavigate, useParams } from 'react-router-dom';
 import css from './Components.module.css';
 import {db} from '../../Config/firebase-config';
 import { doc, deleteDoc } from "firebase/firestore";
@@ -9,8 +9,8 @@ const DeleteButton = (props) => {
 
     const navigate = useNavigate();
 
-    const location = useLocation()
-    const { bet } = location.state
+
+    const bet = useParams();
 
     const handleDelete = () => {
         const deleteDocument  = async () => {
