@@ -59,8 +59,6 @@ const ViewBet = () => {
             <div>
                 <div className="flex justify-around">
                     <h1 className={`pb-4 bl-4 ${css.betLabel}`}>{bets.bet}</h1>
-                    <DeleteButton collection={collectionName} docId={betId}/>
-                    <ShareButton />
                 </div>
                 {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
                 : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
@@ -70,7 +68,8 @@ const ViewBet = () => {
             </div>
         </div>
         <div className="x1">
-            <Players />
+            <DeleteButton collection={collectionName} docId={betId}/>
+            <ShareButton />
         </div>
       </div>
     </div>

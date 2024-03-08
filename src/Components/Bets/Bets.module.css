@@ -99,3 +99,8 @@
 .createButton:active{
   box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.2) inset;
 }
+
+.betLabel{
+  font-weight: normal;
+  border-bottom: dashed 1px var(--alabaster);
+}
