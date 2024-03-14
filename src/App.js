@@ -15,7 +15,7 @@ import ViewProp from './Components/Bets/PropBets/ViewProp';
 import DisplayAllBets from './Components/Bets/DisplayAllBets';
 import Friends from './Components/Friends/Friends';
 import ViewBet from './Components/Bets/ViewBet';
-
+import { useEffect } from 'react';
 
 
 
@@ -23,7 +23,7 @@ import ViewBet from './Components/Bets/ViewBet';
 
 function App() {
 
-  
+
  
     return (
       <Router>

@@ -34,7 +34,6 @@ const ViewBet = () => {
 
     const handleShowDeleteButton = (createdByID) => {
         createdByID === getSignedInUserInfo().uid ? setShowDeleteButton(true) : setShowDeleteButton(false)
-        console.log(createdByID + "===" + getSignedInUserInfo().uid)
     } 
 
     const fetchBet = async () => {

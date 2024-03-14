@@ -11,7 +11,9 @@
   --alabaster: #e2e8ddff;
   --dark-spring-green: #007a45ff;
   --spring-green: #9DC9A4;
-  
+  --spring-green-light:#ddece0;
+
+
   /* CSS HSL */
   /*
   --midnight-green: hsla(195, 70%, 22%, 1);
@@ -36,16 +38,15 @@
 
 
 body{
-  background-color: var(--midnight-green);
-  color: var(--alabaster);
   font-family: 'Roboto', sans-serif;
   font-size: 1.25em;
   height: 100vh;
   width: 100vw;
+  background: white;
+  background-image: radial-gradient(lightgray 1px, transparent 0);
+  background-size: 40px 40px;
 
 }
-
-
 
 .x1{flex: 1;}
 .x2{flex: 2;}
@@ -56,24 +57,27 @@ body{
   align-items: center;
 }
 
-.header{
-  display: flex;
-  padding: 1rem;
-  padding-top: 2rem;
-  background-color: var(--cadet-gray);
-  color:  var(--alabaster);
-  font-size: 1.25em;
+.box-shadow{
+  box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
 }
+
+
+.bg-spring-green-light{
+  background-color: var(--spring-green-light);
+}
+
+
 .pages{
   justify-content: center;
   align-items: center;
   gap:1em;
 }
-.link{
+
+/* .link{
   text-decoration: none;
   color: var(--alabaster);
   padding: .75rem 1.25rem;
-}
+} */
 .Link{
   text-decoration: none;
   background-color: rgba(110, 118, 119, .5);
@@ -118,9 +122,7 @@ body{
 }
 
 
-.betLink{
-  background-color:var(--spring-green);
-}
+
 
 
 

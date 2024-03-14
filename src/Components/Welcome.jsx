@@ -37,7 +37,10 @@ const Welcome = () => {
             <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>
         </div>
         )}
+            <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>
+
     </div>
+    
     );
 };
 
