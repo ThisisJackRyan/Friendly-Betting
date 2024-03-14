@@ -11,6 +11,8 @@ import css from './Bets.module.css';
 import ViewMoneyLine from './MoneyLineBets/ViewMoneyLine';
 import ViewOverUnder from './OverUnderBets/ViewOverUnder';
 import ViewProp from './PropBets/ViewProp';
+import { getSignedInUserInfo } from '../../Config/base';
+
 
 
 
@@ -21,6 +23,8 @@ const ViewBet = () => {
     const [bets, setBets] = useState([])
     const [betId, setBetId] = useState('')
     const [collectionName, setCollectionName] = useState('')
+
+    const [showDeleteButton, setShowDeleteButton] = useState(false)
     
     
     const bet = useParams();
@@ -28,6 +32,10 @@ const ViewBet = () => {
 
 
 
+    const handleShowDeleteButton = (createdByID) => {
+        createdByID === getSignedInUserInfo().uid ? setShowDeleteButton(true) : setShowDeleteButton(false)
+        console.log(createdByID + "===" + getSignedInUserInfo().uid)
+    } 
 
     const fetchBet = async () => {
         try{
@@ -37,6 +45,7 @@ const ViewBet = () => {
             const docRef = doc(db,  getCollectionName(betsDocSnap.data().type), betsDocSnap.data().betID);
             const docSnap = await getDoc(docRef);
             
+            handleShowDeleteButton(betsDocSnap.data().createdByID)
             setBets(docSnap.data());
             setBetId(betsDocSnap.data().betID);
             setCollectionName(getCollectionName(betsDocSnap.data().type))
@@ -45,6 +54,9 @@ const ViewBet = () => {
             console.error(e);
         }
     }
+
+    
+
     useEffect(() => {
         fetchBet();
     }, [])
@@ -63,12 +75,13 @@ const ViewBet = () => {
                 {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
                 : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
                 : collectionName === 'PropBets' ? <ViewProp bets={bets}/>
-                : <div>hmm.... Something went wrong</div>
+                : <div>hmm.... Something went wrong... Wait we are actually loading</div>
             }
             </div>
         </div>
         <div className="x1">
-            <DeleteButton collection={collectionName} docId={betId}/>
+            {showDeleteButton ? <DeleteButton collection={collectionName} docId={betId}/> : null}
+            
             <ShareButton />
         </div>
       </div>
