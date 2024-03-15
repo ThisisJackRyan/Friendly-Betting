@@ -1,6 +1,7 @@
 import { Link, useLocation} from "react-router-dom";
 import { useState } from "react";
 import BetNav from "./Bets/BetNav";
+import { CSSTransition } from "react-transition-group";
 
 
 
@@ -23,15 +24,26 @@ const Header = () => {
             </div>
             </Link>
             {
-                location.pathname === "/Friendly-Betting/Bet" ? (
-                <div onClick={swapDisplay} className="bg-spring-green-light box-shadow rounded-b-2xl p-4 flex justify-center items-center">
-                    <span className="">Create One!</span>
-                    {display ? <BetNav swap={swapDisplay}/> : null}
-                </div>
-                ) : null
+                
+                    <CSSTransition
+                        in={(location.pathname === "/Friendly-Betting/Bet")}
+                        timeout={300}
+                        classNames="my-node"
+                        unmountOnExit
+                        
+                    >
+                        <div>
+                            <div onClick={swapDisplay} className="h-full flex bg-spring-green-light box-shadow rounded-b-2xl pl-8 pr-8 justify-center items-center">
+                                <span className="flex justify-center items-center">Create One!</span>
+                            </div>
+                        </div>
+                        
+                    </CSSTransition>
+                
             }
-            
-            <Link className="flex box-shadow  bg-spring-green-light rounded-bl-2xl betLink p-8 pb-4 no-underline text-black" to="Friendly-Betting/Bet">View Bets</Link>
+            <Link className="flex box-shadow  bg-spring-green-light rounded-bl-2xl betLink p-8 pb-4 no-underline text-black" to="Friendly-Betting/Bet"><span className="flex items-center justify-center">View Bets</span></Link>
+            {display ? <BetNav swap={swapDisplay}/> : null}
+
         </div>
     )
 }
