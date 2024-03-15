@@ -42,11 +42,8 @@ const Header = () => {
                             <span className="flex justify-center items-center">Create One!</span>
                         </div>
                     </div>
-                    
                 </CSSTransition>
             </div>
-            
-    
             <Link className="flex box-shadow bg-spring-green-light rounded-bl-2xl betLink pt-8 pl-32 pr-32 pb-4 no-underline text-black" to="Friendly-Betting/Bet"><span className="flex items-center justify-center">View Bets</span></Link>
             {display ? <BetNav swap={swapDisplay}/> : null}
 
