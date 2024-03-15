@@ -40,7 +40,7 @@
 body{
   font-family: 'Roboto', sans-serif;
   font-size: 1.25em;
-  height: 100vh;
+  min-height: 100vh;
   width: 100vw;
   background: white;
   background-image: radial-gradient(lightgray 1px, transparent 0);
@@ -79,34 +79,34 @@ body{
 
 
 
-.my-node-enter {
+.createBet-enter {
   opacity: 0;
   transform: translateY(-100%); /* Start from above the screen */
 }
 
-.my-node-enter-active {
+.createBet-enter-active {
   opacity: 1;
   transform: translateY(0); /* Move to its original position */
   transition: opacity 300ms, transform 300ms;
 }
 
-.my-node-enter-done {
+.createBet-enter-done {
   opacity: 1;
   transform: translateY(0);
 }
 
-.my-node-exit {
+.createBet-exit {
   opacity: 1;
   transform: translateY(0);
 }
 
-.my-node-exit-active {
+.createBet-exit-active {
   opacity: 0;
   transform: translateY(-100%); /* Move out of the screen upwards */
   transition: opacity 300ms, transform 300ms;
 }
 
-.my-node-exit-done {
+.createBet-exit-done {
   opacity: 0;
   transform: translateY(-100%);
 

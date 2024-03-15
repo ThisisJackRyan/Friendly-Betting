@@ -17,12 +17,12 @@ const DisplayBet = (props) => {
             <Link 
                 to={`/Friendly-Betting/Bet/${betType}/${props.bet.id}/`}
                 state={{"bet":props.bet}}
-                className={css.link}
+                className="text-black no-underline"
             
             >
-                <div className={css.bet} key={props.bet.id}>
-                    <h4>{props.bet.type}</h4>
-                    <p>{props.bet.bet}</p>
+                <div className={`box-shadow bg-spring-green-light rounded-2xl p-4 m-2 ${css.bet}`} key={props.bet.id}>
+                    <p>{props.bet.type}</p>
+                    <h4>{props.bet.bet}</h4>
                 </div>
             </Link>
         </div>

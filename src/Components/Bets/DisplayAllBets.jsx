@@ -38,29 +38,25 @@ const DisplayAllBets = () => {
     }
 
   return (
-    <div className='flex p-12'>
-      <div className='x2'>
-        {bets.length < 1 ? (
-          <div>
-            <h3>hmmm.... Looks Like you haven't created any bets yet 🤷‍♂️ </h3>
-            <p> Create One!</p>
-            <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
-            {display ? <BetNav swap={swapDisplay}/> : null}
+    <div className='flex justify-center p-12'>
 
-          </div>
-        ) : (
-          <div>
-            {bets.map((bet, id) => (
-              <DisplayBet key={id} bet={bet} />
-            ))}
-            <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
-            {display ? <BetNav swap={swapDisplay}/> : null}
-          </div>
-        ) }
-      </div>
-      <div className='x1'>
-        <Players />
-      </div>
+      {bets.length < 1 ? (
+        <div>
+          <h3>hmmm.... Looks Like you haven't created any bets yet 🤷‍♂️ </h3>
+          <p> Create One!</p>
+          <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
+          {display ? <BetNav swap={swapDisplay}/> : null}
+
+        </div>
+      ) : (
+        <div>
+          {bets.map((bet, id) => (
+            <DisplayBet key={id} bet={bet} />
+          ))}
+          <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
+          {display ? <BetNav swap={swapDisplay}/> : null}
+        </div>
+      ) }
     </div>
   );
 }

@@ -60,28 +60,11 @@
 }
 
 .bet{
-  background-color: var(--cadet-gray);
-  padding: 0.5rem 2em;
-  margin: 1em 2em;
-  border-radius: 5px;
-  border: solid black 2px;
-  box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
-  transition: all 0.3s;
+  
+
 }
 
-.bet:hover{
-  background-color: rgb(135, 148, 148);
-  box-shadow: 7px 7px 7px 2px rgba(0,0,0,0.75);
-}
 
-.bet:active{
-  box-shadow: 3px 3px 3px 0px rgba(0,0,0,0.75) inset;
-}
-
-.link{
-  text-decoration: none;
-  color: var(--alabaster);
-}
 
 .createButton{
   padding: .75rem 1.25rem;
