@@ -73,6 +73,12 @@ body{
   background-color: var(--spring-green-light);
 }
 
+.absolute-center-x{
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%);
+
+}
 
 
 
