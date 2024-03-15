@@ -34,10 +34,10 @@ const Welcome = () => {
         <div>
             {/* Render the non-authenticated content */}
             <h1>Please sign in to access this content.</h1>
-            <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>
+            <Link className="Link" to="/SignIn">Sign In</Link>
         </div>
         )}
-            <Link className="Link" to="Friendly-Betting/SignIn">Sign In</Link>
+            <Link className="Link" to="SignIn">Sign In</Link>
 
     </div>
     
