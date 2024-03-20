@@ -35,16 +35,16 @@ const ViewOverUnder = ({bets, collectionName, betId, fetchBet}) => {
             <div className={`blob row p-16`}>
                 <div className="flex flex-col justify-center items-center">
                     <Buttons click={addUnder} text="Under" a="greenButton" size="big"></Buttons>
-                    <p>{bets.under || 0} others have taken the under</p>
+                    <div className='max-w-40 text-center mt-4'>{bets.under || 0} others have taken the under</div>
                 </div>
                 <div className={css.line}>
                     <div className={css.lineLabel}><span>Line</span></div>
                     <div className={css.actualLine}>{bets.line}</div> 
-                    <div className="flex justify-center items-center break-words text-center">3 people have not voted</div>
+                    <div className="flex justify-center items-start break-words max-w-40 text-center">3 people have not voted</div>
                 </div>
                 <div className="flex flex-col justify-center items-center">
                     <Buttons click={addOver} text="Over" a="greenButton" size="big"></Buttons>
-                    <p className="text-center">{bets.over } others have taken the over</p>
+                    <div className="max-w-40 text-center mt-4">{bets.over } others have taken the over</div>
                 </div>
             </div>
         </div>
