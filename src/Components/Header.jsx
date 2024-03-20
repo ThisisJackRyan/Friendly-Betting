@@ -44,12 +44,18 @@ const Header = () => {
                     </div>
                 </CSSTransition>
             </div>
-        
-                <Link className="flex rounded-bl-2xl betLink pt-8 p-4 no-underline text-black" to="Friendly-Betting/Bet" >
-                    <span className="flex items-center justify-center z-10">View Bets</span>
-                </Link>
+            <Link className="flex rounded-bl-2xl betLink pt-8 p-4 no-underline text-black" to="Friendly-Betting/Bet" >
+                <span className="flex items-center justify-center z-10">View Bets</span>
+            </Link>
 
-            {display ? <BetNav swap={swapDisplay}/> : null}
+            <CSSTransition
+                in={display}
+                timeout={300}
+                classNames="createBet"
+                unmountOnExit              
+            >
+                <BetNav swap={swapDisplay}/>
+            </CSSTransition>
 
         </div>
     )

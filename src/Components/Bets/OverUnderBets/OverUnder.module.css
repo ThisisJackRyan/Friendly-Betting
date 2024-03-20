@@ -35,8 +35,8 @@
     margin: 1em ;
     gap:1rem;
     padding: 0em 1.5em;
-    border-left: solid 1px var(--alabaster);
-    border-right: solid 1px var(--alabaster);
+    border-left: solid 1px var(--blue-gray);
+    border-right: solid 1px var(--blue-gray);
 }
 .actualLine{
     display: flex;

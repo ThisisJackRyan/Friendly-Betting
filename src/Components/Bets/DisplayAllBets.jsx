@@ -10,8 +10,6 @@ import { getSignedInUserInfo } from '../../Config/base';
 
 
 const DisplayAllBets = () => {
-
-    const [display, setDisplay] = useState(false)
     const [bets, setBets] = useState([])
 
 
@@ -33,10 +31,6 @@ const DisplayAllBets = () => {
       getBets();
     }, [])
 
-    const swapDisplay = () => {
-        setDisplay((current) => !current)
-    }
-
   return (
     <div className='flex justify-center p-12'>
 
@@ -44,8 +38,6 @@ const DisplayAllBets = () => {
         <div>
           <h3>hmmm.... Looks Like you haven't created any bets yet 🤷‍♂️ </h3>
           <p> Create One!</p>
-          <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
-          {display ? <BetNav swap={swapDisplay}/> : null}
 
         </div>
       ) : (
@@ -53,8 +45,6 @@ const DisplayAllBets = () => {
           {bets.map((bet, id) => (
             <DisplayBet key={id} bet={bet} />
           ))}
-          <button className={css.createButton} onClick={swapDisplay}>Create One!</button>
-          {display ? <BetNav swap={swapDisplay}/> : null}
         </div>
       ) }
     </div>
