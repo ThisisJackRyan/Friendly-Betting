@@ -1,5 +1,6 @@
 
 import './App.css';
+import './base.css';
 import SignIn from './Components/SignInPage/SignIn';
 import CreateAccount from './Components/SignInPage/CreateAccount';
 import Header from './Components/Header';
@@ -9,22 +10,16 @@ import Welcome from './Components/Welcome';
 import MoneyLine from './Components/Bets/MoneyLineBets/MoneyLine';
 import OverUnder from './Components/Bets/OverUnderBets/OverUnder';
 import Prop from './Components/Bets/PropBets/Prop';
-import ViewMoneyLine from './Components/Bets/MoneyLineBets/ViewMoneyLine';
-import ViewOverUnder from './Components/Bets/OverUnderBets/ViewOverUnder';
-import ViewProp from './Components/Bets/PropBets/ViewProp';
 import DisplayAllBets from './Components/Bets/DisplayAllBets';
 import Friends from './Components/Friends/Friends';
 import ViewBet from './Components/Bets/ViewBet';
-import { useEffect } from 'react';
 
 
 
 
 
-function App() {
 
-
- 
+function App() { 
     return (
       <Router>
         <Header />
@@ -44,9 +39,7 @@ function App() {
           <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id" element={<ViewBet />} />
           <Route path="/Friendly-Betting/Bet/OverUnderBets/:id" element={<ViewBet />} />
           <Route path="/Friendly-Betting/Bet/PropBets/:id" element={<ViewBet />} />
-
-
-
+          
           <Route path="/*" element={<NotFound />} />
         </Routes>
       </Router>

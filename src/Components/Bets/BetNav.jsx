@@ -15,10 +15,10 @@ const BetNav = (props) => {
         navigate('/Friendly-Betting/PropBets')
     }
   return (
-    <div className={css.betNav}>
-        <div className={css.x}><span onClick={props.swap} >x</span></div>
-        <h1><span>Bets</span></h1>
-        <div className={css.BettingLinks}>
+    <div className="fixed-center bg-spring-green-light text-black p-4 rounded-md black-border box-shadow-no-hover">
+        <div className="x"><span onClick={props.swap} >x</span></div>
+        <div className='text-3xl flex justify-center items-center mb-4'><span className='border-bottom'>Bets</span></div>
+        <div className="flex justify-center items-center flex-col gap-4 m-4">
             <div>
                 <div onClick={goToMoneyLine} className={css.betNavLinks} >Money Line Bets</div>
             </div>
