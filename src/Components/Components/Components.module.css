@@ -1,25 +1,15 @@
-.greenButtons {
-    /* background-color: var(--spring-green-light); */
-    background-color: #6B818C;
-    border-radius: 5px;
+.betButton {
+    background-color: var(--blue-gray);
     border: none;
-    box-shadow: 0px 4px 4px 2px rgba(0,0,0,0.25);
     font-size: 1.1rem;
     font-weight: 100;
     padding:1rem 2.25rem;
     color: white;
-
-    transition: all ease 0.3s;
 }
 
-.greenButtons:hover {
-    box-shadow: 0px 7px 7px 2px rgba(0,0,0,0.25);
-    background-color: #cce5d0;
+.betButton:hover {
+    background-color: #576971;
 }
-.greenButtons:active {
-    box-shadow: 0px 2px 2px 2px rgba(0,0,0,0.25) inset;
-}
-
 
 .redSpring {
     background-color: #FF9A9A;

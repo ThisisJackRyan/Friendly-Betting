@@ -88,4 +88,8 @@ This file is all the base classes for consistent styling
     margin-top:6rem;
     min-width: 60%;
     max-width: 75%;
-  }
+}
+
+.row { /* overrides the flex-colum in blob */
+    flex-direction: row;
+}

@@ -7,8 +7,8 @@ const ViewMoneyLine = ({bets}) => {
             <div className="blob">
                 <div className="flex">
                     <div className='flex flex-col gap-8 m-4 items-center'>
-                        <Buttons text="Bet" a="greenButton" size="big"></Buttons>
-                        <Buttons text="Bet" a="greenButton" size="big"></Buttons>
+                        <Buttons text="Bet" a="betButton" size="big"></Buttons>
+                        <Buttons text="Bet" a="betButton" size="big"></Buttons>
                     </div>
                     <div className='flex flex-col gap-8 m-4 items-center'>
                         <div className='py-4'>{bets.contestant1}</div>
