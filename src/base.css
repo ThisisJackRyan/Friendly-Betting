@@ -15,6 +15,10 @@ This file is all the base classes for consistent styling
 .bg-spring-green-light{
     background-color: var(--spring-green-light);
 }
+.bg-secondary-spring-green-light{
+    background-color: #BEDEC5;
+
+}
 .bg-blue-gray{
     background-color: var(--blue-gray);
 }

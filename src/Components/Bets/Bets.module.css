@@ -1,6 +1,7 @@
 
 /* BetNav.jsx */
 .betNavLinks{
+  cursor: pointer;
   text-decoration: none;
   transition: all .25s ease-in-out;
 }
@@ -12,8 +13,9 @@
 .betNavLinks:active{
   color: lightgray;
 }
-
-
 .betLabel{
   border-bottom: dashed 1px var(--blue-gray);
+}
+.line{
+  border-right: black solid 2px;
 }
