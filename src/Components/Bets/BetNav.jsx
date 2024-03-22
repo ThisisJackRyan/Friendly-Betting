@@ -41,7 +41,7 @@ const BetNav = (props) => {
             
         </div>
         <div className="flex">
-            <div className='flex justify-around my-8 flex-col gap-8 text-nowrap'>
+            <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
                 <div onClick={() => {setBetType("MoneyLine")}}>
                     Money Line
                 </div>
@@ -52,7 +52,7 @@ const BetNav = (props) => {
                     Prop
                 </div>
             </div>
-            <div className='bg-secondary-spring-green-light rounded-md p-4 m-4'>
+            <div className='bg-secondary-spring-green-light rounded-md p-4 m-4 ml-24'>
                     {betType === 'MoneyLine' ? 
                         <span>
                         Money Line bet is a type of wager where you place a bet on the outcome of an event with only two possible outcomes. 
@@ -67,6 +67,8 @@ const BetNav = (props) => {
                             Rather than betting on the outcome of the game itself,
                             you're betting on whether the total score will be over or under a predetermined number set by the s
                             sports book or betting operator.
+                            
+                            Lorem ipsum dolor sit amet consectetur adipisicing elit. 
 
                         </span>
                     : 
