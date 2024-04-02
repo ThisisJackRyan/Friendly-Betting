@@ -19,3 +19,8 @@
 .line{
   border-right: black solid 2px;
 }
+
+.betDescriptions{
+  overflow-y: auto;
+  height: 100%;
+}
