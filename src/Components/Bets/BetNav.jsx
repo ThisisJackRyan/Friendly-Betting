@@ -9,7 +9,8 @@ const BetNav = (props) => {
     const navigate = useNavigate();
 
     const goTo = () => {
-        navigate(`/Friendly-Betting/${betType}`)
+        // navigate(`/Friendly-Betting/${betType}`)
+        navigate(`/Friendly-Betting/CreateBet`)
     }
   return (
     <div className="fixed-center bg-spring-green-light text-black p-4 rounded-md black-border box-shadow-no-hover">

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect} from 'react';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
 import { db } from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
-import  { getSignedInUserInfo }  from '../../../Config/base';
+import  { getSignedInUserInfo, isUserSignedIn }  from '../../../Config/base';
 
 const CreateMoneyLine = () => {
   const [bet, setBet] = useState('');
@@ -18,7 +18,9 @@ const CreateMoneyLine = () => {
 
 
 
-
+    useEffect(() => {
+        console.log(isUserSignedIn);
+    }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -13,6 +13,7 @@ import Prop from './Components/Bets/PropBets/Prop';
 import DisplayAllBets from './Components/Bets/DisplayAllBets';
 import Friends from './Components/Friends/Friends';
 import ViewBet from './Components/Bets/ViewBet';
+import CreateBet from './Components/Bets/CreateBet';
 
 
 
@@ -31,6 +32,8 @@ function App() {
           <Route path="Friendly-Betting/CreateAccount" element={<CreateAccount />} />
           <Route path="Friendly-Betting/Bet" element={<DisplayAllBets />} />
           <Route path="Friendly-Betting/Friends" element={<Friends />} />
+
+          <Route path="Friendly-Betting/CreateBet" element={<CreateBet />} />
 
           <Route path="Friendly-Betting/MoneyLineBets" element={<MoneyLine />} />
           <Route path="Friendly-Betting/OverUnderBets" element={<OverUnder />} />

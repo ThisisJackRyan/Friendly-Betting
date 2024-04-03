@@ -20,6 +20,15 @@ export const getSignedInUserInfo = () => {
     }
 }
 
+// if doCheck is false then don't bother checking
+// if null or true do checks
+export function isUserSignedIn(doCheck) { 
+    if (doCheck !== false && getAuth().currentUser === null) {
+        return false;
+    }
+    return true;
+}
+
 
 export function getCollectionName(betType) {
     if(betType === "Money Line"){
