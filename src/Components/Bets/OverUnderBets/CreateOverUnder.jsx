@@ -1,16 +1,24 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import css from './OverUnder.module.css';
 import Players from '../Players/Players';
-
-import { getSignedInUserInfo } from '../../../Config/base';
-import {useState} from 'react';
+import { getSignedInUserInfo, isUserSignedIn } from '../../../Config/base';
+import {useState, useEffect} from 'react';
 import {db} from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
 const CreateOverUnder = () => {
+    const navigate = useNavigate();
     
     const [bet, setBet] = useState('');
     const [line, setLine] = useState(0);
+
+    useEffect(() => {
+        if(!isUserSignedIn()){
+            alert("You must be signed in to create a bet")
+            navigate(`/Friendly-Betting/Bet`)
+        }
+    }, [])
 
     const handelSubmit = async (e) => {
         e.preventDefault();
@@ -39,6 +47,8 @@ const CreateOverUnder = () => {
           }
         console.log('Creating over under bet');
     }
+
+    
 
   return (
     <div className='flex'>

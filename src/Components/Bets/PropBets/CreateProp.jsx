@@ -1,21 +1,27 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import css from './Prop.module.css';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PreSetBettingOptions from './PreSetBettingOptions';
 import Players from '../Players/Players';
 
-import { getSignedInUserInfo } from '../../../Config/base';
+import { getSignedInUserInfo, isUserSignedIn } from '../../../Config/base';
 import {db} from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
 const CreateProp = () => {
+    const navigate = useNavigate();
 
     const [bet, setBet] = useState('');
     const [Options, setOptions] = useState([]);
-
-
     const [isChecked, setIsChecked] = useState(false);
 
+    useEffect(() => {
+        if(!isUserSignedIn()){
+            alert("You must be signed in to create a bet")
+            navigate(`/Friendly-Betting/Bet`)
+        }
+    }, [])
 
     const handlesSetOptions = (options) => {
         setOptions(options);
