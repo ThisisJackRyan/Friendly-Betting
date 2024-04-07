@@ -4,13 +4,13 @@ import css from './Bets.module.css';
 
 const BetNav = (props) => {
 
-    const [betType, setBetType] = useState('MoneyLine')
+    const [betType, setBetType] = useState('MoneyLineBets')
 
     const navigate = useNavigate();
 
-    const goTo = () => {
-        // navigate(`/Friendly-Betting/${betType}`)
-        navigate(`/Friendly-Betting/CreateBet`)
+    const goTo = (bet) => {
+        navigate(`/Friendly-Betting/${bet}`)
+
     }
   return (
     <div className="fixed-center bg-spring-green-light text-black p-4 rounded-md black-border box-shadow-no-hover">
@@ -24,13 +24,13 @@ const BetNav = (props) => {
         </div>
         <div className="flex">
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
-                <div className="cursor-pointer" onClick={goTo} onMouseEnter={() => {setBetType("MoneyLineBets")}}>
+                <div className="cursor-pointer" onClick={() => goTo("MoneyLineBets")} onMouseEnter={() => {setBetType("MoneyLineBets")}}>
                     Money Line
                 </div>
-                <div className="cursor-pointer" onClick={goTo} onMouseEnter={() => {setBetType("OverUnderBets")}}>
+                <div className="cursor-pointer" onClick={() => goTo("OverUnderBets")} onMouseEnter={() => {setBetType("OverUnderBets")}}>
                     Over / Under
                 </div>
-                <div className="cursor-pointer" onClick={goTo} onMouseEnter={() => {setBetType("PropBets")}}> 
+                <div className="cursor-pointer" onClick={() => goTo("PropBets")} onMouseEnter={() => {setBetType("PropBets")}}> 
                     Prop (Not Implemented Yet)
                 </div>
             </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect} from 'react';
+import { useNavigate } from 'react-router-dom';
 import css from './MoneyLine.module.css';
 import Players from '../Players/Players';
 import { db } from '../../../Config/firebase-config';
@@ -7,19 +8,24 @@ import { addDoc, collection } from 'firebase/firestore';
 import  { getSignedInUserInfo, isUserSignedIn }  from '../../../Config/base';
 
 const CreateMoneyLine = () => {
-  const [bet, setBet] = useState('');
-  const [contestant1, setContestant1] = useState('');
-  const [contestant2, setContestant2] = useState('');
+    const navigate = useNavigate();
 
-  
-  const [odds1, setOdds1] = useState(0);
-  const [odds2, setOdds2] = useState(0);
+    const [bet, setBet] = useState('');
+    const [contestant1, setContestant1] = useState('');
+    const [contestant2, setContestant2] = useState('');
+
+
+    const [odds1, setOdds1] = useState(0);
+    const [odds2, setOdds2] = useState(0);
 
 
 
 
     useEffect(() => {
-        console.log(isUserSignedIn);
+        if(!isUserSignedIn()){
+            alert("You must be signed in to create a bet")
+            navigate(`/Friendly-Betting/Bet`)
+        }
     }, [])
 
   const handleSubmit = async (e) => {
