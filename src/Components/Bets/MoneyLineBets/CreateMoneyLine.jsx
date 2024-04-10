@@ -22,12 +22,12 @@ const CreateMoneyLine = () => {
 
 
 
-    // useEffect(() => {
-    //     if(!isUserSignedIn()){
-    //         alert("You must be signed in to create a bet")
-    //         navigate(`/Friendly-Betting/Bet`)
-    //     }
-    // }, [])
+    useEffect(() => {
+        if(!isUserSignedIn()){
+            alert("You must be signed in to create a bet")
+            navigate(`/Friendly-Betting/Bet`)
+        }
+    }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,15 +55,9 @@ const CreateMoneyLine = () => {
         } else {
            alert("You must be signed in to create a bet")
         }
-        
-        
-  
-      
     } catch (e) {
       console.error(e);
     }
-    // Logic to create the moneyline bet using the team and odds values
-    console.log('Creating moneyline bet:');
   };
 
   return (

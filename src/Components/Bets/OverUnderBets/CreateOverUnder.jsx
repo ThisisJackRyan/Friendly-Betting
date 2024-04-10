@@ -1,7 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import css from './OverUnder.module.css';
-import Players from '../Players/Players';
 import { getSignedInUserInfo, isUserSignedIn } from '../../../Config/base';
 import {useState, useEffect} from 'react';
 import {db} from '../../../Config/firebase-config';
@@ -29,7 +27,7 @@ const CreateOverUnder = () => {
                     bet: bet,
                     line: line,
                 })
-                await addDoc(collection(db, "bets"), {
+                const betLocation = await addDoc(collection(db, "bets"), {
                     betID: betRef.id,
                     type: "Over Under",
                     bet: bet,
@@ -38,42 +36,52 @@ const CreateOverUnder = () => {
                     under: 0,
                     over: 0,
                 })
+            navigate(`/Friendly-Betting/Bet/OverUnderBets/${betLocation.id}/`) 
             } else {
                 alert("You must be signed in to create a bet")
             }
-            
           } catch (e) {
             console.error(e);
           }
-        console.log('Creating over under bet');
     }
 
     
 
   return (
-    <div className='flex'>
-        <div className={css.OverUnder}>
+    <div className='p-12'>
         <form onSubmit={handelSubmit}>
-                <div className={`flex flex-col gap-4 pb-8 ${css.betContainer}`}>
-                    Proposition:
-                    <div className={css.bet}>
-                        <textarea className={css.BetTextArea} type="text" onChange={(e) => {setBet(e.target.value)}}/>
+            <div className="blob mx-auto items-start mt-8">
+                <div className="text-4xl betLabel">Over Under</div>
+                <div className='m-4 w-full'>
+                    <span className='text-2xl border-bottom'>
+                        Bet
+                    </span>
+                    <div className='mt-4'>
+                        <textarea 
+                            className='bg-secondary-spring-green-light rounded-md BetTextArea p-4'
+                            onChange={(e) => setBet(e.target.value)}
+                            placeholder='How many roles will grandpa eat at the family dinner?'
+                        >
+                        </textarea>
                     </div>
                 </div>
-                <div>
-                    <div className="flex items-center gap-4 m-2">
-                        <span className={css.label}>Line:</span>
-                        <input className="h-6 w-12" type="number" step="0.5" onChange={(e) =>{setLine(Number(e.target.value))}} />
+                <div className='m-4 w-full'>
+                    <span>
+                        Line
+                    </span>
+                    <div className='mt-4'>
+                        <input 
+                            className='bg-secondary-spring-green-light rounded-md subgroupsBetTextArea p-4 text-md'
+                            type="number"
+                            step="0.5"
+                            onChange={(e) =>setLine(Number(e.target.value))}
+                            placeholder='13.5'
+                        />
                     </div>
                 </div>
-                <button type="submit">Create bet</button>
-            </form>
-        </div>
-
-        <div className="x1">
-            <Players />
-        </div>
-        
+                <button className='betButton box-shadow rounded-md cursor-pointer' type='submit'>Create Bet</button>
+            </div>
+        </form>
     </div>
   );
 };
