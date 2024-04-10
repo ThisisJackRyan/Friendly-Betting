@@ -18,9 +18,7 @@ const BetNav = (props) => {
             <div className="x text-md"><span onClick={props.swap} >x</span></div>
         </div>
         <div className='flex justify-center'>
-            <div className=' text-3xl'><span className='border-bottom'>Bets</span></div>
-            
-            
+            <div className=' text-3xl'><span className='border-bottom'>Bets</span></div>      
         </div>
         <div className="flex">
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>

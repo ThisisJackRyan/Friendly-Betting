@@ -4,7 +4,7 @@ import Buttons from '../../Components/Buttons';
 const ViewMoneyLine = ({bets}) => {
     return (     
         <div className="flex justify-center items-center">
-            <div className="blob">
+            <div className="blob mt-24">
                 <div className="flex">
                     <div className='flex flex-col gap-8 m-4 items-center'>
                         <Buttons text="Bet" a="betButton" size="big"></Buttons>

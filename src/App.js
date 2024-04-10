@@ -7,9 +7,9 @@ import Header from './Components/Header';
 import NotFound from './Components/NotFound';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Welcome from './Components/Welcome';
-import MoneyLine from './Components/Bets/MoneyLineBets/MoneyLine';
-import OverUnder from './Components/Bets/OverUnderBets/OverUnder';
-import Prop from './Components/Bets/PropBets/Prop';
+import CreateMoneyLine from './Components/Bets/MoneyLineBets/CreateMoneyLine';
+import CreateOverUnder from './Components/Bets/OverUnderBets/CreateOverUnder';
+import CreateProp from './Components/Bets/PropBets/CreateProp';
 import DisplayAllBets from './Components/Bets/DisplayAllBets';
 import Friends from './Components/Friends/Friends';
 import ViewBet from './Components/Bets/ViewBet';
@@ -33,9 +33,9 @@ function App() {
           <Route path="Friendly-Betting/Bet" element={<DisplayAllBets />} />
           <Route path="Friendly-Betting/Friends" element={<Friends />} />
 
-          <Route path="Friendly-Betting/MoneyLineBets" element={<MoneyLine />} />
-          <Route path="Friendly-Betting/OverUnderBets" element={<OverUnder />} />
-          <Route path="Friendly-Betting/PropBets" element={<Prop />} />
+          <Route path="Friendly-Betting/MoneyLineBets" element={<CreateMoneyLine />} />
+          <Route path="Friendly-Betting/OverUnderBets" element={<CreateOverUnder />} />
+          <Route path="Friendly-Betting/PropBets" element={<CreateProp />} />
 
           <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id" element={<ViewBet />} />
           <Route path="/Friendly-Betting/Bet/OverUnderBets/:id" element={<ViewBet />} />

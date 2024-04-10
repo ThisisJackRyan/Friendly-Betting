@@ -25,7 +25,15 @@
   --gradient-radial: radial-gradient(#114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
 }
 
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
 
+input[type=number]{
+  -moz-appearance: textfield;
+}
 
 
 

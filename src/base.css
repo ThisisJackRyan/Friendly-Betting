@@ -89,7 +89,6 @@ This file is all the base classes for consistent styling
     border-radius: 5px;
     box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
     padding: 3em;
-    margin-top:6rem;
     min-width: 60%;
     max-width: 75%;
 }
@@ -97,3 +96,34 @@ This file is all the base classes for consistent styling
 .row { /* overrides the flex-colum in blob */
     flex-direction: row;
 }
+.items-start{ /* overrides the align-items in blob */
+    align-items: start;
+}
+
+/* == Input sizes on Create Bets == */
+.BetTextArea{
+    width: 75%;
+    height: 6em;
+}
+.subgroupsBetTextArea{
+    width: 60%;
+    height: 4em;
+}
+
+/* == Buttons == */
+.betButton {
+    background-color: var(--blue-gray);
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 100;
+    padding:1rem 2.25rem;
+    color: white;
+}
+.betButton:hover {
+    background-color: #576971;
+}
+
+
+.betLabel{
+    border-bottom: dashed 1px var(--blue-gray);
+  }
