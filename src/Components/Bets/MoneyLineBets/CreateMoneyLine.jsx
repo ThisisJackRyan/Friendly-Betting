@@ -1,12 +1,12 @@
 import React, { useState, useEffect} from 'react';
 import { useNavigate } from 'react-router-dom';
-import css from './MoneyLine.module.css';
-import Players from '../Players/Players';
+
+
 import { db } from '../../../Config/firebase-config';
 import { addDoc, collection } from 'firebase/firestore';
 
 import  { getSignedInUserInfo, isUserSignedIn }  from '../../../Config/base';
-import Buttons from '../../Components/Buttons';
+
 
 const CreateMoneyLine = () => {
     const navigate = useNavigate();
@@ -134,54 +134,6 @@ const CreateMoneyLine = () => {
             </div>
         </form>
     </div>
-
-
-    // <div className='flex'>
-    //     <div className='x2'>
-    //         <form className={css.MoneyLine} onSubmit={handleSubmit}>
-    //         <div className={`pb-8 ${css.betContainer}`}>
-    //             Bet:
-    //             <div className="pl-8">
-    //                 <textarea className={css.betTextArea}type="text" name="" id="" onChange={(e) => setBet(e.target.value)} />
-    //             </div>
-    //         </div>
-    //         <div className='flex'>
-    //             <div className="flex flex-col my-4 mx-8">
-    //                 <div><span className={css.label}>Contestant 1</span></div>
-    //                 <input
-    //                     type="text"
-    //                     name=""
-    //                     value={contestant1}
-    //                     className={css.contestantInput}
-    //                     onChange={(e) => setContestant1(e.target.value)}
-                        
-    //                 />
-    //                 <div className={css.odds}>
-    //                     <span>(+ or - odds)</span>
-    //                     <input className="justify-center items-center" type="number" onChange={(e) => setOdds1(Number(e.target.value))}/>
-    //                 </div>
-    //             </div>
-    //             <div className="flex flex-col my-4 mx-8">
-    //                 <div><span className={css.label}>Contestant 2</span></div>
-    //                 <input 
-    //                     type="text"
-    //                     name=""
-    //                     value={contestant2}
-    //                     className={css.contestantInput}
-    //                     onChange={(e) => setContestant2(e.target.value)}
-                        
-    //                 /> 
-    //                 <div className="flex justify-center items-center gap-2 p-2">
-    //                     <span className={css.odds}>(+ or - odds)</span>
-    //                     <input type="number"  onChange={(e) => setOdds2(Number(e.target.value))}/>
-    //                 </div>
-    //             </div>
-    //         </div>
-                
-    //         <button type="submit">Create Bet</button>
-    //         </form>
-    //     </div>
-    // </div>
   );
 };
 
