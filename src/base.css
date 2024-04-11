@@ -19,6 +19,9 @@ This file is all the base classes for consistent styling
     background-color: #BEDEC5;
 
 }
+.bg-spring-green{
+    background-color: var(--spring-green);
+}
 .bg-blue-gray{
     background-color: var(--blue-gray);
 }
