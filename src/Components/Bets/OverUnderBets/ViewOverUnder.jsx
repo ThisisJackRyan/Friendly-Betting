@@ -32,7 +32,7 @@ const ViewOverUnder = ({bets, collectionName, betId, fetchBet}) => {
 
     return (
         <div className='flex justify-center items-center'>
-            <div className={`blob mt-24 row p-16`}>
+            <div className={`blob row p-16`}>
                 <div className="flex flex-col justify-center items-center">
                     <Buttons click={addUnder} text="Under" a="betButton" size="big"></Buttons>
                     <div className='max-w-40 text-center mt-4'>{bets.under || 0} others have taken the under</div>

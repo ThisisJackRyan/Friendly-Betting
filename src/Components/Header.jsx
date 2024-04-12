@@ -23,7 +23,7 @@ const Header = () => {
     return(
 
         <div className=" max-h-24">
-            <div className="absolute top-0 bottom-0 right-0 left-0 flex">
+            <div className=" flex justify-start">
                 <Link className=" ease-in no-underline text-black" to="Friendly-Betting/">
                     <div className="p-4 pt-8 text-shadow flex justify-start items-center text-5xl">
                         <span className="font-sans font-thin">FR</span>
@@ -41,7 +41,7 @@ const Header = () => {
                     </Link>
                 
             </div>
-            <div className="fixed-center-x h-24">
+            <div className="fixed-center-x top-0 h-24">
                 <CSSTransition
                     in={(location.pathname === "/Friendly-Betting/Bet")}
                     timeout={300}
