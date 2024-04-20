@@ -12,9 +12,9 @@ const ShareBet = (props) => {
     return (
         
         <div>
-            <div className='fixed-center text-2xl p-8 px-16 bg-spring-green-light rounded-md box-shadow-no-hover'>
+            <div className='fixed-center text-2xl p-8 px-16 bg-blue-gray rounded-md box-shadow-no-hover'>
                 <div className="flex justify-end mb-2 "><span className={css.x} onClick={props.display}>x</span></div>
-                <div className='justify-center text-center text-4xl mb-6 '><span className='border-bottom'>Share</span></div>
+                <div className='justify-center text-center text-4xl mb-6 text-white '><span className='border-bottom-white'>Share</span></div>
                 <div className={css.border}>
                     <QRCode
                         title="qr-code"

@@ -99,10 +99,12 @@
   border-left:none;
   border-top-right-radius: 5px;
   border-bottom-right-radius: 5px;
+  padding: 0rem .5rem;
+  font-size: 1rem;
 }
 .copyButton:hover{
   cursor: pointer;
-  background-color: var(--alabaster);
+  background-color: lightgray;
 }
 .copyButton:active{
   box-shadow: 0px 1px 1px 0px rgba(0,0,0,0.75) inset;
