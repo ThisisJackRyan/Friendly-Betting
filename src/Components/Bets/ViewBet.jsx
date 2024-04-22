@@ -2,6 +2,7 @@ import React from 'react';
 import Players from './Players/Players';
 import DeleteButton from '../Components/DeleteButton';
 import ShareButton from '../Components/ShareButton';
+import EditButton from '../Components/EditButton';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {db} from '../../Config/firebase-config';
@@ -24,7 +25,7 @@ const ViewBet = () => {
     const [betId, setBetId] = useState('')
     const [collectionName, setCollectionName] = useState('')
 
-    const [showDeleteButton, setShowDeleteButton] = useState(false)
+    const [showDeleteAndEditButton, setShowDeleteAndEditButton] = useState(false)
     
     
     const bet = useParams();
@@ -33,7 +34,7 @@ const ViewBet = () => {
 
 
     const handleShowDeleteButton = (createdByID) => {
-        createdByID === getSignedInUserInfo().uid ? setShowDeleteButton(true) : setShowDeleteButton(false)
+        createdByID === getSignedInUserInfo().uid ? setShowDeleteAndEditButton(true) : setShowDeleteAndEditButton(false)
     } 
 
     const fetchBet = async () => {
@@ -72,8 +73,14 @@ const ViewBet = () => {
                         {bets.bet}
                     </div>
                     <div className=' x1 flex gap-4 justify-end'>
-                        {showDeleteButton ? <DeleteButton collection={collectionName} docId={betId}/> : null}
+                        {showDeleteAndEditButton ?
+                            <>  
+                                <DeleteButton collection={collectionName} docId={betId}/> 
+                                <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
+                            </>
+                        : null}
                         <ShareButton />
+                        
                     </div>
                 </div>
                 {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />

@@ -1,25 +1,27 @@
 import React, { useState, useEffect} from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+
 
 
 import { db } from '../../../Config/firebase-config';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, doc, getDoc , updateDoc, collection } from 'firebase/firestore';
 
 import  { getSignedInUserInfo, isUserSignedIn }  from '../../../Config/base';
 
 
+
 const CreateMoneyLine = () => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [bet, setBet] = useState('');
     const [contestant1, setContestant1] = useState('');
     const [contestant2, setContestant2] = useState('');
+    const [odds1, setOdds1] = useState('');
+    const [odds2, setOdds2] = useState('');
 
-
-    const [odds1, setOdds1] = useState(0);
-    const [odds2, setOdds2] = useState(0);
-
-
+    const [isLocationNull, setIsLocationNull] = useState(location.state === null);
 
 
     useEffect(() => {
@@ -27,13 +29,41 @@ const CreateMoneyLine = () => {
             alert("You must be signed in to create a bet")
             navigate(`/Friendly-Betting/Bet`)
         }
+        if(isLocationNull == false){
+            try{
+                setBet(location.state.bets.bet)
+                setContestant1(location.state.bets.contestant1)
+                setContestant2(location.state.bets.contestant2)
+                setOdds1(location.state.bets.contestant1Odds)
+                setOdds2(location.state.bets.contestant2Odds)
+            }
+            catch (e){
+                console.error(e);
+            }
+        }
     }, [])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-        const userInfo = getSignedInUserInfo();
-        if(userInfo !== null) {
+
+    const updateBet = async () => {
+        try {
+            const betsDocRef = doc(db, "bets", location.state.betUrl.id);
+            const betsDocSnap = await getDoc(betsDocRef);
+
+            await updateDoc(doc(db,"MoneyLineBets" , betsDocSnap.data().betID), {
+                bet: bet,
+                contestant1: contestant1,
+                contestant1Odds: odds1,
+                contestant2: contestant2,
+                contestant2Odds: odds2,
+            })
+            navigate(`/Friendly-Betting/Bet/MoneyLineBets/${location.state.betUrl.id}/`) 
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const createBet = async (userInfo) => {
+        try {
             const betRef = await addDoc(collection(db, "MoneyLineBets"), {
                 bet: bet,
                 contestant1: contestant1,
@@ -49,9 +79,26 @@ const CreateMoneyLine = () => {
                 createdByID: userInfo["uid"],
                 createdByEmail: userInfo["email"],
 
-
             })
             navigate(`/Friendly-Betting/Bet/MoneyLineBets/${betLocation.id}/`) 
+
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+        const userInfo = getSignedInUserInfo();
+        if(userInfo !== null) {
+            if(isLocationNull){
+                createBet(userInfo);
+            }
+            else{
+                updateBet();
+            }
+            
         } else {
            alert("You must be signed in to create a bet")
         }
@@ -74,6 +121,7 @@ const CreateMoneyLine = () => {
                             className='bg-secondary-spring-green-light rounded-md BetTextArea p-4'
                             onChange={(e) => setBet(e.target.value)}
                             placeholder='Who will win Movie of the year?'
+                            value={bet}
                         >
                         </textarea>
                     </div>
@@ -95,9 +143,11 @@ const CreateMoneyLine = () => {
                         <span className='text-sm pr-2'>(+ or - odds)</span>
                         <input 
                             type="number"  
-                            onChange={(e) => setOdds1(Number(e.target.value))}
+                            value={odds1}
+                            onChange={(e) => setOdds1(Number(e.target.value) || '')}
                             className="bg-secondary-spring-green-light rounded-md p-2"
                             placeholder='+350'
+                            
                         />
                     </div>
                 </div>
@@ -118,9 +168,11 @@ const CreateMoneyLine = () => {
                         <span className='text-sm pr-2'>(+ or - odds)</span>
                         <input 
                             type="number"  
-                            onChange={(e) => setOdds2(Number(e.target.value))}
+                            value={odds2}
+                            onChange={(e) => setOdds2(Number(e.target.value) || '')}
                             className='bg-secondary-spring-green-light rounded-md p-2'
                             placeholder='-500'
+                            
                         />
                     </div>
                 </div>
