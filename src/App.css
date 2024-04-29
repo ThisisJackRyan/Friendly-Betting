@@ -100,6 +100,41 @@ body{
 }
 
 
+/* == transition for mobile view  button == */
+.createBetDown-enter {
+  opacity: 0;
+  transform: translateY(100%); /* Start from above the screen */
+}
+
+.createBetDown-enter-active {
+  opacity: 1;
+  transform: translateY(0); /* Move to its original position */
+  transition: opacity 300ms, transform 300ms;
+}
+
+.createBetDown-enter-done {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.createBetDown-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.createBetDown-exit-active {
+  opacity: 0;
+  transform: translateY(100%); /* Move out of the screen upwards */
+  transition: opacity 300ms, transform 300ms;
+}
+
+.createBetDown-exit-done {
+  opacity: 0;
+  transform: translateY(100%);
+
+}
+
+
 
 
 /* == transition for view bet button == */

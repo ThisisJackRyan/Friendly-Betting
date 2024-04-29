@@ -21,9 +21,8 @@ const Header = () => {
 
 
     return(
-
-        <div className=" max-h-24">
-            <div className=" flex justify-start">
+        <div className="">
+            <div className=" flex justify-center">
                 <Link className=" ease-in no-underline text-black" to="Friendly-Betting/">
                     <div className="p-4 pt-8 text-shadow flex justify-start items-center text-5xl">
                         <span className="font-sans font-thin">FR</span>
@@ -33,36 +32,22 @@ const Header = () => {
                     </div>
                 </Link>
             </div>
-            
-            <div className="fixed flex top-0 right-0 h-24">
-                
-                    <Link className="flex rounded-bl-2xl betLink pt-8 p-4 no-underline text-black" to="Friendly-Betting/Bet" >
-                        <span className="flex items-center justify-center z-10">View Bets</span>
-                    </Link>
-                
-            </div>
-            <div className="fixed-center-x top-0 h-24">
-                <CSSTransition
-                    in={(location.pathname === "/Friendly-Betting/Bet")}
-                    timeout={300}
-                    classNames="createBet"
-                    unmountOnExit              
+
+
+            <div className="">
+                     <CSSTransition
+                     in={(location.pathname !== "/Friendly-Betting/Bet")}
+                     timeout={300}
+                     classNames="createBetDown"
+                     unmountOnExit              
                 >
-                    <div className="h-full">
-                        <div onClick={swapDisplay} className=" h-full flex bg-spring-green-light box-shadow rounded-b-2xl pl-8 pr-8 justify-center items-center">
-                            <span className="flex justify-center items-center">Create One!</span>
-                        </div>
-                    </div>
-                </CSSTransition>
+                    <Link to="Friendly-Betting/Bet" className="bg-spring-green-light absolute bottom-0 w-full flex justify-center items-center h-20 rounded-t-md">
+                        <span>
+                            View Bets
+                        </span> 
+                    </Link>
+                 </CSSTransition>
             </div>
-            <CSSTransition
-                in={display}
-                timeout={300}
-                classNames="createBet"
-                unmountOnExit              
-            >
-                <BetNav swap={swapDisplay}/>
-            </CSSTransition>
         </div>
     )
 }
