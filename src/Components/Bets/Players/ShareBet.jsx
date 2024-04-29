@@ -1,7 +1,6 @@
 import React from 'react';
 import css from './Players.module.css';
 import QRCode from 'react-qr-code';
-import {useState} from 'react';
 
 
 

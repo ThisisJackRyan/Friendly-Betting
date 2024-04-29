@@ -1,5 +1,4 @@
 import React from 'react';
-import Players from './Players/Players';
 import DeleteButton from '../Components/DeleteButton';
 import ShareButton from '../Components/ShareButton';
 import EditButton from '../Components/EditButton';
@@ -59,6 +58,7 @@ const ViewBet = () => {
 
     useEffect(() => {
         fetchBet();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
 

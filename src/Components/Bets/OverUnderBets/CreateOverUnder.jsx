@@ -12,7 +12,7 @@ const CreateOverUnder = () => {
     const [bet, setBet] = useState('');
     const [line, setLine] = useState(0);
 
-    const [isLocationNull, setIsLocationNull] = useState(location.state === null);
+    const isLocationNull = location.state === null;
 
 
     useEffect(() => {
@@ -20,7 +20,7 @@ const CreateOverUnder = () => {
             alert("You must be signed in to create a bet")
             navigate(`/Friendly-Betting/Bet`)
         }
-        if(isLocationNull == false){
+        if(isLocationNull === false){
             try{
                 setBet(location.state.bets.bet)
                 setLine(location.state.bets.line)
@@ -29,6 +29,7 @@ const CreateOverUnder = () => {
                 console.error(e);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const updateBet = async () => {
@@ -112,7 +113,7 @@ const CreateOverUnder = () => {
                         />
                     </div>
                 </div>
-                <button className='betButton box-shadow rounded-md cursor-pointer' type='submit'>Create Bet</button>
+                <button className='betButton box-shadow rounded-md cursor-pointer' type='submit'>{isLocationNull ? "Create Bet" : "Update Bet"}</button>
             </div>
         </form>
     </div>

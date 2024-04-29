@@ -19,6 +19,8 @@ const DisplayBet = (props) => {
             setBetData(docSnap.data());
         }
         fetchBetData();
+        
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
     return (
         <div className='max-w-3xl'>

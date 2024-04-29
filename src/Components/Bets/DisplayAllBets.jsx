@@ -1,11 +1,8 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import BetNav from './BetNav';
 import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
-import Players from './Players/Players';
-import css from './Bets.module.css';
 import { getSignedInUserInfo } from '../../Config/base';
 
 
@@ -21,7 +18,7 @@ const DisplayAllBets = () => {
             ...doc.data(), 
             id: doc.id,
           }));
-          const cleanedData = filteredData.filter(bet => bet.createdByID == getSignedInUserInfo().uid);
+          const cleanedData = filteredData.filter(bet => bet.createdByID === getSignedInUserInfo().uid);
           setBets(cleanedData);
         } catch (e) {
           console.error(e);

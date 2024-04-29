@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import css from './Prop.module.css';
 import { useState, useEffect } from 'react';
 import PreSetBettingOptions from './PreSetBettingOptions';
-import Players from '../Players/Players';
 
 import { getSignedInUserInfo, isUserSignedIn } from '../../../Config/base';
 import {db} from '../../../Config/firebase-config';
@@ -21,6 +20,7 @@ const CreateProp = () => {
             alert("You must be signed in to create a bet")
             navigate(`/Friendly-Betting/Bet`)
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handlesSetOptions = (options) => {
@@ -77,9 +77,7 @@ const CreateProp = () => {
             <div>
                 {isChecked ? <PreSetBettingOptions setOptions={handlesSetOptions} display={handleCheckboxChange}/> : null}
             </div>
-            <div className="x1">
-                <Players />
-            </div>
+            
     </div>
   );
 };

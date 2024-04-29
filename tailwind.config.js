@@ -6,6 +6,11 @@ module.exports = {
   theme: {
     extend: {},
   },
-  plugins: [],
+  plugins: [
+    require('postcss-nested'), // add this line
+    require('autoprefixer'),
+    require('tailwindcss'),
+    
+  ]
 }
 
