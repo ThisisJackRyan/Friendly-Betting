@@ -4,10 +4,17 @@ import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
 import { getSignedInUserInfo } from '../../Config/base';
+import { CSSTransition } from 'react-transition-group';
+import BetNav from './BetNav';
 
 
 const DisplayAllBets = () => {
     const [bets, setBets] = useState([])
+    const [display, setDisplay] = useState(false)
+
+    const swapDisplay = () => {
+        setDisplay((current) => !current)
+    }
 
 
     useEffect(() => {
@@ -29,7 +36,7 @@ const DisplayAllBets = () => {
     }, [])
 
   return (
-    <div className='flex justify-center p-12'>
+    <div className='flex flex-col justify-center p-12'>
 
       {bets.length < 1 ? (
         <div>
@@ -44,6 +51,18 @@ const DisplayAllBets = () => {
           ))}
         </div>
       ) }
+      <div className="flex justify-center items-center bg-blue-gray text-white mx-2 rounded-md box-shadow py-4" onClick={swapDisplay}>
+          Create Bet
+      </div>
+
+      <CSSTransition
+                in={display}
+                timeout={300}
+                classNames="createBetDown"
+                unmountOnExit              
+      >
+        <BetNav swap={swapDisplay}/>
+      </CSSTransition>
     </div>
   );
 }

@@ -30,10 +30,9 @@ const DisplayBet = (props) => {
                 state={{"bet":props.bet}}
             >
                 <div className=''>
-                    <div className='bg-spring-green-light m-2 p-2 rounded-md' key={props.bet.id}>
+                    <div className='bg-spring-green-light m-2 mb-4 p-2 pb-4 rounded-md box-shadow' key={props.bet.id}>
                         <div className='text-md font-light'>{props.bet.type}</div>
                         <div className='text-2xl p-2 font-medium text-center'>{props.bet.bet}</div>
-
                     </div>
                 </div>
             </Link>
