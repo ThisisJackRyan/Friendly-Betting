@@ -46,8 +46,8 @@ const BetNav = (props) => {
                     </button>
                     <CSSTransition
                         in={isOpenMoneyLine}
-                        timeout={500}
-                        classNames="createBet"
+                        timeout={300}
+                        classNames="fadeDown"
                         unmountOnExit              
                     >
                         <div>
@@ -57,7 +57,7 @@ const BetNav = (props) => {
                                 In a Money line bet, you simply choose which side you think will win. 
                                 </span>
                             </div>
-                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("MoneyLineBets")}>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 text-white active:border-gray-50' onClick={() => goTo("MoneyLineBets")}>
                                 <span>
                                     Create One!
                                 </span>
@@ -66,9 +66,9 @@ const BetNav = (props) => {
                     </CSSTransition>
 
                 </div>
-                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 transition duration-75 ease-in-out ${isOpenMoneyLine ? css.moveSouth : "delay-300"}`}>
 
-                    <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenOverUnder(!isOpenOverUnder)}>
+                    <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenOverUnder(!isOpenOverUnder)}>
                         Over / Under
                         <div className='flex justify-center items-center'>
                             {isOpenOverUnder ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
@@ -76,8 +76,8 @@ const BetNav = (props) => {
                     </button>
                     <CSSTransition
                         in={isOpenOverUnder}
-                        timeout={500}
-                        classNames="createBet"
+                        timeout={300}
+                        classNames="fadeDown"
                         unmountOnExit              
                     >
                         <div>
@@ -87,7 +87,7 @@ const BetNav = (props) => {
                                 score of both teams or participants in a game, match, or event will be OVER or UNDER a predetermined number.
                                 </span>
                             </div>
-                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("OverUnderBets")}>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 text-white active:border-gray-50' onClick={() => goTo("OverUnderBets")}>
                                 <span>
                                     Create One!
                                 </span>
@@ -96,7 +96,7 @@ const BetNav = (props) => {
                     </CSSTransition>
 
                 </div>
-                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 transition duration-75 ease-in-out ${isOpenMoneyLine || isOpenOverUnder ? css.moveSouth : "delay-300"}`}>
 
                     <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenProp(!isOpenProp)} >
                         Prop (Not Implemented)
@@ -106,8 +106,8 @@ const BetNav = (props) => {
                     </button>
                     <CSSTransition
                         in={isOpenProp}
-                        timeout={500}
-                        classNames="createBet"
+                        timeout={300}
+                        classNames="fadeDown"
                         unmountOnExit              
                     >
                         <div>
@@ -118,7 +118,7 @@ const BetNav = (props) => {
                                 or anything you can thing of!
                                 </span>
                             </div>
-                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("PropBets")}>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 text-white active:border-gray-50' onClick={() => goTo("PropBets")}>
                                 <span>
                                     Create One!
                                 </span>

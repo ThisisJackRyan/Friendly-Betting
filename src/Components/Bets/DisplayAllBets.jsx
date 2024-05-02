@@ -58,7 +58,7 @@ const DisplayAllBets = () => {
       <CSSTransition
                 in={display}
                 timeout={300}
-                classNames="createBetDown"
+                classNames="fadeUp"
                 unmountOnExit              
       >
         <BetNav swap={swapDisplay}/>

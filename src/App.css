@@ -65,35 +65,36 @@ body{
 
 
 
-/* == transition for create bet button == */
-.createBet-enter {
+/* == transition fade bringing element down == */
+.fadeDown-enter {
+  /* transition-delay: 75ms; */
   opacity: 0;
   transform: translateY(-15%); /* Start from above the screen */
 }
 
-.createBet-enter-active {
+.fadeDown-enter-active {
   opacity: 1;
   transform: translateY(0); /* Move to its original position */
-  transition: opacity 500ms, transform 500ms;
+  transition: opacity 300ms, transform 300ms;
 }
 
-.createBet-enter-done {
+.fadeDown-enter-done {
   opacity: 1;
   transform: translateY(0);
 }
 
-.createBet-exit {
+.fadeDown-exit {
   opacity: 1;
   transform: translateY(0);
 }
 
-.createBet-exit-active {
+.fadeDown-exit-active {
   opacity: 0;
   transform: translateY(-15%); /* Move out of the screen upwards */
-  transition: opacity 500ms, transform 500ms;
+  transition: opacity 300ms, transform 300ms;
 }
 
-.createBet-exit-done {
+.fadeDown-exit-done {
   opacity: 0;
   transform: translateY(-15%);
 
@@ -101,34 +102,34 @@ body{
 
 
 /* == transition for mobile view  button == */
-.createBetDown-enter {
+.fadeUp-enter {
   opacity: 0;
   transform: translateY(100%); /* Start from above the screen */
 }
 
-.createBetDown-enter-active {
+.fadeUp-enter-active {
   opacity: 1;
   transform: translateY(0); /* Move to its original position */
   transition: opacity 300ms, transform 300ms;
 }
 
-.createBetDown-enter-done {
+.fadeUp-enter-done {
   opacity: 1;
   transform: translateY(0);
 }
 
-.createBetDown-exit {
+.fadeUp-exit {
   opacity: 1;
   transform: translateY(0);
 }
 
-.createBetDown-exit-active {
+.fadeUp-exit-active {
   opacity: 0;
   transform: translateY(100%); /* Move out of the screen upwards */
   transition: opacity 300ms, transform 300ms;
 }
 
-.createBetDown-exit-done {
+.fadeUp-exit-done {
   opacity: 0;
   transform: translateY(100%);
 
