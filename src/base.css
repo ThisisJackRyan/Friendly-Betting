@@ -25,7 +25,12 @@ This file is all the base classes for consistent styling
 .bg-blue-gray{
     background-color: var(--blue-gray);
 }
-
+.dropdown.bg-secondary-spring-green-light:hover{
+    background-color: var(--spring-green);
+}
+.dropdown.bg-secondary-spring-green-light:active{
+    background-color: var(--blue-gray);
+}
 /* == Text colors == */
 .green{
     color: rgb(3, 255, 3);

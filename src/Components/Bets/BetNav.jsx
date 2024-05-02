@@ -2,10 +2,14 @@ import React, {useState} from 'react';
 import {useNavigate } from 'react-router-dom';
 import css from './Bets.module.css';
 import { Link } from 'react-router-dom';
+import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
+import { CSSTransition } from 'react-transition-group';
 
 const BetNav = (props) => {
 
     const [betType, setBetType] = useState('MoneyLineBets')
+
+    const [isOpen, setIsOpen] = useState(false);
 
     const navigate = useNavigate();
 
@@ -29,16 +33,45 @@ const BetNav = (props) => {
         <div className='absolute top-0 right-0 mr-8 mt-8'>
              <div className="x text-2xl"><span onClick={props.swap} >x</span></div>
         </div>
-        <div className='flex justify-center items-center h-full'>
+        <div className='flex justify-center items-start mt-40 h-full'>
             {/* Make this a drop down that displays description... look at meta's website */}
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
-                <div className="cursor-pointer" onClick={() => goTo("MoneyLineBets")} onMouseEnter={() => {setBetType("MoneyLineBets")}}>
+            {/* () => goTo("MoneyLineBets") */}
+            <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+
+                <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpen(!isOpen)} onMouseEnter={() => {setBetType("MoneyLineBets")}}>
                     Money Line
-                </div>
-                <div className="cursor-pointer" onClick={() => goTo("OverUnderBets")} onMouseEnter={() => {setBetType("OverUnderBets")}}>
+                    <div className='flex justify-center items-center'>
+                        {isOpen ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
+                    </div>
+                </button>
+                <CSSTransition
+                    in={isOpen}
+                    timeout={500}
+                    classNames="createBet"
+                    unmountOnExit              
+                >
+                    <div>
+                        <div className='relative flex justify-center items-center  border-4 rounded-lg bg-secondary-spring-green-light'>
+                            <span  className=' break-words whitespace-normal flex justify-center items-center p-2'>
+                            Money Line bet is a type of wager where you place a bet on the outcome of an event with only two possible outcomes. 
+                            In a Money line bet, you simply choose which side you think will win. 
+                            </span>
+                        </div>
+                        <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50'>
+                            <span>
+                                Create One!
+                            </span>
+                        </button>
+                    </div>
+                </CSSTransition>
+
+            </div>
+
+                <div className="cursor-pointer  black-border rounded-md p-2 m-2" onClick={() => goTo("OverUnderBets")} onMouseEnter={() => {setBetType("OverUnderBets")}}>
                     Over / Under
                 </div>
-                <div className="cursor-pointer" onClick={() => goTo("PropBets")} onMouseEnter={() => {setBetType("PropBets")}}> 
+                <div className="cursor-pointer black-border rounded-md p-2 m-2" onClick={() => goTo("PropBets")} onMouseEnter={() => {setBetType("PropBets")}}> 
                     Prop (Not Implemented Yet)
                 </div>
             </div>

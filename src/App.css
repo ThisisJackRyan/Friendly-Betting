@@ -68,13 +68,13 @@ body{
 /* == transition for create bet button == */
 .createBet-enter {
   opacity: 0;
-  transform: translateY(-100%); /* Start from above the screen */
+  transform: translateY(-15%); /* Start from above the screen */
 }
 
 .createBet-enter-active {
   opacity: 1;
   transform: translateY(0); /* Move to its original position */
-  transition: opacity 300ms, transform 300ms;
+  transition: opacity 500ms, transform 500ms;
 }
 
 .createBet-enter-done {
@@ -89,13 +89,13 @@ body{
 
 .createBet-exit-active {
   opacity: 0;
-  transform: translateY(-100%); /* Move out of the screen upwards */
-  transition: opacity 300ms, transform 300ms;
+  transform: translateY(-15%); /* Move out of the screen upwards */
+  transition: opacity 500ms, transform 500ms;
 }
 
 .createBet-exit-done {
   opacity: 0;
-  transform: translateY(-100%);
+  transform: translateY(-15%);
 
 }
 
@@ -133,6 +133,35 @@ body{
   transform: translateY(100%);
 
 }
+
+
+/* == fade in transition == */
+.fadeIn-enter {
+  opacity: 0;
+}
+
+.fadeIn-enter-active {
+  opacity: 1;
+  transition: opacity 300ms;
+}
+
+.fadeIn-enter-done {
+  opacity: 1;
+}
+
+.fadeIn-exit {
+  opacity: 1;
+}
+
+.fadeIn-exit-active {
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.fadeIn-exit-done {
+  opacity: 0;
+}
+
 
 
 
