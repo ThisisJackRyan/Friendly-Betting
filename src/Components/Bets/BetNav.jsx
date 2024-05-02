@@ -7,9 +7,9 @@ import { CSSTransition } from 'react-transition-group';
 
 const BetNav = (props) => {
 
-    const [betType, setBetType] = useState('MoneyLineBets')
-
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpenMoneyLine, setIsOpenMoneyLine] = useState(false);
+    const [isOpenOverUnder, setIsOpenOverUnder] = useState(false);
+    const [isOpenProp, setIsOpenProp] = useState(false);
 
     const navigate = useNavigate();
 
@@ -36,43 +36,96 @@ const BetNav = (props) => {
         <div className='flex justify-center items-start mt-40 h-full'>
             {/* Make this a drop down that displays description... look at meta's website */}
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
-            {/* () => goTo("MoneyLineBets") */}
-            <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
 
-                <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpen(!isOpen)} onMouseEnter={() => {setBetType("MoneyLineBets")}}>
-                    Money Line
-                    <div className='flex justify-center items-center'>
-                        {isOpen ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
-                    </div>
-                </button>
-                <CSSTransition
-                    in={isOpen}
-                    timeout={500}
-                    classNames="createBet"
-                    unmountOnExit              
-                >
-                    <div>
-                        <div className='relative flex justify-center items-center  border-4 rounded-lg bg-secondary-spring-green-light'>
-                            <span  className=' break-words whitespace-normal flex justify-center items-center p-2'>
-                            Money Line bet is a type of wager where you place a bet on the outcome of an event with only two possible outcomes. 
-                            In a Money line bet, you simply choose which side you think will win. 
-                            </span>
+                    <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenMoneyLine(!isOpenMoneyLine)} >
+                        Money Line
+                        <div className='flex justify-center items-center'>
+                            {isOpenMoneyLine ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
                         </div>
-                        <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50'>
-                            <span>
-                                Create One!
-                            </span>
-                        </button>
-                    </div>
-                </CSSTransition>
+                    </button>
+                    <CSSTransition
+                        in={isOpenMoneyLine}
+                        timeout={500}
+                        classNames="createBet"
+                        unmountOnExit              
+                    >
+                        <div>
+                            <div className='relative flex justify-center items-center  border-4 rounded-lg bg-secondary-spring-green-light'>
+                                <span  className=' break-words whitespace-normal flex justify-center items-center p-2'>
+                                Money Line bet is a type of wager where you place a bet on the outcome of an event with only two possible outcomes. 
+                                In a Money line bet, you simply choose which side you think will win. 
+                                </span>
+                            </div>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("MoneyLineBets")}>
+                                <span>
+                                    Create One!
+                                </span>
+                            </button>
+                        </div>
+                    </CSSTransition>
 
-            </div>
-
-                <div className="cursor-pointer  black-border rounded-md p-2 m-2" onClick={() => goTo("OverUnderBets")} onMouseEnter={() => {setBetType("OverUnderBets")}}>
-                    Over / Under
                 </div>
-                <div className="cursor-pointer black-border rounded-md p-2 m-2" onClick={() => goTo("PropBets")} onMouseEnter={() => {setBetType("PropBets")}}> 
-                    Prop (Not Implemented Yet)
+                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+
+                    <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenOverUnder(!isOpenOverUnder)}>
+                        Over / Under
+                        <div className='flex justify-center items-center'>
+                            {isOpenOverUnder ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
+                        </div>
+                    </button>
+                    <CSSTransition
+                        in={isOpenOverUnder}
+                        timeout={500}
+                        classNames="createBet"
+                        unmountOnExit              
+                    >
+                        <div>
+                            <div className='relative flex justify-center items-center  border-4 rounded-lg bg-secondary-spring-green-light'>
+                                <span  className=' break-words whitespace-normal flex justify-center items-center p-2'>
+                                An over/under bet is a wager where you bet on if the combined 
+                                score of both teams or participants in a game, match, or event will be OVER or UNDER a predetermined number.
+                                </span>
+                            </div>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("OverUnderBets")}>
+                                <span>
+                                    Create One!
+                                </span>
+                            </button>
+                        </div>
+                    </CSSTransition>
+
+                </div>
+                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+
+                    <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenProp(!isOpenProp)} >
+                        Prop (Not Implemented)
+                        <div className='flex justify-center items-center'>
+                            {isOpenProp ? <BsCaretUpFill className='flex justify-center items-center' /> : <BsCaretDownFill className='lex justify-center items-center' />}
+                        </div>
+                    </button>
+                    <CSSTransition
+                        in={isOpenProp}
+                        timeout={500}
+                        classNames="createBet"
+                        unmountOnExit              
+                    >
+                        <div>
+                            <div className='relative flex justify-center items-center  border-4 rounded-lg bg-secondary-spring-green-light'>
+                                <span  className=' break-words whitespace-normal flex justify-center items-center p-2'>
+                                A prop bet is wager that focuses on specific occurrences within a game, 
+                                match, or event. Betters place bets on things like, the coin toss and the first team to score 
+                                or anything you can thing of!
+                                </span>
+                            </div>
+                            <button className='flex justify-center w-full bg-blue-gray border-4 rounded-lg p-2 mb-64 text-white active:border-gray-50' onClick={() => goTo("PropBets")}>
+                                <span>
+                                    Create One!
+                                </span>
+                            </button>
+                        </div>
+                    </CSSTransition>
+
                 </div>
             </div>
         </div>
