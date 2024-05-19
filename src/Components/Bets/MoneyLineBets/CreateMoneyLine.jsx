@@ -134,7 +134,7 @@ const CreateMoneyLine = () => {
             <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
                 <span className='text-3xl'>MoneyLine</span>     
             </div>
-            <div className='m-12'>
+            <div className='m-12 mt-8'>
                 <div className='mb-6'>
                     <div>
                         Bet
@@ -191,7 +191,7 @@ const CreateMoneyLine = () => {
                         <span className='pl-2 text-gray-400'>Favorite</span>
                     </div>
                 </div>
-                <div className='flex justify-center mt-4'>
+                <div className='flex justify-center mt-6'>
                     <button className='betButton  rounded-md cursor-pointer ' type='submit'>{isLocationNull ? "Create Bet" : "Update Bet"}</button>
                 </div>
             </div>
