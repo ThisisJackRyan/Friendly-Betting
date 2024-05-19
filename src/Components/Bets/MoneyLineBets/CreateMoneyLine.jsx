@@ -1,9 +1,5 @@
 import React, { useState, useEffect} from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-
-
-
 import { db } from '../../../Config/firebase-config';
 import { addDoc, doc, getDoc , updateDoc, collection } from 'firebase/firestore';
 
@@ -198,80 +194,6 @@ const CreateMoneyLine = () => {
             
         </form>
     </div>
-
-
-    // <div className='p-12'>
-    //     <form onSubmit={handleSubmit}>
-    //         <div className='blob mx-auto items-start mt-8'>
-    //         <div className="text-4xl betLabel">MoneyLine</div>
-    //             <div className='m-4 w-full'>
-    //                 <span className='text-2xl border-bottom'>
-    //                     Bet
-    //                 </span>
-    //                 <div className='mt-4'>
-    //                     <textarea 
-    //                         className='bg-secondary-spring-green-light rounded-md BetTextArea p-4'
-    //                         onChange={(e) => setBet(e.target.value)}
-    //                         placeholder='Who will win Movie of the year?'
-    //                         value={bet}
-    //                     >
-    //                     </textarea>
-    //                 </div>
-    //             </div>
-    //             <div className='m-4 w-full'>
-    //                 <span>
-    //                     Contestant 1
-    //                 </span>
-    //                 <div className='mt-4'>
-    //                     <textarea 
-    //                         className='bg-secondary-spring-green-light rounded-md subgroupsBetTextArea p-4 text-md'
-    //                         value={contestant1}
-    //                         onChange={(e) => setContestant1(e.target.value)}
-    //                         placeholder='Barbie'
-    //                     >
-    //                     </textarea>
-    //                 </div>
-    //                 <div className='pl-8'>
-    //                     <span className='text-sm pr-2'>(+ or - odds)</span>
-    //                     <input 
-    //                         type="number"  
-    //                         value={odds1}
-    //                         onChange={(e) => setOdds1(Number(e.target.value) || '')}
-    //                         className="bg-secondary-spring-green-light rounded-md p-2"
-    //                         placeholder='+350'
-                            
-    //                     />
-    //                 </div>
-    //             </div>
-    //             <div className='m-4 w-full'>
-    //                 <span>
-    //                     Contestant 2
-    //                 </span>
-    //                 <div className='mt-4'>
-    //                     <textarea 
-    //                         className='bg-secondary-spring-green-light rounded-md subgroupsBetTextArea p-4 text-md'
-    //                         value={contestant2}
-    //                         onChange={(e) => setContestant2(e.target.value)}
-    //                         placeholder='Oppenheimer'
-    //                     >
-    //                     </textarea>
-    //                 </div>
-    //                 <div className='pl-8'>
-    //                     <span className='text-sm pr-2'>(+ or - odds)</span>
-    //                     <input 
-    //                         type="number"  
-    //                         value={odds2}
-    //                         onChange={(e) => setOdds2(Number(e.target.value) || '')}
-    //                         className='bg-secondary-spring-green-light rounded-md p-2'
-    //                         placeholder='-500'
-                            
-    //                     />
-    //                 </div>
-    //             </div>
-    //             <button className='betButton box-shadow rounded-md cursor-pointer' type='submit'>{isLocationNull ? "Create Bet" : "Update Bet"}</button>
-    //         </div>
-    //     </form>
-    // </div>
   );
 };
 
