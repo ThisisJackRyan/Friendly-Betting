@@ -74,6 +74,12 @@ This file is all the base classes for consistent styling
 .border-bottom-white{
     border-bottom: solid white 2px;
 }
+.border-blue-gray{
+    border: solid var(--blue-gray) 2px;
+}
+.border-bottom-dashed-blue-gray{
+    border-bottom: dashed 1px var(--blue-gray);
+  }
 
 /* == shadows == */
 .box-shadow{
@@ -135,14 +141,10 @@ This file is all the base classes for consistent styling
     border: none;
     font-size: 1.1rem;
     font-weight: 100;
-    padding:1rem 2.25rem;
+    padding:.5rem 1.125rem;
     color: white;
 }
 .betButton:hover {
     background-color: #576971;
 }
 
-
-.betLabel{
-    border-bottom: dashed 1px var(--blue-gray);
-  }

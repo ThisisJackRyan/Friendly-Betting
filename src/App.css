@@ -67,14 +67,13 @@ body{
 
 /* == transition fade bringing element down == */
 .fadeDown-enter {
-  /* transition-delay: 75ms; */
   opacity: 0;
-  transform: translateY(-15%); /* Start from above the screen */
+  transform: translateY(-15%);
 }
 
 .fadeDown-enter-active {
   opacity: 1;
-  transform: translateY(0); /* Move to its original position */
+  transform: translateY(0);
   transition: opacity 300ms, transform 300ms;
 }
 
@@ -90,7 +89,7 @@ body{
 
 .fadeDown-exit-active {
   opacity: 0;
-  transform: translateY(-15%); /* Move out of the screen upwards */
+  transform: translateY(-15%); 
   transition: opacity 300ms, transform 300ms;
 }
 
@@ -101,15 +100,15 @@ body{
 }
 
 
-/* == transition for mobile view  button == */
+/* == transition fade bringing element down == */
 .fadeUp-enter {
   opacity: 0;
-  transform: translateY(100%); /* Start from above the screen */
+  transform: translateY(100%);
 }
 
 .fadeUp-enter-active {
   opacity: 1;
-  transform: translateY(0); /* Move to its original position */
+  transform: translateY(0);
   transition: opacity 300ms, transform 300ms;
 }
 
@@ -125,7 +124,7 @@ body{
 
 .fadeUp-exit-active {
   opacity: 0;
-  transform: translateY(100%); /* Move out of the screen upwards */
+  transform: translateY(100%);
   transition: opacity 300ms, transform 300ms;
 }
 

@@ -32,13 +32,12 @@ const Header = () => {
                     </div>
                 </Link>
             </div>
-
-
+            
             <div className="">
                      <CSSTransition
                      in={(location.pathname !== "/Friendly-Betting/Bet")}
                      timeout={300}
-                     classNames="createBetDown"
+                     classNames="fadeUp"
                      unmountOnExit              
                 >
                     <Link to="Friendly-Betting/Bet" className="bg-spring-green-light absolute bottom-0 w-full flex justify-center items-center h-20 rounded-t-md">
