@@ -119,43 +119,6 @@ const CreateOverUnder = () => {
             </div>
         </form>
     </div>
-    // <div className='p-12'>
-    //     <form onSubmit={handelSubmit}>
-    //         <div className="blob mx-auto items-start mt-8">
-    //             <div className="text-4xl betLabel">Over Under</div>
-    //             <div className='m-4 w-full'>
-    //                 <span className='text-2xl border-bottom'>
-    //                     Bet
-    //                 </span>
-    //                 <div className='mt-4'>
-    //                     <textarea 
-    //                         className='bg-secondary-spring-green-light rounded-md BetTextArea p-4'
-    //                         onChange={(e) => setBet(e.target.value)}
-    //                         placeholder='How many roles will grandpa eat at the family dinner?'
-    //                         value={bet}
-    //                     >
-    //                     </textarea>
-    //                 </div>
-    //             </div>
-    //             <div className='m-4 w-full'>
-    //                 <span>
-    //                     Line
-    //                 </span>
-    //                 <div className='mt-4'>
-    //                     <input 
-    //                         className='bg-secondary-spring-green-light rounded-md subgroupsBetTextArea p-4 text-md'
-    //                         type="number"
-    //                         step="0.5"
-    //                         onChange={(e) =>setLine(Number(e.target.value))}
-    //                         placeholder='13.5'
-    //                         value={line}
-    //                     />
-    //                 </div>
-    //             </div>
-    //             <button className='betButton box-shadow rounded-md cursor-pointer' type='submit'>{isLocationNull ? "Create Bet" : "Update Bet"}</button>
-    //         </div>
-    //     </form>
-    // </div>
   );
 };
 
