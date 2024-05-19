@@ -3,3 +3,5 @@ This is a betting web app. However, this is not a sports betting app but rather 
 
 Go ahead, Create a account and Start betting.  
 https://thisisjackryan.com/Friendly-Betting/ 
+
+If you like to see the general direction of this project. Head over to my projects tab, where you will see this project and all the upcoming issues I plan on attacking.
