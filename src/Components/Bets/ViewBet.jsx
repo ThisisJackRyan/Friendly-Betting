@@ -12,6 +12,11 @@ import ViewMoneyLine from './MoneyLineBets/ViewMoneyLine';
 import ViewOverUnder from './OverUnderBets/ViewOverUnder';
 import ViewProp from './PropBets/ViewProp';
 import { getSignedInUserInfo } from '../../Config/base';
+import { RxHamburgerMenu } from "react-icons/rx";
+import { IconContext } from "react-icons";
+import { IoCloseOutline } from "react-icons/io5";
+import { CSSTransition } from 'react-transition-group';
+
 
 
 
@@ -25,6 +30,7 @@ const ViewBet = () => {
     const [collectionName, setCollectionName] = useState('')
 
     const [showDeleteAndEditButton, setShowDeleteAndEditButton] = useState(false)
+    const [showActions, setShowActions] = useState(false)
     
     
     const bet = useParams();
@@ -35,6 +41,9 @@ const ViewBet = () => {
     const handleShowDeleteButton = (createdByID) => {
         createdByID === getSignedInUserInfo().uid ? setShowDeleteAndEditButton(true) : setShowDeleteAndEditButton(false)
     } 
+    const handleShowActions = () => {
+        setShowActions(!showActions)
+    }
 
     const fetchBet = async () => {
         try{
@@ -72,6 +81,43 @@ const ViewBet = () => {
                     <div className="x2 flex justify-center items-center text-3xl">
                         {bets.bet}
                     </div>
+                    <IconContext.Provider value={{ color: "", className: "text-4xl  cursor-pointer" }}>
+                    <div>
+                        <RxHamburgerMenu  onClick={handleShowActions}/>
+                    </div>
+                    </IconContext.Provider>
+                    {showActions ? 
+                        <CSSTransition
+                        in={showActions}
+                        timeout={300}
+                        classNames="fadeUp"
+                        unmountOnExit              
+                    >
+                        <div className=' absolute z-10 bg-spring-green-light inset-0'>
+                            <IconContext.Provider value={{ style: { background: '#ddece0', color:"black" },  className: "text-3xl m-4 cursor-pointer rounded-full black-border" }}>
+                                <div className="flex justify-end">
+                                    <IoCloseOutline onClick={handleShowActions}/>
+                                </div>
+                            </IconContext.Provider>
+                            <div className='flex flex-col gap-8 max-w-fit m-auto'>
+                               <div className="text-4xl mb-4">
+                                <span className='border-bottom'>
+                                    Actions
+                                </span>
+                               </div>
+                               {showDeleteAndEditButton ?
+                                    <>  
+                                        <DeleteButton collection={collectionName} docId={betId}/> 
+                                        <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
+                                    </>
+                                : null}
+                                <ShareButton />
+                            </div>
+                        </div> 
+                        </CSSTransition>
+                    : null}
+                    
+                    
                     {/* <div className=' x1 flex gap-4 justify-end'>
                         {showDeleteAndEditButton ?
                             <>  

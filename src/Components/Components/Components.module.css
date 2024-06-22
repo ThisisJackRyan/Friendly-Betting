@@ -31,6 +31,7 @@
     border: none;
     box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
     padding: 1rem   2.25rem;
+    width:100%;
 }
 .DeleteButton:hover{
     background-color: darkred;
@@ -46,6 +47,7 @@
     border: none;
     box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
     padding: 1rem   2.25rem;
+    width:100%;
 }
 .ShareButton:hover{
     background-color: #7DBD8D;
@@ -61,6 +63,7 @@
     border: none;
     box-shadow: 4px 4px 4px 0px rgba(0,0,0,0.25);
     padding: 1rem   2.75rem;
+    width:100%;
 }
 .EditButton:hover{
     background-color: #576971;

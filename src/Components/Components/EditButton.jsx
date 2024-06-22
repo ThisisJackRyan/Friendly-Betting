@@ -12,7 +12,7 @@ const EditButton = (props) => {
                     "betUrl":props.betUrl,
                     "bets": props.bets,
                 }}
-                className="text-black no-underline"
+                className="text-black w-full no-underline"
             >
                 <button className={css.EditButton} >Edit</button>
             </Link>
