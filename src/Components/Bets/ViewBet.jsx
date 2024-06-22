@@ -82,16 +82,15 @@ const ViewBet = () => {
                         {bets.bet}
                     </div>
                     <IconContext.Provider value={{ color: "", className: "text-4xl  cursor-pointer" }}>
-                    <div>
-                        <RxHamburgerMenu  onClick={handleShowActions}/>
-                    </div>
+                        <div className='pl-2'>
+                            <RxHamburgerMenu  onClick={handleShowActions}/>
+                        </div>
                     </IconContext.Provider>
-                    {showActions ? 
-                        <CSSTransition
-                        in={showActions}
-                        timeout={300}
-                        classNames="fadeUp"
-                        unmountOnExit              
+                    <CSSTransition
+                    in={showActions}
+                    timeout={300}
+                    classNames="fadeUp"
+                    unmountOnExit              
                     >
                         <div className=' absolute z-10 bg-spring-green-light inset-0'>
                             <IconContext.Provider value={{ style: { background: '#ddece0', color:"black" },  className: "text-3xl m-4 cursor-pointer rounded-full black-border" }}>
@@ -100,12 +99,12 @@ const ViewBet = () => {
                                 </div>
                             </IconContext.Provider>
                             <div className='flex flex-col gap-8 max-w-fit m-auto'>
-                               <div className="text-4xl mb-4">
+                                <div className="text-4xl mb-4">
                                 <span className='border-bottom'>
                                     Actions
                                 </span>
-                               </div>
-                               {showDeleteAndEditButton ?
+                                </div>
+                                {showDeleteAndEditButton ?
                                     <>  
                                         <DeleteButton collection={collectionName} docId={betId}/> 
                                         <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
@@ -114,8 +113,7 @@ const ViewBet = () => {
                                 <ShareButton />
                             </div>
                         </div> 
-                        </CSSTransition>
-                    : null}
+                    </CSSTransition>
                     
                     
                     {/* <div className=' x1 flex gap-4 justify-end'>
