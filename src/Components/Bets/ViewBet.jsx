@@ -66,13 +66,13 @@ const ViewBet = () => {
 
   return (
     <div>
-      <div className="flex p-12">
-        <div className="x2">
-                <div className={`flex text-center p-4 ${css.betLabel}`}>
+      <div className="flex m-4 mt-8 justify-center">
+        <div>
+                <div className={`flex text-center ${css.betLabel}`}>
                     <div className="x2 flex justify-center items-center text-3xl">
                         {bets.bet}
                     </div>
-                    <div className=' x1 flex gap-4 justify-end'>
+                    {/* <div className=' x1 flex gap-4 justify-end'>
                         {showDeleteAndEditButton ?
                             <>  
                                 <DeleteButton collection={collectionName} docId={betId}/> 
@@ -81,13 +81,15 @@ const ViewBet = () => {
                         : null}
                         <ShareButton />
                         
-                    </div>
+                    </div> */}
                 </div>
-                {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
-                : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
-                : collectionName === 'PropBets' ? <ViewProp bets={bets}/>
-                : <div>hmm.... Something went wrong... Wait we are actually loading</div>
-            }
+                <div className='flex justify-center'>
+                    {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
+                    : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
+                    : collectionName === 'PropBets' ? <ViewProp bets={bets}/>
+                    : <div>hmm.... Something went wrong... Wait we are actually loading</div>
+                    }
+                </div>
         </div>
 
       </div>
