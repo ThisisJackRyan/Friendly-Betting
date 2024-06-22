@@ -6,6 +6,7 @@ import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
 import { CSSTransition } from 'react-transition-group';
 import { IconContext } from "react-icons";
 import { IoCloseOutline } from "react-icons/io5";
+import Logo from '../Components/Static/Logo';
 
 const BetNav = (props) => {
 
@@ -22,16 +23,7 @@ const BetNav = (props) => {
   return (
     
     <div className='fixed h-full top-0 bottom-0 left-0 right-0 bg-spring-green-light'>
-        <div className="flex justify-center ">
-                <Link className=" ease-in no-underline text-black" to="Friendly-Betting/">
-                    <div className="p-4 pt-8 text-shadow flex justify-start items-center text-5xl">
-                        <span className="font-sans font-thin">FR</span>
-                        <span className="font-serif font-bold text-2xl">IE</span>
-                        <span className="font-sans font-thin">NDLY &nbsp;</span>
-                        <span>Bets</span>
-                    </div>
-                </Link>
-            </div>
+        <Logo />
         <div className='flex justify-center items-start mt-24 h-full'>
             {/* Make this a drop down that displays description... look at meta's website */}
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
