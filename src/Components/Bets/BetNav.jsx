@@ -4,6 +4,8 @@ import css from './Bets.module.css';
 import { Link } from 'react-router-dom';
 import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
 import { CSSTransition } from 'react-transition-group';
+import { IconContext } from "react-icons";
+import { IoCloseOutline } from "react-icons/io5";
 
 const BetNav = (props) => {
 
@@ -30,10 +32,7 @@ const BetNav = (props) => {
                     </div>
                 </Link>
             </div>
-        <div className='absolute top-0 right-0 mr-8 mt-8'>
-             <div className="x text-2xl"><span onClick={props.swap} >x</span></div>
-        </div>
-        <div className='flex justify-center items-start mt-40 h-full'>
+        <div className='flex justify-center items-start mt-24 h-full'>
             {/* Make this a drop down that displays description... look at meta's website */}
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
                 <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
@@ -125,7 +124,9 @@ const BetNav = (props) => {
                             </button>
                         </div>
                     </CSSTransition>
-
+                </div>
+                <div className="flex w-full justify-center items-center bg-blue-gray text-white rounded-md box-shadow py-2" onClick={props.swap}>
+                    Close
                 </div>
             </div>
         </div>
