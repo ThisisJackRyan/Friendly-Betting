@@ -51,17 +51,6 @@ body{
 
 }
 
-.x{
-  display: flex;
-  justify-content: right;
-  margin-bottom: 0.5rem;
-}
-.x span:hover{
-  cursor: pointer;
-  color: white;
-  
-}
-
 
 
 
