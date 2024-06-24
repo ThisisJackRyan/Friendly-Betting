@@ -71,9 +71,6 @@ This file is all the base classes for consistent styling
 .border-bottom {
     border-bottom: solid black 2px;
 }
-.border-bottom-white{
-    border-bottom: solid white 2px;
-}
 .border-blue-gray{
     border: solid var(--blue-gray) 2px;
 }

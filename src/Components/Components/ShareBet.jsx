@@ -1,7 +1,7 @@
 import React from 'react';
-import css from './Players.module.css';
+import css from './Components.module.css';
 import QRCode from 'react-qr-code';
-import CloseX from '../../Components/Static/CloseX';
+import CloseX from './Static/CloseX';
 
 
 
@@ -12,9 +12,9 @@ const ShareBet = (props) => {
     return (
         
         <div>
-            <div className='fixed-center text-2xl p-8 px-16 bg-blue-gray rounded-md box-shadow-no-hover'>
+            <div className='fixed-center text-2xl p-8 px-16 bg-secondary-spring-green-light black-border rounded-md box-shadow-no-hover'>
                 <CloseX action={props.display} divStyle="flex justify-end mb-2" IconStyle="text-3xl cursor-pointer "/>
-                <div className='justify-center text-center text-4xl mb-6 text-white '><span className='border-bottom-white'>Share</span></div>
+                <div className='justify-center text-center text-4xl mb-6'><span className='border-bottom'>Share</span></div>
                 <div className={css.border}>
                     <QRCode
                         title="qr-code"

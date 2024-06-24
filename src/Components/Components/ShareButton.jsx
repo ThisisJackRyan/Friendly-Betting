@@ -1,5 +1,5 @@
 import React from 'react';
-import ShareBet from '../Bets/Players/ShareBet';
+import ShareBet from './ShareBet';
 import { useState } from 'react';
 import css from './Components.module.css';
 
