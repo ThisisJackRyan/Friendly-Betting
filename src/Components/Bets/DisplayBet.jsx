@@ -1,5 +1,4 @@
 import React, {useEffect, useState} from 'react';
-import css from './Bets.module.css';
 import {Link} from 'react-router-dom';
 import {getCollectionName} from '../../Config/base';
 import { doc, getDoc } from 'firebase/firestore';

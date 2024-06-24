@@ -1,5 +1,4 @@
 import React from 'react';
-import Buttons from '../../Components/Buttons';
 import Modal from './components/Modal';
 import { CSSTransition } from 'react-transition-group';
 import { useState } from 'react';

@@ -1,7 +1,6 @@
 import React, {useState} from 'react';
 import {useNavigate } from 'react-router-dom';
 import css from './Bets.module.css';
-import { Link } from 'react-router-dom';
 import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
 import { CSSTransition } from 'react-transition-group';
 import Logo from '../Components/Static/Logo';

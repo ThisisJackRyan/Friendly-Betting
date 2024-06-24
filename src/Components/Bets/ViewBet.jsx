@@ -12,8 +12,6 @@ import ViewMoneyLine from './MoneyLineBets/ViewMoneyLine';
 import ViewOverUnder from './OverUnderBets/ViewOverUnder';
 import ViewProp from './PropBets/ViewProp';
 import { getSignedInUserInfo } from '../../Config/base';
-import { RxHamburgerMenu } from "react-icons/rx";
-import { IconContext } from "react-icons";
 import { CSSTransition } from 'react-transition-group';
 import CloseX from '../Components/Static/CloseX';
 import Hamburger from '../Components/Static/Hamburger';
