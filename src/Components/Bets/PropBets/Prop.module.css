@@ -55,11 +55,6 @@
 .label {
     font-size: 1em;
 }
-.x:hover {
-    cursor: pointer;
-    color: black;
-}
-
 .optionInput{
     height: 2rem;
     background-color: var(--alabaster);
