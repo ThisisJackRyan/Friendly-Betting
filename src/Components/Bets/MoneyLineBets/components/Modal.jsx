@@ -1,16 +1,11 @@
 import React from 'react';
-import { IconContext } from "react-icons";
-import { IoCloseOutline } from "react-icons/io5";
+import CloseX from '../../../Components/Static/CloseX';
 
 const Modal = (props) => {
 
     return (
         <div className='absolute bottom-0 inset-x-0 w-full'>
-            <IconContext.Provider value={{ style: { background: '#ddece0', color:"black" },  className: "text-3xl mr-1 mb-1 cursor-pointer rounded-full black-border" }}>
-                <div className="flex justify-end">
-                    <IoCloseOutline onClick={props.handleModal}/>
-                </div>
-            </IconContext.Provider>
+            <CloseX action={props.handleModal} divStyle="flex justify-end" IconStyle="text-3xl mr-1 mb-1 cursor-pointer rounded-full black-border" backgroundColor='#ddece0'/>
             <div className='px-4 pb-28 pt-12 bg-spring-green-light'>
                 <div className='text-center'>
                     <span className='border-bottom-dashed-blue-gray text-3xl font-medium rou'>Place Your Bet</span>

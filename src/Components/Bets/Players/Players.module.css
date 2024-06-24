@@ -35,18 +35,6 @@
     box-shadow: 5px 5px 5px 0px rgba(0,0,0,0.75);
 }
   
-  
-.x {
-    margin-left: 0.5rem;
-    margin-right: 0.5rem;
-    font-size: smaller;
-}
-  
-.x:hover{
-    cursor: pointer;
-    color: white;
-}
-
 .shareBet{
     font-size: 1.5em;
     position: absolute;

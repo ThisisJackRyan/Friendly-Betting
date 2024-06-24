@@ -14,8 +14,9 @@ import ViewProp from './PropBets/ViewProp';
 import { getSignedInUserInfo } from '../../Config/base';
 import { RxHamburgerMenu } from "react-icons/rx";
 import { IconContext } from "react-icons";
-import { IoCloseOutline } from "react-icons/io5";
 import { CSSTransition } from 'react-transition-group';
+import CloseX from '../Components/Static/CloseX';
+import Hamburger from '../Components/Static/Hamburger';
 
 
 
@@ -81,11 +82,7 @@ const ViewBet = () => {
                     <div className="x2 flex justify-center items-center text-3xl">
                         {bets.bet}
                     </div>
-                    <IconContext.Provider value={{ color: "", className: "text-4xl  cursor-pointer" }}>
-                        <div className='pl-2'>
-                            <RxHamburgerMenu  onClick={handleShowActions}/>
-                        </div>
-                    </IconContext.Provider>
+                    <Hamburger action={handleShowActions} divStyle="pl-2" IconStyle="text-4xl cursor-pointer"/>
                     <CSSTransition
                     in={showActions}
                     timeout={300}
@@ -93,11 +90,7 @@ const ViewBet = () => {
                     unmountOnExit              
                     >
                         <div className=' absolute z-10 bg-spring-green-light inset-0'>
-                            <IconContext.Provider value={{ style: { background: '#ddece0', color:"black" },  className: "text-3xl m-4 cursor-pointer rounded-full black-border" }}>
-                                <div className="flex justify-end">
-                                    <IoCloseOutline onClick={handleShowActions}/>
-                                </div>
-                            </IconContext.Provider>
+                        <CloseX action={handleShowActions} divStyle="flex justify-end" IconStyle="text-3xl m-4 cursor-pointer"/>
                             <div className='flex flex-col gap-8 max-w-fit m-auto'>
                                 <div className="text-4xl mb-4">
                                 <span className='border-bottom'>

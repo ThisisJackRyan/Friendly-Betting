@@ -4,8 +4,6 @@ import css from './Bets.module.css';
 import { Link } from 'react-router-dom';
 import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
 import { CSSTransition } from 'react-transition-group';
-import { IconContext } from "react-icons";
-import { IoCloseOutline } from "react-icons/io5";
 import Logo from '../Components/Static/Logo';
 
 const BetNav = (props) => {
