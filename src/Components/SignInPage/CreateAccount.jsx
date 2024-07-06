@@ -55,42 +55,41 @@ const CreateAccount = () => {
     return (
 
         <div>
-            <form onSubmit={createAccount}>
-            <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
-                <span className='text-3xl'>Create Account</span>     
-            </div>
-            <div className="m-12 mt-32 flex flex-col gap-4">
-                <input type="text"
-                    placeholder="Email" 
-                    id="username"
-                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
-                    onChange={(e) => setEmail(e.target.value)} 
-                />
-                <input 
-                    type="password" 
-                    placeholder="password" 
-                    name=""
-                    id="password1" 
-                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
-                    onChange={(e) => setPassword1(e.target.value)}
-                />
-                <input 
-                    type="password"
-                    placeholder="confirm password" 
-                    name="" 
-                    id="password2" 
-                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
-                    onChange={(e) => setPassword2(e.target.value)}
-                />
-                <div className='flex justify-center mt-6'>
-                    <button className='betButton rounded-md cursor-pointer ' type='submit'>Create Account</button>
+            <div>
+                <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
+                    <span className='text-3xl'>Create Account</span>     
                 </div>
-                <div className="flex justify-center">
-                    <span onClick={toSignIn} className="blue underline text-xs" >Already have account? Sign in!</span>
+                <div className="m-12 mt-32 flex flex-col gap-4">
+                    <input type="text"
+                        placeholder="Email" 
+                        id="username"
+                        className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                        onChange={(e) => setEmail(e.target.value)} 
+                    />
+                    <input 
+                        type="password" 
+                        placeholder="password" 
+                        name=""
+                        id="password1" 
+                        className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                        onChange={(e) => setPassword1(e.target.value)}
+                    />
+                    <input 
+                        type="password"
+                        placeholder="confirm password" 
+                        name="" 
+                        id="password2" 
+                        className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                        onChange={(e) => setPassword2(e.target.value)}
+                    />
+                    <div className='flex justify-center mt-6'>
+                        <button className='betButton rounded-md cursor-pointer ' onClick={createAccount}>Create Account</button>
+                    </div>
+                    <div className="flex justify-center">
+                        <span onClick={toSignIn} className="blue underline text-xs" >Already have account? Sign in!</span>
+                    </div>
                 </div>
             </div>
-
-            </form>
         </div>
         
     )

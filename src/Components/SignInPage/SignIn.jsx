@@ -16,7 +16,7 @@ const SignIn = () => {
     const [signInTransition, setSignInTransition] = useState(false);
 
 
-    console.log(auth?.currentUser?.email)
+    // console.log(auth?.currentUser?.email)
 
     const signInUser = async () => {
         signInWithEmailAndPassword(auth, email, password)
@@ -51,46 +51,46 @@ const SignIn = () => {
 
     
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setSignInTransition(true);
-    }, 2);
+//   useEffect(() => {
+//     const timeout = setTimeout(() => {
+//       setSignInTransition(true);
+//     }, 2);
 
-    return () => clearTimeout(timeout);
-  }, []);
+//     return () => clearTimeout(timeout);
+//   }, []);
     
 
     return (
 
         <div>
-            <form onSubmit={signInUser}>
-            <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
-                <span className='text-3xl'>Sign in</span>     
-            </div>
-            <div className="m-12 mt-32 flex flex-col gap-4">
-                <input 
-                    type="text" 
-                    placeholder="Email or Number"  
-                    id="username"
-                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
-                    onChange={(e) => setEmail(e.target.value)}
-                />
-                <input 
-                    type="password"
-                    placeholder="password"
-                    id="password"
-                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
-                    onChange={(e) => setPassword(e.target.value)}
-                     />
+            <div>
+                <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
+                    <span className='text-3xl'>Sign in</span>     
+                </div>
+                <div className="m-12 mt-32 flex flex-col gap-4">
+                    <input 
+                        type="text" 
+                        placeholder="Email or Number"  
+                        id="username"
+                        className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                        onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <input 
+                        type="password"
+                        placeholder="password"
+                        id="password"
+                        className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                        onChange={(e) => setPassword(e.target.value)}
+                        />
 
-                <div className='flex justify-center mt-6'>
-                    <button className='betButton  rounded-md cursor-pointer ' type='submit'>Sign in</button>
-                </div>
-                <div className="flex justify-center">
-                    <span onClick={toCreateAccount} className="blue underline text-xs" >Don't have account? Create One!</span>
+                    <div className='flex justify-center mt-6'>
+                        <button className='betButton  rounded-md cursor-pointer' onClick={signInUser}>Sign in</button>
+                    </div>
+                    <div className="flex justify-center">
+                        <span onClick={toCreateAccount} className="blue underline text-xs" >Don't have account? Create One!</span>
+                    </div>
                 </div>
             </div>
-            </form>
             <div className="flex justify-center mb-4">
                 <span className="">or</span>
             </div>
