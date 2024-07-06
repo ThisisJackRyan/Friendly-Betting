@@ -105,18 +105,6 @@ const ViewBet = () => {
                             </div>
                         </div> 
                     </CSSTransition>
-                    
-                    
-                    {/* <div className=' x1 flex gap-4 justify-end'>
-                        {showDeleteAndEditButton ?
-                            <>  
-                                <DeleteButton collection={collectionName} docId={betId}/> 
-                                <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
-                            </>
-                        : null}
-                        <ShareButton />
-                        
-                    </div> */}
                 </div>
                 <div className='flex justify-center'>
                     {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
