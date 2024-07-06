@@ -18,7 +18,7 @@ const SignIn = () => {
 
     console.log(auth?.currentUser?.email)
 
-    const singInUser = async () => {
+    const signInUser = async () => {
         signInWithEmailAndPassword(auth, email, password)
         .then((userCredential) => {
             // Signed in 
@@ -61,27 +61,43 @@ const SignIn = () => {
     
 
     return (
-       
-        <div className={`${css.signIn} ${signInTransition ? "" : css.signInTransition}`}>
-            <div className={css.signInLabel}>Sign in</div>
-            <input 
-                type="text" 
-                placeholder="Email or Number"  
-                onChange={(e) => setEmail(e.target.value)}
-            />
-            <input 
-                type="password" 
-                placeholder="password" 
-                id="" 
-                onChange={(e) => setPassword(e.target.value)}
-            />
-            <button onClick={singInUser}>Sign In</button>
-            <div>
-                <div onClick={toCreateAccount} className={css.swapSignIn} >Don't have account? Create One!</div>
+
+        <div>
+            <form onSubmit={signInUser}>
+            <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
+                <span className='text-3xl'>Sign in</span>     
             </div>
-            <br />
-            <br />
-            <button onClick={logOut}>Log Out</button>
+            <div className="m-12 mt-32 flex flex-col gap-4">
+                <input 
+                    type="text" 
+                    placeholder="Email or Number"  
+                    id="username"
+                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                    onChange={(e) => setEmail(e.target.value)}
+                />
+                <input 
+                    type="password"
+                    placeholder="password"
+                    id="password"
+                    className="border-blue-gray rounded-md w-full outline-none p-4 focus:border-black"
+                    onChange={(e) => setPassword(e.target.value)}
+                     />
+
+                <div className='flex justify-center mt-6'>
+                    <button className='betButton  rounded-md cursor-pointer ' type='submit'>Sign in</button>
+                </div>
+                <div className="flex justify-center">
+                    <span onClick={toCreateAccount} className="blue underline text-xs" >Don't have account? Create One!</span>
+                </div>
+            </div>
+            </form>
+            <div className="flex justify-center mb-4">
+                <span className="">or</span>
+            </div>
+
+            <div className='flex justify-center mt-6'>
+                <button className='betButton  rounded-md cursor-pointer ' onClick={logOut}>Log Out</button>
+            </div>
         </div>
         
 

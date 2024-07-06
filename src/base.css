@@ -39,7 +39,14 @@ This file is all the base classes for consistent styling
 .red{
     color: red;
 }
+.blue{
+    color: blue;
 
+}
+.blue:hover{
+    color: darkblue;
+
+}
 
 /* == absolute / fixed centering  == */
 .absolute-center-x{
@@ -73,6 +80,10 @@ This file is all the base classes for consistent styling
 }
 .border-blue-gray{
     border: solid var(--blue-gray) 2px;
+}
+.border-bottom-blue{
+    border-bottom: solid blue 2px;
+
 }
 .border-bottom-dashed-blue-gray{
     border-bottom: dashed 1px var(--blue-gray);
