@@ -126,7 +126,6 @@ const ViewBet = () => {
                     }
                 </div>
         </div>
-
       </div>
     </div>
   );

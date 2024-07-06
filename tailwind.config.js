@@ -23,7 +23,7 @@ module.exports = {
     }
   },
   plugins: [
-    require('postcss-nested'), // add this line
+    require('postcss-nested'),
     require('autoprefixer'),
     require('tailwindcss'),
     

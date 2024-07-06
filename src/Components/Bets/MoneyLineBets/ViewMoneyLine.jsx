@@ -39,13 +39,13 @@ const ViewMoneyLine = ({bets}) => {
             </div>
 
             <CSSTransition
-                        in={displayModal}
-                        timeout={300}
-                        classNames="fadeUp"
-                        unmountOnExit              
-                    >
-                        <Modal handleModal={handleModal} contestant1={bets.contestant1} contestant2={bets.contestant2}/>
-                    </CSSTransition>
+                in={displayModal}
+                timeout={300}
+                classNames="fadeUp"
+                unmountOnExit              
+            >
+                <Modal handleModal={handleModal} contestant1={bets.contestant1} contestant2={bets.contestant2}/>
+            </CSSTransition>
         </div> 
     );
 };
