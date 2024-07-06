@@ -18,7 +18,7 @@ const Header = () => {
                      classNames="fadeUp"
                      unmountOnExit              
                 >
-                    <Link to="Friendly-Betting/Bet" className="bg-spring-green-light absolute bottom-0 w-full flex justify-center items-center h-20 rounded-t-md">
+                    <Link to="Friendly-Betting/Bet" className="bg-spring-green-light fixed bottom-0 w-full flex justify-center items-center h-20 rounded-t-md">
                         <span>
                             View Bets
                         </span> 
