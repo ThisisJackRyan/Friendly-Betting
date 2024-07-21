@@ -1,5 +1,6 @@
 import React from 'react';
 import Modal from './components/Modal';
+import Hamburger from '../../Components/Static/Hamburger';
 import { CSSTransition } from 'react-transition-group';
 import { useState } from 'react';
 

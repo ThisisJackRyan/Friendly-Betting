@@ -75,44 +75,44 @@ const ViewBet = () => {
   return (
     <div>
       <div className="flex m-4 mt-8 justify-center">
-        <div>
-                <div className={`flex text-center ${css.betLabel}`}>
-                    <div className="x2 flex justify-center items-center text-3xl">
-                        {bets.bet}
-                    </div>
-                    <Hamburger action={handleShowActions} divStyle="pl-2" IconStyle="text-4xl cursor-pointer"/>
-                    <CSSTransition
-                    in={showActions}
-                    timeout={300}
-                    classNames="fadeUp"
-                    unmountOnExit              
-                    >
-                        <div className=' absolute z-10 bg-spring-green-light inset-0'>
-                        <CloseX action={handleShowActions} divStyle="flex justify-end" IconStyle="text-3xl m-4 cursor-pointer"/>
-                            <div className='flex flex-col gap-8 max-w-fit m-auto'>
-                                <div className="text-4xl mb-4">
-                                <span className='border-bottom'>
-                                    Actions
-                                </span>
-                                </div>
-                                {showDeleteAndEditButton ?
-                                    <>  
-                                        <DeleteButton collection={collectionName} docId={betId}/> 
-                                        <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
-                                    </>
-                                : null}
-                                <ShareButton />
+        <div className='w-full'>
+            <div className="flex justify-between border-bottom-dashed-blue-gray">
+                <div className="flex items-center text-left px-4 text-2xl md:text-3xl">
+                    {bets.bet}
+                </div>
+                <Hamburger action={handleShowActions} divStyle="pl-2 " IconStyle="text-4xl cursor-pointer"/>
+                <CSSTransition
+                in={showActions}
+                timeout={300}
+                classNames="fadeUp"
+                unmountOnExit              
+                >
+                    <div className=' absolute z-10 bg-spring-green-light inset-0 md:inset-y-48 md:inset-x-96 md: rounded-md'>
+                    <CloseX action={handleShowActions} divStyle="flex justify-end" IconStyle="text-3xl m-4 cursor-pointer"/>
+                        <div className='flex flex-col gap-8 max-w-fit m-auto'>
+                            <div className="text-4xl mb-4">
+                            <span className='border-bottom'>
+                                Actions
+                            </span>
                             </div>
-                        </div> 
-                    </CSSTransition>
-                </div>
-                <div className='flex justify-center'>
-                    {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
-                    : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
-                    : collectionName === 'PropBets' ? <ViewProp bets={bets}/>
-                    : <div>hmm.... Something went wrong... Wait we are actually loading</div>
-                    }
-                </div>
+                            {showDeleteAndEditButton ?
+                                <>  
+                                    <DeleteButton collection={collectionName} docId={betId}/> 
+                                    <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
+                                </>
+                            : null}
+                            <ShareButton />
+                        </div>
+                    </div> 
+                </CSSTransition>
+            </div>
+            <div className='flex justify-center'>
+                {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />
+                : collectionName === 'OverUnderBets' ? <ViewOverUnder bets={bets} collectionName={collectionName} betId={betId} fetchBet={fetchBet}/>
+                : collectionName === 'PropBets' ? <ViewProp bets={bets}/>
+                : <div>hmm.... Something went wrong... Wait we are actually loading</div>
+                }
+            </div>
         </div>
       </div>
     </div>

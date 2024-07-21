@@ -23,28 +23,30 @@ function App() {
     return (
       <Router>
         <Header />
-        <Routes>
-          <Route path="Friendly-Betting/" element={<Welcome />} />
-          
-          <Route path="Friendly-Betting/SignIn" element={ <SignIn />} />
-          <Route path="Friendly-Betting/CreateAccount" element={<CreateAccount />} />
-          
-          <Route path="Friendly-Betting/Bet" element={<DisplayAllBets />} />
+        <div className="md:max-w-screen-md md:m-auto">
+          <Routes>
+            <Route path="Friendly-Betting/" element={<Welcome />} />
+            
+            <Route path="Friendly-Betting/SignIn" element={ <SignIn />} />
+            <Route path="Friendly-Betting/CreateAccount" element={<CreateAccount />} />
+            
+            <Route path="Friendly-Betting/Bet" element={<DisplayAllBets />} />
 
-          <Route path="Friendly-Betting/MoneyLineBets" element={<CreateMoneyLine />} />
-          <Route path="Friendly-Betting/OverUnderBets" element={<CreateOverUnder />} />
-          <Route path="Friendly-Betting/PropBets" element={<CreateProp />} />
+            <Route path="Friendly-Betting/MoneyLineBets" element={<CreateMoneyLine />} />
+            <Route path="Friendly-Betting/OverUnderBets" element={<CreateOverUnder />} />
+            <Route path="Friendly-Betting/PropBets" element={<CreateProp />} />
 
-          <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id" element={<ViewBet />} />
-          <Route path="/Friendly-Betting/Bet/OverUnderBets/:id" element={<ViewBet />} />
-          <Route path="/Friendly-Betting/Bet/PropBets/:id" element={<ViewBet />} />
+            <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id" element={<ViewBet />} />
+            <Route path="/Friendly-Betting/Bet/OverUnderBets/:id" element={<ViewBet />} />
+            <Route path="/Friendly-Betting/Bet/PropBets/:id" element={<ViewBet />} />
 
-          <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id/edit" element={<CreateMoneyLine />} />
-          <Route path="/Friendly-Betting/Bet/OverUnderBets/:id/edit" element={<CreateOverUnder />} />
-          <Route path="/Friendly-Betting/Bet/PropBets/:id/edit" element={<CreateProp />} />
-          
-          <Route path="/*" element={<NotFound />} />
-        </Routes>
+            <Route path="/Friendly-Betting/Bet/MoneyLineBets/:id/edit" element={<CreateMoneyLine />} />
+            <Route path="/Friendly-Betting/Bet/OverUnderBets/:id/edit" element={<CreateOverUnder />} />
+            <Route path="/Friendly-Betting/Bet/PropBets/:id/edit" element={<CreateProp />} />
+            
+            <Route path="/*" element={<NotFound />} />
+          </Routes>
+        </div>
       </Router>
     );
 }

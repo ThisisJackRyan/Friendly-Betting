@@ -19,12 +19,12 @@ const BetNav = (props) => {
     }
   return (
     
-    <div className='fixed h-full top-0 bottom-0 left-0 right-0 bg-spring-green-light'>
+    <div className='fixed h-full inset-0 bg-spring-green-light'>
         <Logo />
         <div className='flex justify-center items-start mt-24 h-full'>
             {/* Make this a drop down that displays description... look at meta's website */}
             <div className='flex justify-around my-8 ml-8 flex-col gap-8 text-nowrap'>
-                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64'>
+                <div className='cursor-pointer flex flex-col justify-center items-center w-full max-w-64 md:max-w-screen-sm md:w-screen'>
 
                     <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light    active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenMoneyLine(!isOpenMoneyLine)} >
                         Money Line
@@ -54,7 +54,7 @@ const BetNav = (props) => {
                     </CSSTransition>
 
                 </div>
-                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 transition duration-75 ease-in-out ${isOpenMoneyLine ? css.moveSouth : "delay-300"}`}>
+                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 md:max-w-screen-sm md:w-screen transition duration-75 ease-in-out ${isOpenMoneyLine ? css.moveSouth : "delay-300"}`}>
 
                     <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenOverUnder(!isOpenOverUnder)}>
                         Over / Under
@@ -84,7 +84,7 @@ const BetNav = (props) => {
                     </CSSTransition>
 
                 </div>
-                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 transition duration-75 ease-in-out ${isOpenMoneyLine || isOpenOverUnder ? css.moveSouth : "delay-300"}`}>
+                <div className={`cursor-pointer flex flex-col justify-center items-center w-full max-w-64 md:max-w-screen-sm md:w-screen transition duration-75 ease-in-out ${isOpenMoneyLine || isOpenOverUnder ? css.moveSouth : "delay-300"}`}>
 
                     <button className=" w-full flex justify-between items-center border-4 rounded-lg p-2 m-2 bg-secondary-spring-green-light active:border-gray-50 duration-300 active:text-gray-50" onClick={() => setIsOpenProp(!isOpenProp)} >
                         Prop (Not Implemented)
