@@ -153,6 +153,38 @@ body{
 
 
 
+.fadeInImmediately-enter {
+  opacity: 0;
+}
+
+.fadeInImmediately-enter-active {
+  opacity: 1;
+  transition: opacity 300ms;
+}
+
+.fadeInImmediately-enter-done {
+  opacity: 1;
+}
+
+.fadeInImmediately-exit {
+  opacity: 1;
+}
+
+.fadeInImmediately-exit {
+  opacity: 1;
+}
+
+.fadeInImmediately-exit-active {
+  opacity: 0;
+  transition: opacity 0ms;
+}
+
+.fadeInImmediately-exit-done {
+  opacity: 0;
+}
+
+
+
 
 
 /* == transition for view bet button == */

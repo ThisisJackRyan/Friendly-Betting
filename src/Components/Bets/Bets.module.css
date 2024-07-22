@@ -24,7 +24,3 @@
   overflow-y: auto;
   height: 100%;
 }
-
-.moveSouth{
-  transform: translateY(50vh);
-}
