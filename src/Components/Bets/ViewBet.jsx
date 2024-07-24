@@ -87,7 +87,7 @@ const ViewBet = () => {
                 classNames="fadeUp"
                 unmountOnExit              
                 >
-                    <div className=' absolute z-10 bg-spring-green-light inset-0 md:inset-y-48 md:inset-x-96 md: rounded-md'>
+                    <div className=' absolute z-10 bg-spring-green-light inset-0 md:inset-y-36 md:inset-x-36 md:rounded-md xl:inset-x-96'>
                     <CloseX action={handleShowActions} divStyle="flex justify-end" IconStyle="text-3xl m-4 cursor-pointer"/>
                         <div className='flex flex-col gap-8 max-w-fit m-auto'>
                             <div className="text-4xl mb-4">
