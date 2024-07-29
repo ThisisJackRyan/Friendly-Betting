@@ -7,13 +7,13 @@ import CloseX from './Static/CloseX';
 
 
 
-const ShareBet = (props) => {
+const ShareBet = ({display}) => {
 
     return (
         
         <div>
             <div className='fixed-center text-2xl p-8 px-16 bg-secondary-spring-green-light black-border rounded-md box-shadow-no-hover'>
-                <CloseX action={props.display} divStyle="flex justify-end mb-2" IconStyle="text-3xl cursor-pointer "/>
+                <CloseX action={display} divStyle="flex justify-end mb-2" IconStyle="text-3xl cursor-pointer "/>
                 <div className='justify-center text-center text-4xl mb-6'><span className='border-bottom'>Share</span></div>
                 <div className={css.border}>
                     <QRCode

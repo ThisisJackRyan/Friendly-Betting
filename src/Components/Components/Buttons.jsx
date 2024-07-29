@@ -3,15 +3,15 @@ import css from './Components.module.css';
 
 
 
-const Buttons = (props) => {
+const Buttons = ({click, text, a, size}) => {
 
-    const buttonColor = props.a === "betButton" ? css.betButton : css.redSpring
-    // const buttonType = props.size === "big" ? css.big : css.small
+    const buttonColor = a === "betButton" ? css.betButton : css.redSpring
+    // const buttonType = size === "big" ? css.big : css.small
 
 
     return (
-        <div className={`box-shadow rounded-md cursor-pointer ${buttonColor}`} onClick={props.click}>
-            <div>{props.text}</div>
+        <div className={`box-shadow rounded-md cursor-pointer ${buttonColor}`} onClick={click}>
+            <div>{text}</div>
         </div>
     );
 }

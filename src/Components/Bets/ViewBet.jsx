@@ -98,7 +98,7 @@ const ViewBet = () => {
                             {showDeleteAndEditButton ?
                                 <>  
                                     <DeleteButton collection={collectionName} docId={betId}/> 
-                                    <EditButton betUrl={bet} bets={bets} betId={betId} collectionName={collectionName} />
+                                    <EditButton betUrl={bet} bets={bets} collectionName={collectionName} />
                                 </>
                             : null}
                             <ShareButton />

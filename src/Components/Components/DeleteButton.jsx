@@ -5,7 +5,7 @@ import {db} from '../../Config/firebase-config';
 import { doc, deleteDoc } from "firebase/firestore";
 
 
-const DeleteButton = (props) => {
+const DeleteButton = ({collection, docId}) => {
 
     const navigate = useNavigate();
 
@@ -15,7 +15,7 @@ const DeleteButton = (props) => {
     const handleDelete = () => {
         const deleteDocument  = async () => {
             try {
-                await deleteDoc(doc(db, props.collection, props.docId));
+                await deleteDoc(doc(db, collection, docId));
                 await deleteDoc(doc(db, "bets" , bet.id));
                 navigate("/Friendly-Betting/Bet"); 
             }

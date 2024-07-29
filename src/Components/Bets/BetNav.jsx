@@ -8,7 +8,7 @@ import { BsCaretDownFill, BsCaretUpFill} from "react-icons/bs";
 import { CSSTransition } from 'react-transition-group';
 import Logo from '../Components/Static/Logo';
 
-const BetNav = (props) => {
+const BetNav = ({swap}) => {
 
     const [isOpenMoneyLine, setIsOpenMoneyLine] = useState(false);
     const [isOpenOverUnder, setIsOpenOverUnder] = useState(false);
@@ -159,7 +159,7 @@ const BetNav = (props) => {
                     </div>
                 </CSSTransition>
             </div>
-            <div className="flex w-full max-w-64 justify-center items-center bg-blue-gray text-white rounded-md box-shadow py-2 md:max-w-screen-sm md:w-screen" onClick={props.swap}>
+            <div className="flex w-full max-w-64 justify-center items-center bg-blue-gray text-white rounded-md box-shadow py-2 md:max-w-screen-sm md:w-screen" onClick={swap}>
                     Close
             </div>
         </div>
