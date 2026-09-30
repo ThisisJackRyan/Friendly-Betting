@@ -8,6 +8,8 @@ Bets are stored in the existing Firebase project. Names and a fallback id stay i
 
 ## Run locally
 
+Requires Node.js 18.18 or newer (Node 20+ is fine). Next.js 15 will not start on older Node.
+
 ```bash
 npm install
 npm run dev
