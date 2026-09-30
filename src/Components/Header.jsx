@@ -1,35 +1,35 @@
-import { Link, useLocation} from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import Logo from "./Components/Static/Logo";
 import { CSSTransition } from "react-transition-group";
 
-
-
 const Header = () => {
     const location = useLocation();
+    const path = location.pathname.replace(/\/+$/, '') || '/';
+    const isCreate =
+        path === '/' ||
+        path === '/Friendly-Betting' ||
+        path.endsWith('/MoneyLineBets') ||
+        path.endsWith('/edit');
+    const showBetList = path !== '/Friendly-Betting/Bet' && !isCreate;
 
-
-    return(
-        <div className="">
+    return (
+        <div>
             <Logo />
-            <div className="">
-                     <CSSTransition
-                     in={(location.pathname !== "/Friendly-Betting/Bet")}
-                     timeout={300}
-                     classNames="fadeUp"
-                     unmountOnExit              
+            <CSSTransition
+                in={showBetList}
+                timeout={300}
+                classNames="fadeUp"
+                unmountOnExit
+            >
+                <Link
+                    to="/Friendly-Betting/Bet"
+                    className="fixed bottom-0 left-1/2 z-10 flex h-16 w-full max-w-[420px] -translate-x-1/2 items-center justify-center rounded-t-md bg-spring-green-light"
                 >
-                    <Link to="Friendly-Betting/Bet" 
-                    className="bg-spring-green-light fixed right-0 left-0 bottom-0 w-full flex justify-center items-center h-20 rounded-t-md 
-                     md:max-w-screen-md md:m-auto"
-                     >
-                        <span>
-                            View Bets
-                        </span> 
-                    </Link>
-                 </CSSTransition>
-            </div>
+                    View Bets
+                </Link>
+            </CSSTransition>
         </div>
-    )
-}
+    );
+};
 
 export default Header;

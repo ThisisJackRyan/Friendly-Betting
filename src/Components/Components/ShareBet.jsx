@@ -1,39 +1,54 @@
-import React from 'react';
-import css from './Components.module.css';
-import QRCode from 'react-qr-code';
-import CloseX from './Static/CloseX';
+const IOS_UA = /iPad|iPhone|iPod/i;
+const MOBILE_UA = /Android|iPhone|iPad|iPod/i;
 
+// Sign-in stores uid and email only. No display name exists, so texts say Jack.
+export const DEFAULT_CREATOR_NAME = 'Jack';
 
+export function betShareText({ creatorName, question, optionA, optionB, stake, url }) {
+    const name = String(creatorName || DEFAULT_CREATOR_NAME).trim() || DEFAULT_CREATOR_NAME;
+    const q = String(question || '').trim().replace(/\?+\s*$/, '');
+    const a = String(optionA || 'Yes').trim() || 'Yes';
+    const b = String(optionB || 'No').trim() || 'No';
+    const stakeText = String(stake || '').trim();
+    const stakeClause = stakeText ? ` — ${stakeText}` : '';
+    const vote = url ? ` Vote: ${url}` : '';
+    return `${name}: ${q}? ${a}/${b}${stakeClause}.${vote}`;
+}
 
+export function buildSmsHref(body, userAgent = '') {
+    const encoded = encodeURIComponent(body);
+    const iOS = IOS_UA.test(userAgent);
+    return iOS ? `sms:&body=${encoded}` : `sms:?body=${encoded}`;
+}
 
+export async function shareFriendlyBet({ url, title, text }) {
+    const shareText = text || title || 'Friendly bet';
+    const fullText = url && !shareText.includes(url) ? `${shareText}\n${url}` : shareText;
 
-const ShareBet = ({display}) => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+            const payload = {
+                title: title || 'Friendly bet',
+                text: fullText,
+            };
+            if (url && !fullText.includes(url)) payload.url = url;
+            await navigator.share(payload);
+            return 'shared';
+        } catch (err) {
+            if (err && err.name === 'AbortError') return 'cancelled';
+        }
+    }
 
-    return (
-        
-        <div>
-            <div className='fixed-center text-2xl p-8 px-16 bg-secondary-spring-green-light black-border rounded-md box-shadow-no-hover'>
-                <CloseX action={display} divStyle="flex justify-end mb-2" IconStyle="text-3xl cursor-pointer "/>
-                <div className='justify-center text-center text-4xl mb-6'><span className='border-bottom'>Share</span></div>
-                <div className={css.border}>
-                    <QRCode
-                        title="qr-code"
-                        value={window.location.href}
-                        bgColor="#FFFFFF"
-                        fgcolor="#000000"
-                        size="254"
-                    />
-                </div>
-                <div className='flex max-w-64 mt-4'>
-                    <div className={css.urlCopy}>
-                            {window.location.href}
-                        </div>
-                    <button className={css.copyButton} onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy</button>
-                </div>
-                    
-            </div>
-        </div>        
-    );
-};
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    if (MOBILE_UA.test(userAgent)) {
+        window.location.href = buildSmsHref(fullText, userAgent);
+        return 'sms';
+    }
 
-export default ShareBet;
+    try {
+        await navigator.clipboard.writeText(fullText);
+    } catch (err) {
+        return 'unavailable';
+    }
+    return 'copied';
+}

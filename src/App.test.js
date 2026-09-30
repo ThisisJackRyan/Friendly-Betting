@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('opens on the new bet form', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /new bet/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /text friends/i })).toBeInTheDocument();
 });

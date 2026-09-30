@@ -1,200 +1,215 @@
-import React, { useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../Config/firebase-config';
-import { addDoc, doc, getDoc , updateDoc, collection } from 'firebase/firestore';
+import { addDoc, doc, getDoc, updateDoc, collection } from 'firebase/firestore';
+import { getSignedInUserInfo } from '../../../Config/base';
+import { betShareText, shareFriendlyBet } from '../../Components/ShareBet';
 
-import  { getSignedInUserInfo, isUserSignedIn }  from '../../../Config/base';
-
-
+const fieldClass =
+    'border-blue-gray w-full rounded-md bg-white p-3 text-base outline-none focus:border-black';
 
 const CreateMoneyLine = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const isNew = location.state === null;
 
-    const [bet, setBet] = useState('');
-    const [contestant1, setContestant1] = useState('');
-    const [contestant2, setContestant2] = useState('');
-
-    const [favorite, setFavorite] = useState('');
-    const [is1checked, setIs1Checked] = useState(false)
-    const [is2checked, setIs2Checked] = useState(false)
-
-
-    const changeFavorite = (who, isChecked) => {
-        if(isChecked === true){
-            if(who === '1'){
-                setIs1Checked(true);
-                setIs2Checked(false);
-                setFavorite(contestant1);
-            }
-            else if(who === '2'){
-                setIs1Checked(false);
-                setIs2Checked(true);
-                setFavorite(contestant2);
-            }
-        }
-        else {
-            setIs1Checked(false);
-            setIs2Checked(false);
-            setFavorite('');
-        }
-    }
-
-    const isLocationNull = location.state === null;
-
+    const [question, setQuestion] = useState('');
+    const [optionA, setOptionA] = useState('Yes');
+    const [optionB, setOptionB] = useState('No');
+    const [stake, setStake] = useState('');
+    const [closes, setCloses] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+    const [shareUrl, setShareUrl] = useState('');
+    const [notice, setNotice] = useState('');
 
     useEffect(() => {
-        if(!isUserSignedIn()){
-            // alert("You must be signed in to create a bet")
-            // navigate(`/Friendly-Betting/Bet`)
+        if (location.state == null) return;
+        try {
+            const bets = location.state.bets || {};
+            setQuestion(bets.bet || '');
+            setOptionA(bets.contestant1 || 'Yes');
+            setOptionB(bets.contestant2 || 'No');
+            setStake(bets.stake || '');
+            setCloses(bets.closes || '');
+        } catch (e) {
+            console.error(e);
         }
-        if(isLocationNull === false){
-            try{
-                setBet(location.state.bets.bet)
-                setContestant1(location.state.bets.contestant1)
-                setContestant2(location.state.bets.contestant2)
-                setFavorite(location.state.bets.favorite)
-            }
-            catch (e){
-                console.error(e);
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [location.state]);
 
+    const betPath = (id) => `/Friendly-Betting/Bet/MoneyLineBets/${id}/`;
+
+    const shareCreatedBet = async (url) => {
+        const result = await shareFriendlyBet({
+            url,
+            title: question.trim(),
+            text: betShareText({
+                question: question.trim(),
+                optionA: optionA.trim() || 'Yes',
+                optionB: optionB.trim() || 'No',
+                stake: stake.trim(),
+                url,
+            }),
+        });
+        if (result === 'copied') setNotice('Link copied. Paste it into a text.');
+        else if (result === 'unavailable') setNotice('Share is not available here. Copy the link below.');
+        else setNotice('');
+        return result;
+    };
 
     const updateBet = async () => {
-        try {
-            const betsDocRef = doc(db, "bets", location.state.betUrl.id);
-            const betsDocSnap = await getDoc(betsDocRef);
+        const betsDocRef = doc(db, 'bets', location.state.betUrl.id);
+        const betsDocSnap = await getDoc(betsDocRef);
+        const payload = {
+            bet: question.trim(),
+            contestant1: optionA.trim() || 'Yes',
+            contestant2: optionB.trim() || 'No',
+            stake: stake.trim(),
+            closes,
+            favorite: '',
+        };
+        await updateDoc(doc(db, 'MoneyLineBets', betsDocSnap.data().betID), payload);
+        navigate(betPath(location.state.betUrl.id));
+    };
 
-            await updateDoc(doc(db,"MoneyLineBets" , betsDocSnap.data().betID), {
-                bet: bet,
-                contestant1: contestant1,
-                contestant2: contestant2,
-                favorite: favorite,
-            })
-            navigate(`/Friendly-Betting/Bet/MoneyLineBets/${location.state.betUrl.id}/`) 
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    const createBet = async (userInfo) => {
-        try {
-            const betRef = await addDoc(collection(db, "MoneyLineBets"), {
-                bet: bet,
-                contestant1: contestant1,
-                contestant2: contestant2,
-                favorite: favorite,
-            })
-            
-            const betLocation = await addDoc(collection(db, "bets"), {
-                betID: betRef.id,
-                type: "Money Line",
-                bet: bet,
-                createdByID: userInfo["uid"],
-                createdByEmail: userInfo["email"],
-
-            })
-            navigate(`/Friendly-Betting/Bet/MoneyLineBets/${betLocation.id}/`) 
-
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
+    const createBet = async () => {
         const userInfo = getSignedInUserInfo();
-        if(userInfo !== null) {
-            if(isLocationNull){
-                createBet(userInfo);
-            }
-            else{
-                updateBet();
-            }
-            
-        } else {
-           alert("You must be signed in to create a bet")
-        }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+        const payload = {
+            bet: question.trim(),
+            contestant1: optionA.trim() || 'Yes',
+            contestant2: optionB.trim() || 'No',
+            stake: stake.trim(),
+            closes,
+            favorite: '',
+        };
+        const betRef = await addDoc(collection(db, 'MoneyLineBets'), payload);
+        const betLocation = await addDoc(collection(db, 'bets'), {
+            betID: betRef.id,
+            type: 'Money Line',
+            bet: payload.bet,
+            createdByID: userInfo?.uid ?? null,
+            createdByEmail: userInfo?.email ?? null,
+            stake: payload.stake,
+            closes,
+        });
+        return betLocation.id;
+    };
 
-  return (
-    <div>
-        <form onSubmit={handleSubmit} className='m-4'>
-            <div className='flex justify-center items-center p-4 bg-spring-green-light m-4 rounded-md'>
-                <span className='text-3xl'>MoneyLine</span>     
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!question.trim()) {
+            setError('Add a question first.');
+            return;
+        }
+        setError('');
+        setSaving(true);
+        try {
+            if (!isNew) {
+                await updateBet();
+                return;
+            }
+            if (shareUrl) {
+                await shareCreatedBet(shareUrl);
+                return;
+            }
+            const id = await createBet();
+            const url = `${window.location.origin}${betPath(id)}`;
+            setShareUrl(url);
+            const result = await shareCreatedBet(url);
+            if (result === 'shared' || result === 'cancelled') {
+                navigate(betPath(id));
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Could not save that bet. Try again.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="pb-28 pt-2">
+            <h1 className="mb-6 text-2xl font-medium">{isNew ? 'New bet' : 'Edit bet'}</h1>
+
+            <label className="mb-5 block">
+                <span className="mb-1 block font-medium">
+                    Question <span aria-hidden="true">*</span>
+                </span>
+                <textarea
+                    required
+                    rows="3"
+                    className={fieldClass}
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="Who shows up last?"
+                />
+            </label>
+
+            <label className="mb-5 block">
+                <span className="mb-1 block font-medium">Option A</span>
+                <input
+                    type="text"
+                    className={fieldClass}
+                    value={optionA}
+                    onChange={(e) => setOptionA(e.target.value)}
+                    placeholder="Yes"
+                />
+            </label>
+
+            <label className="mb-5 block">
+                <span className="mb-1 block font-medium">Option B</span>
+                <input
+                    type="text"
+                    className={fieldClass}
+                    value={optionB}
+                    onChange={(e) => setOptionB(e.target.value)}
+                    placeholder="No"
+                />
+            </label>
+
+            <label className="mb-5 block">
+                <span className="mb-1 block font-medium">
+                    Stake <span className="font-normal text-gray-500">(optional)</span>
+                </span>
+                <input
+                    type="text"
+                    className={fieldClass}
+                    value={stake}
+                    onChange={(e) => setStake(e.target.value)}
+                    placeholder="Loser buys coffee"
+                />
+            </label>
+
+            <label className="mb-5 block">
+                <span className="mb-1 block font-medium">Closes</span>
+                <input
+                    type="datetime-local"
+                    className={fieldClass}
+                    value={closes}
+                    onChange={(e) => setCloses(e.target.value)}
+                />
+            </label>
+
+            {error ? <p className="mb-3 text-sm text-red-700">{error}</p> : null}
+            {notice ? <p className="mb-2 text-sm text-gray-600">{notice}</p> : null}
+            {shareUrl ? (
+                <p className="mb-3 break-all rounded-md bg-spring-green-light p-3 text-sm">
+                    {shareUrl}
+                </p>
+            ) : null}
+
+            <div className="fixed bottom-0 left-1/2 z-20 w-full max-w-[420px] -translate-x-1/2 border-t border-[#ddece0] bg-white px-4 py-3">
+                <button
+                    type="submit"
+                    disabled={saving}
+                    className="h-14 w-full rounded-md text-lg font-medium text-white disabled:opacity-60"
+                    style={{ backgroundColor: 'var(--dark-spring-green)' }}
+                >
+                    {saving ? 'Sending…' : isNew ? 'Text friends' : 'Save'}
+                </button>
             </div>
-            <div className='m-12 mt-8'>
-                <div className='mb-6'>
-                    <div>
-                        Bet
-                    </div>
-                    <textarea 
-                        name="" 
-                        id=""  
-                        rows="3"
-                        className='border-blue-gray rounded-md w-full outline-none p-4 focus:border-black '
-                        value={bet}
-                        onChange={(e) => setBet(e.target.value)}
-                        placeholder='Who will win Movie of the year?'
-                    ></textarea>
-                </div>
-                <div className='mb-6'>
-                    <div>Contestant 1</div>
-                    <div>
-                        <input 
-                            type="text" 
-                            className='border-blue-gray rounded-md w-full outline-none p-2 focus:border-black' 
-                            value={contestant1}
-                            onChange={(e) => setContestant1(e.target.value)}
-                            placeholder='Barbie'
-                            />
-                    </div>
-                    <div className='flex mt-2'>
-                        <input 
-                            type="checkbox" 
-                            className='w-6' 
-                            onChange={() => changeFavorite('1', !is1checked)}
-                            value={is1checked}
-                            />
-                        <span className='pl-2 text-gray-400'>Favorite</span>
-                    </div>
-                </div>
-                <div>
-                    <div>Contestant 2</div>
-                    <div>
-                        <input 
-                            type="text" 
-                            className='border-blue-gray rounded-md w-full outline-none p-2 focus:border-black' 
-                            value={contestant2}
-                            onChange={(e) => setContestant2(e.target.value)}
-                            placeholder='Oppenheimer'
-                        />
-                    </div>
-                    <div className='flex mt-2'>
-                        <input 
-                            type="checkbox" 
-                            className='w-6' 
-                            onChange={() => changeFavorite('2', !is2checked)}
-                            value={is2checked}
-                        />
-                        <span className='pl-2 text-gray-400'>Favorite</span>
-                    </div>
-                </div>
-                <div className='flex justify-center mt-6'>
-                    <button className='betButton  rounded-md cursor-pointer ' type='submit'>{isLocationNull ? "Create Bet" : "Update Bet"}</button>
-                </div>
-            </div>
-            
         </form>
-    </div>
-  );
+    );
 };
 
 export default CreateMoneyLine;
