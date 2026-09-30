@@ -22,6 +22,7 @@ function localUser() {
 }
 
 function ensureSignedIn() {
+  if (!auth) return Promise.resolve(localUser());
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
   if (!ensuring) {
     ensuring = signInAnonymously(auth)
@@ -33,6 +34,14 @@ function ensureSignedIn() {
 
 export function watchIdentity(onChange) {
   let active = true;
+  if (!auth) {
+    ensureSignedIn().then((next) => {
+      if (active) onChange(next);
+    });
+    return () => {
+      active = false;
+    };
+  }
   const unsubscribe = onAuthStateChanged(auth, (user) => {
     if (!active) return;
     if (user) {
@@ -50,7 +59,7 @@ export function watchIdentity(onChange) {
 }
 
 export function useIdentity() {
-  const [user, setUser] = useState(() => auth.currentUser || null);
+  const [user, setUser] = useState(null);
   useEffect(() => watchIdentity(setUser), []);
   return user;
 }

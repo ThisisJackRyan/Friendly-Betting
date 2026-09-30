@@ -1,9 +1,11 @@
+'use client';
+
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { TYPE_META, TYPE_ORDER } from './model';
 
 const TypePicker = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
     document.title = 'New bet · Friendly';
@@ -21,7 +23,7 @@ const TypePicker = () => {
               key={id}
               type="button"
               className="type-card press"
-              onClick={() => navigate(`/new/${id}`)}
+              onClick={() => router.push(`/new/${id}`)}
             >
               <span className="type-card-title">{meta.label}</span>
               <span className="type-card-hint">{meta.hint}</span>

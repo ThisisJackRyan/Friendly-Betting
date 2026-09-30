@@ -1,5 +1,8 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
 import { creatorName, useIdentity } from './identity';
@@ -23,8 +26,9 @@ const SHARE_NOTE = {
 };
 
 const CreateForm = () => {
-  const { type } = useParams();
-  const navigate = useNavigate();
+  const params = useParams();
+  const type = params?.type;
+  const router = useRouter();
   const user = useIdentity();
   const meta = TYPE_META[type];
 
@@ -44,10 +48,14 @@ const CreateForm = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (!meta) router.replace('/');
+  }, [meta, router]);
+
+  useEffect(() => {
     if (meta) document.title = `${meta.label} · Friendly`;
   }, [meta]);
 
-  if (!meta) return <Navigate to="/" replace />;
+  if (!meta) return null;
 
   const updateProp = (index, value) => {
     setPropOptions((current) => current.map((item, i) => (i === index ? value : item)));
@@ -119,7 +127,7 @@ const CreateForm = () => {
       <form className="form-fill" onSubmit={onSubmit}>
         <div className="screen-push form-fill">
           <div className="nav-row">
-            <button type="button" className="icon-btn" aria-label="Back" onClick={() => navigate('/')}>
+            <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.push('/')}>
               <FiChevronLeft size={28} />
             </button>
             <h1 className="nav-title">{meta.label}</h1>
@@ -254,7 +262,7 @@ const CreateForm = () => {
         </div>
         <div className="cta-bar">
           {code && (
-            <Link className="vote-link" to={`/b/${code}`}>{voteUrl(code)}</Link>
+            <Link className="vote-link" href={`/b/${code}`}>{voteUrl(code)}</Link>
           )}
           {shareState && <p className="share-note">{SHARE_NOTE[shareState]}</p>}
           <button className="cta press" type="submit" disabled={saving}>

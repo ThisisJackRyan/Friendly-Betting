@@ -1,5 +1,7 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft } from 'react-icons/fi';
 import { hydrateBet, settleBet, subscribeBet } from './api';
 import { useIdentity } from './identity';
@@ -15,9 +17,9 @@ import {
 import Bars from './Bars';
 
 const TallyScreen = () => {
-  const params = useParams();
+  const params = useParams() || {};
   const betId = params.code || params.id;
-  const navigate = useNavigate();
+  const router = useRouter();
   const user = useIdentity();
   const [bet, setBet] = useState(undefined);
   const [error, setError] = useState('');
@@ -77,7 +79,7 @@ const TallyScreen = () => {
   return (
     <div className="phone screen-push">
       <div className="nav-row">
-        <button type="button" className="icon-btn" aria-label="Back" onClick={() => navigate(-1)}>
+        <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.back()}>
           <FiChevronLeft size={28} />
         </button>
         <h1 className="nav-title">Tally</h1>

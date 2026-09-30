@@ -1,14 +1,16 @@
-import { Outlet, useLocation } from 'react-router-dom';
+'use client';
+
+import { usePathname } from 'next/navigation';
 import { useIdentity } from './identity';
 
-const TabLayout = () => {
-  const { pathname } = useLocation();
+const TabLayout = ({ children }) => {
+  const pathname = usePathname() || '/';
   useIdentity();
 
   return (
     <div className="phone">
       <div className="scroll screen-fade" key={pathname}>
-        <Outlet />
+        {children}
       </div>
     </div>
   );

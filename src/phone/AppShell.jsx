@@ -1,31 +1,30 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { FiList, FiPlus } from 'react-icons/fi';
 
-const AppShell = () => {
-  const { pathname } = useLocation();
+const AppShell = ({ children }) => {
+  const pathname = usePathname() || '/';
   const phoneTabs = pathname === '/' || pathname === '/bets';
+  const createActive = pathname === '/' || pathname.startsWith('/new');
+  const betsActive = pathname === '/bets' || pathname.startsWith('/bets/');
 
   return (
     <div className={phoneTabs ? 'app-shell shell-tabs' : 'app-shell shell-stack'}>
       <div className="app-main">
-        <Outlet />
+        {children}
       </div>
       <nav className="tabbar app-nav" aria-label="Primary">
         <p className="wordmark nav-brand">Friendly</p>
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) => (
-            (isActive || pathname.startsWith('/new')) ? 'tab active' : 'tab'
-          )}
-        >
+        <Link href="/" className={createActive ? 'tab active' : 'tab'}>
           <FiPlus size={22} aria-hidden="true" />
           <span>Create</span>
-        </NavLink>
-        <NavLink to="/bets" className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+        </Link>
+        <Link href="/bets" className={betsActive ? 'tab active' : 'tab'}>
           <FiList size={22} aria-hidden="true" />
           <span>My bets</span>
-        </NavLink>
+        </Link>
       </nav>
     </div>
   );

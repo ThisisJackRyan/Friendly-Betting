@@ -1,10 +1,7 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth} from "firebase/auth"
-import { getFirestore } from "firebase/firestore"
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAnalytics, isSupported } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -18,14 +15,17 @@ const firebaseConfig = {
   measurementId: "G-74305KF5X4"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-try {
-  getAnalytics(app);
-} catch (err) {
-  // Analytics is optional. The app still creates and shares bets without it.
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+if (typeof window !== "undefined") {
+  isSupported()
+    .then((ok) => {
+      if (ok) getAnalytics(app);
+    })
+    .catch(() => {
+      // Analytics is optional. The app still creates and shares bets without it.
+    });
 }
 
-
-export const auth = getAuth(app);
+export const auth = typeof window === "undefined" ? null : getAuth(app);
 export const db = getFirestore(app);
