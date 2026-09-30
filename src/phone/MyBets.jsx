@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { FiPlus } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
@@ -37,7 +38,11 @@ const MyBets = () => {
       {bets === null && <p className="muted">Loading…</p>}
       {bets && bets.length === 0 && (
         <div className="empty">
-          <p>No bets yet.</p>
+          <span className="empty-mark" aria-hidden="true">
+            <FiPlus size={22} />
+          </span>
+          <p className="empty-title">No bets yet</p>
+          <p className="empty-copy">Create one and text it to friends.</p>
           <Link className="secondary press" href="/">Create a bet</Link>
         </div>
       )}

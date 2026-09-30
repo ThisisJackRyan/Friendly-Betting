@@ -2,7 +2,14 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { FiBarChart2, FiGrid, FiTrendingUp } from 'react-icons/fi';
 import { TYPE_META, TYPE_ORDER } from './model';
+
+const TYPE_ICONS = {
+  'money-line': FiTrendingUp,
+  'over-under': FiBarChart2,
+  prop: FiGrid,
+};
 
 const TypePicker = () => {
   const router = useRouter();
@@ -15,9 +22,11 @@ const TypePicker = () => {
     <div className="stack">
       <p className="wordmark">Friendly</p>
       <h1 className="screen-title">New bet</h1>
+      <p className="section-label">Pick a type</p>
       <div className="type-list">
         {TYPE_ORDER.map((id) => {
           const meta = TYPE_META[id];
+          const Icon = TYPE_ICONS[id];
           return (
             <button
               key={id}
@@ -25,8 +34,13 @@ const TypePicker = () => {
               className="type-card press"
               onClick={() => router.push(`/new/${id}`)}
             >
-              <span className="type-card-title">{meta.label}</span>
-              <span className="type-card-hint">{meta.hint}</span>
+              <span className="type-card-icon" aria-hidden="true">
+                <Icon size={22} />
+              </span>
+              <span className="type-card-copy">
+                <span className="type-card-title">{meta.label}</span>
+                <span className="type-card-hint">{meta.hint}</span>
+              </span>
             </button>
           );
         })}

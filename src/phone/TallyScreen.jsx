@@ -94,9 +94,12 @@ const TallyScreen = () => {
               <span className={`status ${statusLabel(bet).toLowerCase()}`}>{statusLabel(bet)}</span>
             </div>
             <h2 className="question-xl">{questionOf(bet)}</h2>
-            {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
-            {won ? <p className="settled-line">Settled on {won}</p> : null}
-            <Bars bet={bet} highlightId={bet.winnerId} />
+            <div className="vote-meta">
+              {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
+              {won ? <p className="settled-line">Settled on {won}</p> : null}
+            </div>
+            <hr className="meta-rule" />
+            <Bars bet={bet} highlightId={bet.winnerId} waiting />
             {error && <p className="form-error" role="alert">{error}</p>}
             {canSettle && !settling && (
               <button type="button" className="danger press" onClick={() => setSettling(true)}>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { FiLink, FiSlash } from 'react-icons/fi';
 import { castVote, hydrateBet, subscribeBet } from './api';
 import { rememberName, savedName, useIdentity } from './identity';
 import {
@@ -92,7 +93,8 @@ const VoteScreen = () => {
         {bet === undefined && <p className="muted center">Loading…</p>}
         {bet === null && (
           <div className="empty">
-            <p>This link does not match a bet.</p>
+            <FiLink className="empty-glyph" size={18} aria-hidden="true" />
+            <p className="empty-title">This bet isn&apos;t here</p>
             <Link className="secondary press" href="/">Home</Link>
           </div>
         )}
@@ -100,8 +102,11 @@ const VoteScreen = () => {
           <>
             <p className="inviter">{bet.createdByName || 'A friend'}</p>
             <h1 className="question-xl">{questionOf(bet)}</h1>
-            {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
-            {bet.stake ? <p className="stake-line">{bet.stake}</p> : null}
+            <div className="vote-meta">
+              {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
+              {bet.stake ? <p className="stake-line">{bet.stake}</p> : null}
+            </div>
+            <hr className="meta-rule" />
 
             {showVoted && (
               <div className="voted-in">
@@ -145,7 +150,10 @@ const VoteScreen = () => {
 
             {!showVoted && !open && (
               <div className="voted-in">
-                <p className="youre-on">Voting is closed</p>
+                <p className="youre-on">
+                  <FiSlash className="state-icon" size={16} aria-hidden="true" />
+                  Voting is closed
+                </p>
                 <Bars bet={bet} />
                 <Link className="text-link" href={`/t/${bet.id || code}`}>Tally</Link>
               </div>

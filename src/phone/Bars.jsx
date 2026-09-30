@@ -1,6 +1,6 @@
 import { optionVoteLabel, tallyCounts } from './model';
 
-const Bars = ({ bet, highlightId }) => {
+const Bars = ({ bet, highlightId, waiting = false }) => {
   const rows = tallyCounts(bet);
   const total = rows.reduce((sum, row) => sum + row.count, 0);
 
@@ -26,6 +26,7 @@ const Bars = ({ bet, highlightId }) => {
           </div>
         );
       })}
+      {waiting && total === 0 && <p className="bars-wait">Waiting on votes.</p>}
     </div>
   );
 };

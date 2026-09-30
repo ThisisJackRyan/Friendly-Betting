@@ -232,6 +232,7 @@ const CreateForm = () => {
               </div>
             )}
 
+            <p className="section-label">Optional</p>
             <div className="field-pair">
               <label className="field" htmlFor="stake">
                 <span className="field-label">Stake <span className="optional">optional</span></span>
