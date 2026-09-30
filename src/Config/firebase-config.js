@@ -20,7 +20,11 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+try {
+  getAnalytics(app);
+} catch (err) {
+  // Analytics is optional. The app still creates and shares bets without it.
+}
 
 
 export const auth = getAuth(app);
