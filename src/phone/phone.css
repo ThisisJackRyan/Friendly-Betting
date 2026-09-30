@@ -74,11 +74,16 @@ body {
 }
 
 .screen-title {
-  margin: 10px 0 18px;
+  margin: 24px 0 18px;
   font-size: 32px;
   line-height: 1.1;
   font-weight: 500;
   letter-spacing: -0.03em;
+}
+
+/* .phone h1 { margin: 0 } would otherwise cancel this top gap. */
+.phone h1.screen-title {
+  margin-top: 24px;
 }
 
 .stack {
