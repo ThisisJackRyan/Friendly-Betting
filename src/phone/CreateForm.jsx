@@ -138,7 +138,7 @@ const CreateForm = () => {
             </label>
 
             {type === 'money-line' && (
-              <>
+              <div className="field-pair">
                 <label className="field" htmlFor="option-a">
                   <span className="field-label">Option A</span>
                   <input
@@ -155,7 +155,7 @@ const CreateForm = () => {
                     onChange={(event) => setOptionB(event.target.value)}
                   />
                 </label>
-              </>
+              </div>
             )}
 
             {type === 'over-under' && (
@@ -170,22 +170,24 @@ const CreateForm = () => {
                     onChange={(event) => setLine(event.target.value)}
                   />
                 </label>
-                <label className="field" htmlFor="over-label">
-                  <span className="field-label">Over</span>
-                  <input
-                    id="over-label"
-                    value={overLabel}
-                    onChange={(event) => setOverLabel(event.target.value)}
-                  />
-                </label>
-                <label className="field" htmlFor="under-label">
-                  <span className="field-label">Under</span>
-                  <input
-                    id="under-label"
-                    value={underLabel}
-                    onChange={(event) => setUnderLabel(event.target.value)}
-                  />
-                </label>
+                <div className="field-pair">
+                  <label className="field" htmlFor="over-label">
+                    <span className="field-label">Over</span>
+                    <input
+                      id="over-label"
+                      value={overLabel}
+                      onChange={(event) => setOverLabel(event.target.value)}
+                    />
+                  </label>
+                  <label className="field" htmlFor="under-label">
+                    <span className="field-label">Under</span>
+                    <input
+                      id="under-label"
+                      value={underLabel}
+                      onChange={(event) => setUnderLabel(event.target.value)}
+                    />
+                  </label>
+                </div>
               </>
             )}
 
@@ -222,25 +224,27 @@ const CreateForm = () => {
               </div>
             )}
 
-            <label className="field" htmlFor="stake">
-              <span className="field-label">Stake <span className="optional">optional</span></span>
-              <input
-                id="stake"
-                value={stake}
-                placeholder="Pizza, $5, bragging rights"
-                onChange={(event) => setStake(event.target.value)}
-              />
-            </label>
+            <div className="field-pair">
+              <label className="field" htmlFor="stake">
+                <span className="field-label">Stake <span className="optional">optional</span></span>
+                <input
+                  id="stake"
+                  value={stake}
+                  placeholder="Pizza, $5, bragging rights"
+                  onChange={(event) => setStake(event.target.value)}
+                />
+              </label>
 
-            <label className="field" htmlFor="closes">
-              <span className="field-label">Closes <span className="optional">optional</span></span>
-              <input
-                id="closes"
-                type="datetime-local"
-                value={closes}
-                onChange={(event) => setCloses(event.target.value)}
-              />
-            </label>
+              <label className="field" htmlFor="closes">
+                <span className="field-label">Closes <span className="optional">optional</span></span>
+                <input
+                  id="closes"
+                  type="datetime-local"
+                  value={closes}
+                  onChange={(event) => setCloses(event.target.value)}
+                />
+              </label>
+            </div>
 
             {message && shareState === 'manual' && (
               <p className="manual-message">{message}</p>

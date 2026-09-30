@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 
+beforeEach(() => {
+  window.history.pushState({}, '', '/');
+});
+
 jest.mock('./phone/api', () => ({
   subscribeMyBets: (_uid, onChange) => {
     onChange([]);
@@ -24,6 +28,7 @@ jest.mock('./phone/identity', () => ({
 
 test('opens on New bet with all three types and a Create / My bets tab bar', async () => {
   render(<App />);
+  expect(screen.getAllByRole('navigation', { name: 'Primary' })).toHaveLength(1);
   expect(screen.getByRole('heading', { name: 'New bet' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
@@ -33,4 +38,11 @@ test('opens on New bet with all three types and a Create / My bets tab bar', asy
   await userEvent.click(screen.getByRole('link', { name: /my bets/i }));
   expect(await screen.findByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(await screen.findByText(/no bets yet/i)).toBeInTheDocument();
+});
+
+test('a vote link stays focused and does not render the app nav', () => {
+  window.history.pushState({}, '', '/b/abc123');
+  render(<App />);
+  expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+  expect(screen.getByText(/loading/i)).toBeInTheDocument();
 });

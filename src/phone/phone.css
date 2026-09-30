@@ -575,3 +575,246 @@ body {
     transition: none;
   }
 }
+
+/* Desktop shell. Below 768 the phone column is unchanged. */
+
+.app-shell {
+  width: 100%;
+  max-width: 420px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f4f7f5;
+  color: #14241c;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell .phone {
+  max-width: none;
+  width: 100%;
+  height: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+.nav-brand {
+  display: none;
+  margin: 0;
+}
+
+.field-pair {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 767px) {
+  .shell-stack .app-nav {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-frame {
+    box-sizing: border-box;
+    padding: 20px 24px;
+  }
+
+  .app-shell {
+    flex: 1;
+    max-width: 1120px;
+    height: 100%;
+    border-radius: 20px;
+    background: #f4f7f5;
+    box-shadow:
+      0 0 0 1px rgba(20, 36, 28, 0.06),
+      0 18px 50px rgba(20, 36, 28, 0.1);
+  }
+
+  .app-nav {
+    order: 1;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    min-height: 60px;
+    padding: 0 16px;
+    background: #fff;
+    box-shadow: inset 0 -1px 0 rgba(20, 36, 28, 0.08);
+    padding-bottom: 0;
+  }
+
+  .app-main {
+    order: 2;
+  }
+
+  .nav-brand {
+    display: block;
+    margin: 0 16px 0 6px;
+  }
+
+  .app-main .wordmark {
+    display: none;
+  }
+
+  .app-nav .tab {
+    flex: none;
+    flex-direction: row;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .app-nav .tab.active {
+    background: #e5f3ea;
+    box-shadow: none;
+  }
+
+  .app-nav .tab:hover {
+    background: #f3faf6;
+  }
+
+  .app-nav .tab.active:hover {
+    background: #dceddf;
+  }
+
+  .app-shell .scroll {
+    padding: 24px 24px 28px;
+  }
+
+  .app-shell .form-fill .scroll,
+  .app-shell .screen-push .scroll {
+    padding-top: 8px;
+  }
+
+  .type-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .type-card {
+    min-width: 0;
+    min-height: 112px;
+  }
+
+  .type-card:hover,
+  .bet-card:hover,
+  .choice:hover {
+    background: #f7fbf8;
+  }
+
+  .bet-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .bet-card {
+    min-width: 0;
+    min-height: 0;
+    padding: 12px 14px;
+    gap: 6px;
+  }
+
+  .bet-card-question {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .field-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 16px;
+    align-items: start;
+  }
+
+  .prop-block {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 16px;
+  }
+
+  .prop-block > .secondary {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell .secondary,
+  .danger {
+    width: fit-content;
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .settle {
+    max-width: 440px;
+  }
+
+  .app-shell .text-link {
+    width: fit-content;
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  .focus-column {
+    flex: 1;
+    max-width: 480px;
+    height: 100%;
+    border-radius: 20px;
+    background: #f4f7f5;
+    box-shadow:
+      0 0 0 1px rgba(20, 36, 28, 0.06),
+      0 18px 50px rgba(20, 36, 28, 0.1);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-frame {
+    padding: 28px 32px;
+  }
+
+  .app-shell {
+    flex-direction: row;
+  }
+
+  .app-nav {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    width: 220px;
+    flex-basis: 220px;
+    gap: 4px;
+    min-height: 0;
+    padding: 28px 14px 16px;
+    box-shadow: inset -1px 0 0 rgba(20, 36, 28, 0.08);
+  }
+
+  .nav-brand {
+    margin: 0 10px 28px;
+  }
+
+  .app-nav .tab {
+    justify-content: flex-start;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 15px;
+  }
+
+  .app-shell .scroll {
+    padding: 28px 32px 32px;
+  }
+
+  .bet-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

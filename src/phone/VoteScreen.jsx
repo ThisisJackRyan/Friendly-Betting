@@ -82,7 +82,7 @@ const VoteScreen = () => {
   };
 
   return (
-    <div className="phone">
+    <div className="phone focus-column">
       <div className="scroll screen-fade vote-screen">
         {bet === undefined && <p className="muted center">Loading…</p>}
         {bet === null && (

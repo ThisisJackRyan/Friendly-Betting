@@ -3,6 +3,7 @@ import './base.css';
 import './phone/phone.css';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { appBasename } from './phone/routes';
+import AppShell from './phone/AppShell';
 import TabLayout from './phone/TabLayout';
 import TypePicker from './phone/TypePicker';
 import CreateForm from './phone/CreateForm';
@@ -16,15 +17,17 @@ function App() {
     <BrowserRouter basename={appBasename()}>
       <div className="app-frame">
         <Routes>
-          <Route element={<TabLayout />}>
-            <Route path="/" element={<TypePicker />} />
-            <Route path="/bets" element={<MyBets />} />
+          <Route element={<AppShell />}>
+            <Route element={<TabLayout />}>
+              <Route path="/" element={<TypePicker />} />
+              <Route path="/bets" element={<MyBets />} />
+            </Route>
+            <Route path="/new/:type" element={<CreateForm />} />
+            <Route path="/t/:code" element={<TallyScreen />} />
+            <Route path="/Bet/:collection/:id" element={<TallyScreen />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
-          <Route path="/new/:type" element={<CreateForm />} />
           <Route path="/b/:code" element={<VoteScreen />} />
-          <Route path="/t/:code" element={<TallyScreen />} />
-          <Route path="/Bet/:collection/:id" element={<TallyScreen />} />
-          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
     </BrowserRouter>
