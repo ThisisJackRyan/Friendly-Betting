@@ -766,6 +766,11 @@ body {
     padding: 0;
   }
 
+  .app-shell .cta-bar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
   .focus-column {
     flex: 1;
     max-width: 480px;
@@ -812,6 +817,11 @@ body {
 
   .app-shell .scroll {
     padding: 28px 32px 32px;
+  }
+
+  .app-shell .cta-bar {
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   .bet-list {
