@@ -233,7 +233,7 @@ const CreateForm = () => {
             </label>
 
             <label className="field" htmlFor="closes">
-              <span className="field-label">Closes</span>
+              <span className="field-label">Closes <span className="optional">optional</span></span>
               <input
                 id="closes"
                 type="datetime-local"

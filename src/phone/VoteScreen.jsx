@@ -121,7 +121,7 @@ const VoteScreen = () => {
                     onChange={(event) => setName(event.target.value)}
                   />
                 </label>
-                <div className="choices">
+                <div className={(bet.options || []).length === 2 ? 'choices choices-centered' : 'choices'}>
                   {(bet.options || []).map((option) => (
                     <button
                       key={option.id}

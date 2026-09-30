@@ -108,7 +108,7 @@ const TallyScreen = () => {
                   <button
                     key={option.id}
                     type="button"
-                    className="danger press"
+                    className="choice press"
                     disabled={saving}
                     onClick={() => confirmSettle(option.id)}
                   >

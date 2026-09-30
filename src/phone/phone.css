@@ -292,6 +292,11 @@ body {
   text-align: left;
 }
 
+.choices-centered .choice {
+  justify-content: center;
+  text-align: center;
+}
+
 .danger {
   background: #ba3b46;
   color: #fff;
