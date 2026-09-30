@@ -1,9 +1,20 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import App from './App';
+import AppShell from './phone/AppShell';
+import TabLayout from './phone/TabLayout';
+import TypePicker from './phone/TypePicker';
+import MyBets from './phone/MyBets';
+import VoteScreen from './phone/VoteScreen';
+import { navigation } from 'next/navigation';
+
+jest.mock('next/navigation');
+jest.mock('next/link');
 
 beforeEach(() => {
-  window.history.pushState({}, '', '/');
+  navigation.pathname = '/';
+  navigation.params = {};
+  navigation.push.mockReset();
+  navigation.replace.mockReset();
+  navigation.back.mockReset();
 });
 
 jest.mock('./phone/api', () => ({
@@ -26,23 +37,46 @@ jest.mock('./phone/identity', () => ({
   watchIdentity: () => () => {},
 }));
 
-test('opens on New bet with all three types and a Create / My bets tab bar', async () => {
-  render(<App />);
+function renderHome() {
+  navigation.pathname = '/';
+  return render(
+    <AppShell>
+      <TabLayout>
+        <TypePicker />
+      </TabLayout>
+    </AppShell>,
+  );
+}
+
+test('opens on New bet with all three types and a Create / My bets tab bar', () => {
+  renderHome();
   expect(screen.getAllByRole('navigation', { name: 'Primary' })).toHaveLength(1);
   expect(screen.getByRole('heading', { name: 'New bet' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /prop/i })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /create/i })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /create/i })).toHaveAttribute('href', '/');
+  expect(screen.getByRole('link', { name: /my bets/i })).toHaveAttribute('href', '/bets');
+});
 
-  await userEvent.click(screen.getByRole('link', { name: /my bets/i }));
-  expect(await screen.findByRole('heading', { name: 'My bets' })).toBeInTheDocument();
-  expect(await screen.findByText(/no bets yet/i)).toBeInTheDocument();
+test('my bets is a tab with an empty state', () => {
+  navigation.pathname = '/bets';
+  render(
+    <AppShell>
+      <TabLayout>
+        <MyBets />
+      </TabLayout>
+    </AppShell>,
+  );
+  expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
+  expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/');
 });
 
 test('a vote link stays focused and does not render the app nav', () => {
-  window.history.pushState({}, '', '/b/abc123');
-  render(<App />);
+  navigation.pathname = '/b/abc123';
+  navigation.params = { code: 'abc123' };
+  render(<VoteScreen />);
   expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
   expect(screen.getByText(/loading/i)).toBeInTheDocument();
 });

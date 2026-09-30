@@ -1,9 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import CreateForm from './CreateForm';
 import { saveBet } from './api';
 import { shareMessage } from './share';
+import { navigation } from 'next/navigation';
+
+jest.mock('next/navigation');
+jest.mock('next/link');
 
 jest.mock('./api', () => ({
   saveBet: jest.fn(),
@@ -28,13 +31,10 @@ beforeEach(() => {
 });
 
 function renderForm(path) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/new/:type" element={<CreateForm />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  const type = path.split('/').pop();
+  navigation.pathname = path;
+  navigation.params = { type };
+  return render(<CreateForm />);
 }
 
 test('money line, over-under, and prop share one form ending in Text friends', () => {

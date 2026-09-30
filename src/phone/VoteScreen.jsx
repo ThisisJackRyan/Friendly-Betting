@@ -1,5 +1,8 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { castVote, hydrateBet, subscribeBet } from './api';
 import { rememberName, savedName, useIdentity } from './identity';
 import {
@@ -13,16 +16,18 @@ import {
 import Bars from './Bars';
 
 const VoteScreen = () => {
-  const { code } = useParams();
+  const params = useParams();
+  const code = params?.code;
   const user = useIdentity();
   const [bet, setBet] = useState(undefined);
   const [error, setError] = useState('');
-  const [name, setName] = useState(savedName);
+  const [name, setName] = useState('');
   const [pendingId, setPendingId] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     document.title = 'Vote · Friendly';
+    setName(savedName());
   }, []);
 
   useEffect(() => {
@@ -88,7 +93,7 @@ const VoteScreen = () => {
         {bet === null && (
           <div className="empty">
             <p>This link does not match a bet.</p>
-            <Link className="secondary press" to="/">Home</Link>
+            <Link className="secondary press" href="/">Home</Link>
           </div>
         )}
         {bet && (
@@ -105,7 +110,7 @@ const VoteScreen = () => {
                   <strong>{optionVoteLabel(bet, selected)}</strong>
                 </p>
                 <Bars bet={bet} highlightId={selectedId} />
-                <Link className="text-link" to={`/t/${bet.id || code}`}>Tally</Link>
+                <Link className="text-link" href={`/t/${bet.id || code}`}>Tally</Link>
               </div>
             )}
 
@@ -142,7 +147,7 @@ const VoteScreen = () => {
               <div className="voted-in">
                 <p className="youre-on">Voting is closed</p>
                 <Bars bet={bet} />
-                <Link className="text-link" to={`/t/${bet.id || code}`}>Tally</Link>
+                <Link className="text-link" href={`/t/${bet.id || code}`}>Tally</Link>
               </div>
             )}
             {error && <p className="form-error" role="alert">{error}</p>}

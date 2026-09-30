@@ -1,9 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
 import { castVote, settleBet } from './api';
+import { navigation } from 'next/navigation';
+
+jest.mock('next/navigation');
+jest.mock('next/link');
 
 const openBet = {
   id: 'abc123',
@@ -41,14 +44,9 @@ jest.mock('./identity', () => ({
 }));
 
 function renderAt(path, element) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/b/:code" element={element} />
-        <Route path="/t/:code" element={element} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  navigation.pathname = path;
+  navigation.params = { code: path.split('/').pop() };
+  return render(element);
 }
 
 test('a shared link opens the vote screen and records a one-tap choice', async () => {

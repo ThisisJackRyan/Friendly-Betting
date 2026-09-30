@@ -1,11 +1,14 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { subscribeMyBets } from './api';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
 
 const MyBets = () => {
   const user = useIdentity();
+  const uid = user?.uid;
   const [bets, setBets] = useState(null);
   const [error, setError] = useState('');
 
@@ -14,8 +17,8 @@ const MyBets = () => {
   }, []);
 
   useEffect(() => {
-    if (!user?.uid) return undefined;
-    return subscribeMyBets(user.uid, (rows, err) => {
+    if (!uid) return undefined;
+    return subscribeMyBets(uid, (rows, err) => {
       if (err) {
         setError('Could not load your bets.');
         setBets([]);
@@ -24,7 +27,7 @@ const MyBets = () => {
       setError('');
       setBets(rows || []);
     });
-  }, [user]);
+  }, [uid]);
 
   return (
     <div className="stack">
@@ -35,14 +38,14 @@ const MyBets = () => {
       {bets && bets.length === 0 && (
         <div className="empty">
           <p>No bets yet.</p>
-          <Link className="secondary press" to="/">Create a bet</Link>
+          <Link className="secondary press" href="/">Create a bet</Link>
         </div>
       )}
       <div className="bet-list">
         {bets && bets.map((bet) => {
           const status = statusLabel(bet);
           return (
-            <Link key={bet.id} className="bet-card press" to={`/t/${bet.id}`}>
+            <Link key={bet.id} className="bet-card press" href={`/t/${bet.id}`}>
               <span className="bet-card-top">
                 <span className="chip">{typeLabelOf(bet)}</span>
                 <span className={`status ${status.toLowerCase()}`}>{status}</span>
