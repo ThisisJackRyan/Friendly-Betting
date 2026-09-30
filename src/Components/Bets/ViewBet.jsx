@@ -7,6 +7,7 @@ import { useParams } from 'react-router-dom';
 import {db} from '../../Config/firebase-config';
 import { getDoc, doc } from 'firebase/firestore';
 import { getCollectionName, getSignedInUserInfo } from '../../Config/base';
+import { betShareText } from '../Components/ShareBet';
 import ViewMoneyLine from './MoneyLineBets/ViewMoneyLine';
 import ViewOverUnder from './OverUnderBets/ViewOverUnder';
 import ViewProp from './PropBets/ViewProp';
@@ -68,7 +69,18 @@ const ViewBet = () => {
     <div className="pb-10 pt-2">
         <h1 className="text-2xl font-medium">{bets.bet}</h1>
         <div className="mt-4">
-            <ShareButton title={bets.bet || 'Friendly bet'} text={bets.bet} />
+            <ShareButton
+                title={bets.bet || 'Friendly bet'}
+                text={collectionName === 'MoneyLineBets' && bets.bet
+                    ? betShareText({
+                        question: bets.bet,
+                        optionA: bets.contestant1,
+                        optionB: bets.contestant2,
+                        stake: bets.stake,
+                        url: window.location.href,
+                    })
+                    : bets.bet}
+            />
         </div>
         <div className="mt-2">
             {collectionName === 'MoneyLineBets' ? <ViewMoneyLine bets={bets} />

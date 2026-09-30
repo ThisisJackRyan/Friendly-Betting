@@ -48,6 +48,7 @@ const CreateMoneyLine = () => {
                 optionA: optionA.trim() || 'Yes',
                 optionB: optionB.trim() || 'No',
                 stake: stake.trim(),
+                url,
             }),
         });
         if (result === 'copied') setNotice('Link copied. Paste it into a text.');
