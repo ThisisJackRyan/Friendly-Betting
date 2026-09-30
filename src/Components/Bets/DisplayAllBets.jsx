@@ -4,17 +4,12 @@ import {db} from '../../Config/firebase-config';
 import { collection, getDocs } from 'firebase/firestore';
 import DisplayBet from './DisplayBet';
 import { getSignedInUserInfo } from '../../Config/base';
-import { CSSTransition } from 'react-transition-group';
-import BetNav from './BetNav';
+import { useNavigate } from 'react-router-dom';
 
 
 const DisplayAllBets = () => {
     const [bets, setBets] = useState([])
-    const [display, setDisplay] = useState(false)
-
-    const swapDisplay = () => {
-        setDisplay((current) => !current)
-    }
+    const navigate = useNavigate()
 
 
     useEffect(() => {
@@ -25,7 +20,8 @@ const DisplayAllBets = () => {
             ...doc.data(), 
             id: doc.id,
           }));
-          const cleanedData = filteredData.filter(bet => bet.createdByID === getSignedInUserInfo().uid);
+          const user = getSignedInUserInfo();
+          const cleanedData = user ? filteredData.filter(bet => bet.createdByID === user.uid) : [];
           setBets(cleanedData);
         } catch (e) {
           console.error(e);
@@ -36,7 +32,7 @@ const DisplayAllBets = () => {
     }, [])
 
   return (
-    <div className='flex flex-col justify-center p-12'>
+    <div className='flex flex-col justify-center py-6'>
 
       {bets.length < 1 ? (
         <div>
@@ -51,18 +47,13 @@ const DisplayAllBets = () => {
           ))}
         </div>
       ) }
-      <div className="flex justify-center items-center bg-blue-gray text-white mx-2 rounded-md box-shadow py-4" onClick={swapDisplay}>
-          Create Bet
-      </div>
-
-      <CSSTransition
-                in={display}
-                timeout={300}
-                classNames="fadeUp"
-                unmountOnExit              
+      <button
+        type="button"
+        className="mt-6 w-full rounded-md bg-blue-gray py-4 text-white box-shadow"
+        onClick={() => navigate('/Friendly-Betting/MoneyLineBets')}
       >
-        <BetNav swap={swapDisplay}/>
-      </CSSTransition>
+          New bet
+      </button>
     </div>
   );
 }

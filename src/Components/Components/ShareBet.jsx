@@ -1,39 +1,45 @@
-import React from 'react';
-import css from './Components.module.css';
-import QRCode from 'react-qr-code';
-import CloseX from './Static/CloseX';
+const IOS_UA = /iPad|iPhone|iPod/i;
+const MOBILE_UA = /Android|iPhone|iPad|iPod/i;
 
+export function betShareText({ question, optionA, optionB, stake }) {
+    const lines = [question, `${optionA} or ${optionB}`];
+    if (stake) lines.push(`Stake: ${stake}`);
+    return lines.filter(Boolean).join('\n');
+}
 
+export function buildSmsHref(body, userAgent = '') {
+    const encoded = encodeURIComponent(body);
+    const iOS = IOS_UA.test(userAgent);
+    return iOS ? `sms:&body=${encoded}` : `sms:?body=${encoded}`;
+}
 
+export async function shareFriendlyBet({ url, title, text }) {
+    const shareText = text || title || 'Friendly bet';
+    const fullText = url && !shareText.includes(url) ? `${shareText}\n${url}` : shareText;
 
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+            await navigator.share({
+                title: title || 'Friendly bet',
+                text: shareText,
+                url,
+            });
+            return 'shared';
+        } catch (err) {
+            if (err && err.name === 'AbortError') return 'cancelled';
+        }
+    }
 
-const ShareBet = ({display}) => {
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    if (MOBILE_UA.test(userAgent)) {
+        window.location.href = buildSmsHref(fullText, userAgent);
+        return 'sms';
+    }
 
-    return (
-        
-        <div>
-            <div className='fixed-center text-2xl p-8 px-16 bg-secondary-spring-green-light black-border rounded-md box-shadow-no-hover'>
-                <CloseX action={display} divStyle="flex justify-end mb-2" IconStyle="text-3xl cursor-pointer "/>
-                <div className='justify-center text-center text-4xl mb-6'><span className='border-bottom'>Share</span></div>
-                <div className={css.border}>
-                    <QRCode
-                        title="qr-code"
-                        value={window.location.href}
-                        bgColor="#FFFFFF"
-                        fgcolor="#000000"
-                        size="254"
-                    />
-                </div>
-                <div className='flex max-w-64 mt-4'>
-                    <div className={css.urlCopy}>
-                            {window.location.href}
-                        </div>
-                    <button className={css.copyButton} onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy</button>
-                </div>
-                    
-            </div>
-        </div>        
-    );
-};
-
-export default ShareBet;
+    try {
+        await navigator.clipboard.writeText(fullText);
+    } catch (err) {
+        return 'unavailable';
+    }
+    return 'copied';
+}
