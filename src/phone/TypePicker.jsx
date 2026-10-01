@@ -11,12 +11,14 @@ const TYPE_ICONS = {
   prop: FiGrid,
 };
 
-const TypePicker = () => {
+const TypePicker = ({ onPick }) => {
   const router = useRouter();
 
   useEffect(() => {
+    if (onPick) return undefined;
     document.title = 'New bet · Friendly';
-  }, []);
+    return undefined;
+  }, [onPick]);
 
   return (
     <div className="stack">
@@ -32,7 +34,10 @@ const TypePicker = () => {
               key={id}
               type="button"
               className="type-card press"
-              onClick={() => router.push(`/new/${id}`)}
+              onClick={() => {
+                if (onPick) onPick(id);
+                else router.push(`/new/${id}`);
+              }}
             >
               <span className="type-card-icon" aria-hidden="true">
                 <Icon size={22} />

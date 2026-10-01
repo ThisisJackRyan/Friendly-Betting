@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import AppShell from './phone/AppShell';
 import TabLayout from './phone/TabLayout';
-import TypePicker from './phone/TypePicker';
+import CreateForm from './phone/CreateForm';
 import MyBets from './phone/MyBets';
 import VoteScreen from './phone/VoteScreen';
 import { navigation } from 'next/navigation';
@@ -42,7 +42,7 @@ function renderHome() {
   return render(
     <AppShell>
       <TabLayout>
-        <TypePicker />
+        <CreateForm />
       </TabLayout>
     </AppShell>,
   );
