@@ -1211,8 +1211,8 @@ body {
 .landing-body {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 28px;
+  justify-content: flex-start;
+  gap: 32px;
   width: 100%;
   max-width: 420px;
   margin: 0 auto;
@@ -1220,7 +1220,7 @@ body {
 }
 
 .landing-copy {
-  padding-top: 6vh;
+  padding-top: 10vh;
 }
 
 .landing-mark {
