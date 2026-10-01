@@ -198,19 +198,27 @@ body {
   color: #2c332f;
 }
 
-.type-card:hover {
-  background: var(--hover-wash);
+.type-card:hover,
+.type-card:active {
+  background: var(--raised);
 }
 
 .type-card:hover .type-card-icon {
+  color: #161a18;
+}
+
+.type-card:active .type-card-icon {
   background: #e6e4e1;
   color: #2c332f;
 }
 
-.type-card:active .type-card-icon,
+.type-card.is-selected {
+  box-shadow: var(--shadow-type), inset 0 0 0 2px #2c332f;
+}
+
 .type-card.is-selected .type-card-icon {
-  background: var(--accent);
-  color: #fff;
+  background: #e6e4e1;
+  color: #161a18;
 }
 
 .type-card-copy {
@@ -937,8 +945,9 @@ body {
       box-shadow 120ms ease-out;
   }
 
-  .type-card:hover {
-    background: var(--hover-wash);
+  .type-card:hover,
+  .type-card:active {
+    background: var(--raised);
     transform: none;
     box-shadow: var(--shadow-type);
   }
