@@ -761,6 +761,85 @@ body {
   color: var(--muted);
 }
 
+.scroll:has(> .tally-load) {
+  display: flex;
+  flex-direction: column;
+}
+
+.tally-load {
+  flex: 1;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 48px 0 64px;
+}
+
+.tally-load-mark {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #007a45;
+}
+
+.tally-load-bars {
+  width: 168px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.tally-load-bar {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: 999px;
+  background: #9dc9a4;
+  opacity: 1;
+  animation: tally-load-pulse 1.4s ease-in-out infinite;
+}
+
+.tally-load-bar:nth-child(2) {
+  width: 74%;
+  animation-delay: 0.18s;
+}
+
+.tally-load-bar:nth-child(3) {
+  width: 48%;
+  animation-delay: 0.36s;
+}
+
+@keyframes tally-load-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.tally-share {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.tally-share .share-note,
+.tally-share .manual-message {
+  margin-bottom: 0;
+}
+
+.tally-share + .danger {
+  margin-top: 12px;
+}
+
 .text-link {
   margin-top: 8px;
   min-height: 56px;
@@ -1360,6 +1439,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .press,
   .nav-home,
   .bar-fill,
+  .tally-load-bar,
   .cta,
   .type-card,
   .bet-card,
