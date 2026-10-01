@@ -96,7 +96,7 @@ export function formatSms({ name, question, choices, stake, url }) {
   const choiceText = (choices || []).filter(Boolean).join(' / ');
   const stakeText = String(stake || '').trim();
   const stakeClause = stakeText ? ` — ${stakeText}` : '';
-  return `${who}: ${q}? ${choiceText}${stakeClause}. Vote: ${url}`;
+  return `${who}: ${q}? ${choiceText}${stakeClause}. Vote here: ${url}`;
 }
 
 export function parseCloses(value) {

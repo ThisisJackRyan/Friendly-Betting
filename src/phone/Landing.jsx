@@ -56,7 +56,7 @@ const Landing = ({ quiet = false }) => {
       <div className="landing-copy">
         <p className="wordmark landing-mark">Friendly</p>
         <h1 className="landing-title">Bet with friends by text</h1>
-        <p className="landing-sub">Create a wager, text the link, vote once — no app.</p>
+        <p className="landing-sub">Text a link. Friends tap once. No app.</p>
       </div>
       <Link className="cta press landing-cta" href="/new" onClick={onStart}>
         Start a bet

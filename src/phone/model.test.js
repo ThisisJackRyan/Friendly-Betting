@@ -7,7 +7,7 @@ test('formats a two-line-or-less text and drops an empty stake', () => {
     choices: ['Yes', 'No'],
     stake: '',
     url: 'https://example.com/b/abc',
-  })).toBe('Maya: Who is late? Yes / No. Vote: https://example.com/b/abc');
+  })).toBe('Maya: Who is late? Yes / No. Vote here: https://example.com/b/abc');
 
   expect(formatSms({
     name: 'Maya',
@@ -15,7 +15,15 @@ test('formats a two-line-or-less text and drops an empty stake', () => {
     choices: ['Over 3.5', 'Under 3.5'],
     stake: 'a coffee',
     url: 'https://example.com/b/abc',
-  })).toBe('Maya: Who is late? Over 3.5 / Under 3.5 — a coffee. Vote: https://example.com/b/abc');
+  })).toBe('Maya: Who is late? Over 3.5 / Under 3.5 — a coffee. Vote here: https://example.com/b/abc');
+
+  expect(formatSms({
+    name: 'Jack',
+    question: 'Who shows up last?',
+    choices: ['Yes', 'No'],
+    stake: 'Pizza',
+    url: 'https://example.com/b/abc',
+  })).toBe('Jack: Who shows up last? Yes / No — Pizza. Vote here: https://example.com/b/abc');
 });
 
 test('builds all three bet types', () => {

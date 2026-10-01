@@ -189,7 +189,7 @@ test('Text friends saves once and keeps the vote link without a second button', 
   finishSave('abc123');
 
   expect(await screen.findByRole('link', { name: /\/b\/abc123/ })).toBeInTheDocument();
-  expect(screen.getByText('Message copied. Paste it into a text.')).toBeInTheDocument();
+  expect(screen.getByText('Copied — paste into a text.')).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: /text friends/i })).toHaveLength(1);
   expect(saveBet).toHaveBeenCalledTimes(1);
   expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
@@ -199,7 +199,7 @@ test('Text friends saves once and keeps the vote link without a second button', 
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Sam: Who is late? Yes / No — a coffee. Vote: http://localhost/b/abc123',
+    'Sam: Who is late? Yes / No — a coffee. Vote here: http://localhost/b/abc123',
   );
 });
 
@@ -212,7 +212,7 @@ test('over-under still shares the same short vote text', async () => {
   expect(screen.getByText('Over 13.5 / Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Sam: Rolls? Over 13.5 / Under 13.5. Vote: http://localhost/b/abc123',
+    'Sam: Rolls? Over 13.5 / Under 13.5. Vote here: http://localhost/b/abc123',
   );
 });
 
