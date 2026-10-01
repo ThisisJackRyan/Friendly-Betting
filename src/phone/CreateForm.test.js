@@ -4,6 +4,8 @@ import AppShell from './AppShell';
 import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
+import { useIdentity } from './identity';
+import { confirmPhoneCode, sendPhoneCode } from './phoneAuth';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 
@@ -14,8 +16,25 @@ jest.mock('./api', () => ({
   saveBet: jest.fn(),
 }));
 
+jest.mock('./phoneAuth', () => ({
+  sendPhoneCode: jest.fn(),
+  confirmPhoneCode: jest.fn(),
+}));
+
+const phoneCreator = {
+  uid: 'user-1',
+  email: 'sam@example.com',
+  phoneNumber: '+15551234567',
+  providerData: [{ providerId: 'phone', phoneNumber: '+15551234567' }],
+};
+
 jest.mock('./identity', () => ({
-  useIdentity: () => ({ uid: 'user-1', email: 'sam@example.com' }),
+  useIdentity: jest.fn(() => ({
+    uid: 'user-1',
+    email: 'sam@example.com',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone', phoneNumber: '+15551234567' }],
+  })),
   creatorName: () => 'Sam',
   rememberName: () => {},
   savedName: () => '',
@@ -32,10 +51,13 @@ beforeEach(() => {
   navigation.push.mockReset();
   navigation.replace.mockReset();
   navigation.back.mockReset();
+  useIdentity.mockReturnValue(phoneCreator);
   saveBet.mockReset();
   saveBet.mockResolvedValue('abc123');
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
+  sendPhoneCode.mockReset();
+  confirmPhoneCode.mockReset();
 });
 
 function renderForm(path) {
@@ -196,6 +218,7 @@ test('Text friends saves once and keeps the vote link without a second button', 
     type: 'money-line',
     question: 'Who is late',
     stake: 'a coffee',
+    createdByID: 'user-1',
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
@@ -285,6 +308,114 @@ test('reduced motion skips the home slide', async () => {
     if (previous) window.matchMedia = previous;
     else delete window.matchMedia;
   }
+});
+
+test('a signed-in phone creator skips the phone gate after stake', async () => {
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  expect(screen.queryByText("We'll text a code.")).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByText("We'll text a code.")).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  expect(sendPhoneCode).not.toHaveBeenCalled();
+  expect(saveBet).not.toHaveBeenCalled();
+});
+
+test('after stake, an anonymous creator verifies a phone before texting friends', async () => {
+  useIdentity.mockReturnValue({ uid: 'anon-1', isAnonymous: true, providerData: [] });
+  let finishSend;
+  let finishVerify;
+  sendPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    finishSend = () => resolve('vid-1');
+  }));
+  confirmPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    finishVerify = () => resolve({
+      uid: 'anon-1',
+      phoneNumber: '+14155551212',
+      providerData: [{ providerId: 'phone', phoneNumber: '+14155551212' }],
+    });
+  }));
+
+  renderForm('/new/money-line');
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  await goToStake('Who is late');
+  expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+  expect(screen.queryByText("We'll text a code.")).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  expect(saveBet).not.toHaveBeenCalled();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.getByText("We'll text a code.")).toBeInTheDocument();
+  expect(screen.getByText('Friends still vote with one tap — no account.')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Text friends' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  const send = screen.getByRole('button', { name: 'Send code' });
+  expect(send).toHaveClass('cta');
+  expect(screen.getByLabelText('Phone number')).toHaveValue('+1 ');
+
+  fireEvent.change(screen.getByLabelText('Phone number'), {
+    target: { value: '4155551212' },
+  });
+  expect(screen.getByLabelText('Phone number')).toHaveValue('+1 (415) 555-1212');
+  await userEvent.click(send);
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  finishSend();
+
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+  expect(screen.getByText('Code sent to •••1212.')).toBeInTheDocument();
+  expect(sendPhoneCode).toHaveBeenCalledWith('+14155551212', expect.any(HTMLDivElement));
+  expect(document.querySelector('.auth-switch')).toHaveTextContent('Resend · Change number');
+  const boxes = screen.getAllByLabelText(/digit \d of 6/i);
+  expect(boxes).toHaveLength(6);
+  await userEvent.type(boxes[0], '1');
+  expect(boxes[1]).toHaveFocus();
+  await userEvent.type(boxes[1], '2');
+  await userEvent.type(boxes[2], '3');
+  await userEvent.type(boxes[3], '4');
+  await userEvent.type(boxes[4], '5');
+  await userEvent.type(boxes[5], '6');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Verify' }));
+  expect(screen.getByRole('button', { name: 'Verifying…' })).toBeDisabled();
+  finishVerify();
+
+  expect(await screen.findByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.queryByText("We'll text a code.")).not.toBeInTheDocument();
+  });
+  await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
+  expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
+    createdByID: 'anon-1',
+    question: 'Who is late',
+  }));
+  expect(confirmPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+});
+
+test('resend and change number stay on the phone gate', async () => {
+  useIdentity.mockReturnValue({ uid: 'anon-1', isAnonymous: true, providerData: [] });
+  sendPhoneCode.mockResolvedValue('vid-1');
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.change(screen.getByLabelText('Phone number'), {
+    target: { value: '4155551212' },
+  });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(await screen.findByText('Code sent to •••1212.')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Resend' }));
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('Code sent to •••1212.')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Change number' }));
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Phone number')).toHaveValue('+1 (415) 555-1212');
+  expect(screen.queryByText('Code sent to •••1212.')).not.toBeInTheDocument();
+  expect(saveBet).not.toHaveBeenCalled();
 });
 
 test('an unknown create route leaves the walkthrough', () => {
