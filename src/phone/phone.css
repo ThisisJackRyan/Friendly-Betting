@@ -342,6 +342,34 @@ body {
     var(--focus);
 }
 
+.create-flow .field-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.create-flow .field-label .optional {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.create-flow .field input,
+.create-flow .field textarea {
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-card);
+}
+
+.create-flow .field input:focus,
+.create-flow .field textarea:focus {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    var(--focus),
+    var(--shadow-card);
+}
+
 .option-row {
   display: flex;
   align-items: flex-end;
@@ -509,6 +537,15 @@ body {
   color: var(--muted);
 }
 
+.phone .recap-eyebrow {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .recap-card {
   display: flex;
   flex-direction: column;
@@ -522,13 +559,14 @@ body {
 .recap-question {
   font-size: 22px;
   line-height: 1.25;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .recap-choices {
   font-size: 16px;
   line-height: 1.35;
+  color: var(--muted);
 }
 
 .cta[aria-disabled='true'] {

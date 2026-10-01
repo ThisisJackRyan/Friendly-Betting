@@ -75,7 +75,7 @@ test('my bets is a tab with an empty state', () => {
   );
   expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
-  expect(screen.getByText(/create one and text it to friends/i)).toBeInTheDocument();
+  expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
   const nav = screen.getByRole('navigation', { name: 'Primary' });
   expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');

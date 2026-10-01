@@ -42,7 +42,7 @@ const MyBets = () => {
             <FiPlus size={22} />
           </span>
           <p className="empty-title">No bets yet</p>
-          <p className="empty-copy">Create one and text it to friends.</p>
+          <p className="empty-copy">Start one and text the link.</p>
           <Link className="secondary press" href="/new">Create a bet</Link>
         </div>
       )}
