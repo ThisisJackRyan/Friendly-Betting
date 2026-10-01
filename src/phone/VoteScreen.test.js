@@ -85,7 +85,13 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
   expect(screen.getByRole('link', { name: 'Tally' })).toBeInTheDocument();
 });
 
-const textFriendsMessage = 'Maya: Who is late? Yes / No — a coffee. Vote here: http://localhost/b/abc123';
+const textFriendsMessage = [
+  'Who is late?',
+  '1. Yes',
+  '2. No',
+  'a coffee',
+  'Vote here: http://localhost/b/abc123',
+].join('\n');
 
 test('the creator can close and settle from the tally', async () => {
   renderAt('/t/abc123', <TallyScreen />);
@@ -117,7 +123,9 @@ test('a manual share shows the message under the tally', async () => {
   renderAt('/t/abc123', <TallyScreen />);
   await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
   expect(await screen.findByText('Copy the message below.')).toBeInTheDocument();
-  expect(screen.getByText(textFriendsMessage)).toHaveClass('manual-message');
+  expect(document.querySelector('.manual-message')).toHaveTextContent(textFriendsMessage, {
+    normalizeWhitespace: false,
+  });
 });
 
 test('tally shows the Friendly loader instead of a loading line', () => {
