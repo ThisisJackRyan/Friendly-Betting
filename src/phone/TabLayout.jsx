@@ -7,6 +7,8 @@ const TabLayout = ({ children }) => {
   const pathname = usePathname() || '/';
   useIdentity();
 
+  if (pathname === '/') return children;
+
   return (
     <div className="phone">
       <div className="scroll screen-fade" key={pathname}>

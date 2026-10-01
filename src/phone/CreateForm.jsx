@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
+import { useCreateChrome } from './createChrome';
 import { creatorName, useIdentity } from './identity';
 import {
   buildDraft,
   choiceLabels,
+  formatCloses,
   formatSms,
   friendlyError,
   parseCloses,
@@ -16,6 +18,7 @@ import {
 } from './model';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
+import TypePicker from './TypePicker';
 
 const SHARE_NOTE = {
   shared: 'Share sheet opened.',
@@ -25,13 +28,67 @@ const SHARE_NOTE = {
   manual: 'Copy the message below.',
 };
 
+const COPY = {
+  newBet: 'New bet',
+  stake: 'Stake',
+  textFriendsTitle: 'Text friends',
+  stakeHint: 'Optional \u2014 skip if it\u2019s just for fun.',
+  stakePlaceholder: 'Pizza, $5, bragging rights',
+  questionPlaceholder: 'Who shows up last?',
+  linePlaceholder: '13.5',
+  propMaya: 'Maya',
+  propSam: 'Sam',
+  next: 'Next',
+  textFriends: 'Text friends',
+  sending: 'Sending\u2026',
+};
+
+const SLIDE_MS = 180;
+
+function draftInput(state) {
+  return {
+    question: state.question,
+    stake: state.stake,
+    closesAt: parseCloses(state.closes),
+    optionA: state.optionA,
+    optionB: state.optionB,
+    line: state.line,
+    overLabel: state.overLabel,
+    underLabel: state.underLabel,
+    propOptions: state.propOptions,
+  };
+}
+
+function Recap({ fields }) {
+  const choices = choiceLabels(fields);
+  return (
+    <div className="recap-card">
+      <p className="recap-question">{fields.question}</p>
+      {choices.length > 0 && (
+        <p className="recap-choices">{choices.join(' / ')}</p>
+      )}
+      {fields.stake ? <p className="stake-line">{fields.stake}</p> : null}
+      {fields.closesAt ? (
+        <p className="closes">Closes {formatCloses(fields.closesAt)}</p>
+      ) : null}
+    </div>
+  );
+}
+
 const CreateForm = () => {
   const params = useParams();
-  const type = params?.type;
   const router = useRouter();
   const user = useIdentity();
-  const meta = TYPE_META[type];
+  const { setHidePhoneTabs } = useCreateChrome();
+  const rawType = params?.type;
+  const routeType = TYPE_META[rawType] ? rawType : null;
+  const invalidRoute = Boolean(rawType) && !routeType;
 
+  const [step, setStep] = useState(routeType ? 2 : 1);
+  const [leaving, setLeaving] = useState(null);
+  const [motion, setMotion] = useState('forward');
+  const [hasMoved, setHasMoved] = useState(false);
+  const [type, setType] = useState(routeType);
   const [question, setQuestion] = useState('');
   const [stake, setStake] = useState('');
   const [closes, setCloses] = useState('');
@@ -47,45 +104,100 @@ const CreateForm = () => {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!meta) router.replace('/');
-  }, [meta, router]);
+  const meta = TYPE_META[type] || null;
+  const input = draftInput({
+    question,
+    stake,
+    closes,
+    optionA,
+    optionB,
+    line,
+    overLabel,
+    underLabel,
+    propOptions,
+  });
+  const draft = type ? buildDraft(type, input) : { ok: false, error: 'Pick a bet type.' };
 
   useEffect(() => {
-    if (meta) document.title = `${meta.label} · Friendly`;
-  }, [meta]);
+    if (invalidRoute) router.replace('/');
+  }, [invalidRoute, router]);
 
-  if (!meta) return null;
+  useEffect(() => {
+    const titles = {
+      1: COPY.newBet,
+      2: meta?.label || COPY.newBet,
+      3: COPY.stake,
+      4: COPY.textFriendsTitle,
+    };
+    document.title = `${titles[step] || COPY.newBet} · Friendly`;
+  }, [step, meta]);
+
+  useEffect(() => {
+    setHidePhoneTabs(step > 1 || leaving != null);
+    return () => setHidePhoneTabs(false);
+  }, [step, leaving, setHidePhoneTabs]);
+
+  useEffect(() => {
+    if (leaving == null) return undefined;
+    const id = window.setTimeout(() => setLeaving(null), SLIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [leaving, step]);
+
+  const go = (next) => {
+    if (next === step || next < 1 || next > 4) return;
+    setMotion(next > step ? 'forward' : 'back');
+    setLeaving(step);
+    setHasMoved(true);
+    setError('');
+    setStep(next);
+  };
+
+  const pickType = (id) => {
+    setType(id);
+    setMotion('forward');
+    setLeaving(step);
+    setHasMoved(true);
+    setError('');
+    setStep(2);
+  };
+
+  const onBack = (stepNumber) => {
+    if (stepNumber <= 1) {
+      router.push('/bets');
+      return;
+    }
+    go(stepNumber - 1);
+  };
 
   const updateProp = (index, value) => {
+    setError('');
     setPropOptions((current) => current.map((item, i) => (i === index ? value : item)));
   };
 
   const addProp = () => {
+    setError('');
     setPropOptions((current) => (current.length >= 4 ? current : [...current, '']));
   };
 
   const removeProp = (index) => {
+    setError('');
     setPropOptions((current) => (
       current.length <= 2 ? current : current.filter((_, i) => i !== index)
     ));
   };
 
-  const onSubmit = async (event) => {
-    event.preventDefault();
-    const draft = buildDraft(type, {
-      question,
-      stake,
-      closesAt: parseCloses(closes),
-      optionA,
-      optionB,
-      line,
-      overLabel,
-      underLabel,
-      propOptions,
-    });
+  const onDetailsNext = () => {
     if (!draft.ok) {
       setError(draft.error);
+      return;
+    }
+    go(3);
+  };
+
+  const onTextFriends = async () => {
+    const ready = buildDraft(type, input);
+    if (!ready.ok) {
+      setError(ready.error);
       return;
     }
     if (!user) {
@@ -94,7 +206,7 @@ const CreateForm = () => {
     }
 
     const fields = {
-      ...draft.fields,
+      ...ready.fields,
       createdByID: user.uid,
       createdByName: creatorName(user),
     };
@@ -122,155 +234,277 @@ const CreateForm = () => {
     }
   };
 
-  return (
-    <div className="phone">
-      <form className="form-fill" onSubmit={onSubmit}>
-        <div className="screen-push form-fill">
-          <div className="nav-row">
-            <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.push('/')}>
-              <FiChevronLeft size={28} />
-            </button>
-            <h1 className="nav-title">{meta.label}</h1>
-          </div>
-          <div className="scroll">
-            <label className="field" htmlFor="question">
-              <span className="field-label">Question <span className="req">*</span></span>
-              <textarea
-                id="question"
-                rows={3}
-                aria-required="true"
-                value={question}
-                placeholder="Who shows up last?"
-                onChange={(event) => setQuestion(event.target.value)}
-              />
-            </label>
+  const titleFor = (stepNumber) => {
+    if (stepNumber === 2) return meta?.label || COPY.newBet;
+    if (stepNumber === 3) return COPY.stake;
+    if (stepNumber === 4) return COPY.textFriendsTitle;
+    return COPY.newBet;
+  };
 
-            {type === 'money-line' && (
-              <div className="field-pair">
-                <label className="field" htmlFor="option-a">
-                  <span className="field-label">Option A</span>
-                  <input
-                    id="option-a"
-                    value={optionA}
-                    onChange={(event) => setOptionA(event.target.value)}
-                  />
-                </label>
-                <label className="field" htmlFor="option-b">
-                  <span className="field-label">Option B</span>
-                  <input
-                    id="option-b"
-                    value={optionB}
-                    onChange={(event) => setOptionB(event.target.value)}
-                  />
-                </label>
-              </div>
-            )}
+  const renderStep = (stepNumber) => {
+    const Title = stepNumber === 1 ? 'p' : 'h1';
+    let body = null;
+    let cta = null;
 
-            {type === 'over-under' && (
-              <>
-                <label className="field" htmlFor="line">
-                  <span className="field-label">Line</span>
-                  <input
-                    id="line"
-                    inputMode="decimal"
-                    value={line}
-                    placeholder="13.5"
-                    onChange={(event) => setLine(event.target.value)}
-                  />
-                </label>
-                <div className="field-pair">
-                  <label className="field" htmlFor="over-label">
-                    <span className="field-label">Over</span>
-                    <input
-                      id="over-label"
-                      value={overLabel}
-                      onChange={(event) => setOverLabel(event.target.value)}
-                    />
-                  </label>
-                  <label className="field" htmlFor="under-label">
-                    <span className="field-label">Under</span>
-                    <input
-                      id="under-label"
-                      value={underLabel}
-                      onChange={(event) => setUnderLabel(event.target.value)}
-                    />
-                  </label>
-                </div>
-              </>
-            )}
+    if (stepNumber === 1) {
+      body = <TypePicker onPick={pickType} />;
+    }
 
-            {type === 'prop' && (
-              <div className="prop-block">
-                {propOptions.map((value, index) => (
-                  <div className="option-row" key={`option-${index}`}>
-                    <label className="field grow" htmlFor={`prop-${index}`}>
-                      <span className="field-label">Option {index + 1}</span>
-                      <input
-                        id={`prop-${index}`}
-                        value={value}
-                        placeholder={index === 0 ? 'Maya' : 'Sam'}
-                        onChange={(event) => updateProp(index, event.target.value)}
-                      />
-                    </label>
-                    {propOptions.length > 2 && (
-                      <button
-                        type="button"
-                        className="icon-btn remove"
-                        aria-label={`Remove option ${index + 1}`}
-                        onClick={() => removeProp(index)}
-                      >
-                        <FiX size={22} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {propOptions.length < 4 && (
-                  <button type="button" className="secondary press" onClick={addProp}>
-                    Add option
-                  </button>
-                )}
-              </div>
-            )}
+    if (stepNumber === 2 && meta) {
+      body = (
+        <>
+          <label className="field" htmlFor="question">
+            <span className="field-label">Question <span className="req">*</span></span>
+            <textarea
+              id="question"
+              rows={3}
+              aria-required="true"
+              value={question}
+              placeholder={COPY.questionPlaceholder}
+              onChange={(event) => {
+                setError('');
+                setQuestion(event.target.value);
+              }}
+            />
+          </label>
 
-            <p className="section-label">Optional</p>
+          {type === 'money-line' && (
             <div className="field-pair">
-              <label className="field" htmlFor="stake">
-                <span className="field-label">Stake <span className="optional">optional</span></span>
+              <label className="field" htmlFor="option-a">
+                <span className="field-label">Option A</span>
                 <input
-                  id="stake"
-                  value={stake}
-                  placeholder="Pizza, $5, bragging rights"
-                  onChange={(event) => setStake(event.target.value)}
+                  id="option-a"
+                  value={optionA}
+                  onChange={(event) => {
+                    setError('');
+                    setOptionA(event.target.value);
+                  }}
                 />
               </label>
-
-              <label className="field" htmlFor="closes">
-                <span className="field-label">Closes <span className="optional">optional</span></span>
+              <label className="field" htmlFor="option-b">
+                <span className="field-label">Option B</span>
                 <input
-                  id="closes"
-                  type="datetime-local"
-                  value={closes}
-                  onChange={(event) => setCloses(event.target.value)}
+                  id="option-b"
+                  value={optionB}
+                  onChange={(event) => {
+                    setError('');
+                    setOptionB(event.target.value);
+                  }}
                 />
               </label>
             </div>
+          )}
 
-            {message && shareState === 'manual' && (
-              <p className="manual-message">{message}</p>
-            )}
-            {error && <p className="form-error" role="alert">{error}</p>}
+          {type === 'over-under' && (
+            <>
+              <label className="field" htmlFor="line">
+                <span className="field-label">Line <span className="req">*</span></span>
+                <input
+                  id="line"
+                  inputMode="decimal"
+                  value={line}
+                  placeholder={COPY.linePlaceholder}
+                  onChange={(event) => {
+                    setError('');
+                    setLine(event.target.value);
+                  }}
+                />
+              </label>
+              <div className="field-pair">
+                <label className="field" htmlFor="over-label">
+                  <span className="field-label">Over</span>
+                  <input
+                    id="over-label"
+                    value={overLabel}
+                    onChange={(event) => {
+                      setError('');
+                      setOverLabel(event.target.value);
+                    }}
+                  />
+                </label>
+                <label className="field" htmlFor="under-label">
+                  <span className="field-label">Under</span>
+                  <input
+                    id="under-label"
+                    value={underLabel}
+                    onChange={(event) => {
+                      setError('');
+                      setUnderLabel(event.target.value);
+                    }}
+                  />
+                </label>
+              </div>
+            </>
+          )}
+
+          {type === 'prop' && (
+            <div className="prop-block">
+              {propOptions.map((value, index) => (
+                <div className="option-row" key={`option-${index}`}>
+                  <label className="field grow" htmlFor={`prop-${index}`}>
+                    <span className="field-label">Option {index + 1}</span>
+                    <input
+                      id={`prop-${index}`}
+                      value={value}
+                      placeholder={index === 0 ? COPY.propMaya : COPY.propSam}
+                      onChange={(event) => updateProp(index, event.target.value)}
+                    />
+                  </label>
+                  {propOptions.length > 2 && (
+                    <button
+                      type="button"
+                      className="icon-btn remove"
+                      aria-label={`Remove option ${index + 1}`}
+                      onClick={() => removeProp(index)}
+                    >
+                      <FiX size={22} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {propOptions.length < 4 && (
+                <button type="button" className="secondary press" onClick={addProp}>
+                  Add option
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      );
+      cta = (
+        <button
+          type="button"
+          className="cta press"
+          aria-disabled={draft.ok ? undefined : true}
+          onClick={onDetailsNext}
+        >
+          {COPY.next}
+        </button>
+      );
+    }
+
+    if (stepNumber === 3) {
+      body = (
+        <>
+          <p className="field-hint">{COPY.stakeHint}</p>
+          <div className="field-pair">
+            <label className="field" htmlFor="stake">
+              <span className="field-label">Stake</span>
+              <input
+                id="stake"
+                value={stake}
+                placeholder={COPY.stakePlaceholder}
+                onChange={(event) => {
+                  setError('');
+                  setStake(event.target.value);
+                }}
+              />
+            </label>
+            <label className="field" htmlFor="closes">
+              <span className="field-label">Closes <span className="optional">optional</span></span>
+              <input
+                id="closes"
+                type="datetime-local"
+                value={closes}
+                onChange={(event) => {
+                  setError('');
+                  setCloses(event.target.value);
+                }}
+              />
+            </label>
           </div>
-        </div>
-        <div className="cta-bar">
+        </>
+      );
+      cta = (
+        <button type="button" className="cta press" onClick={() => go(4)}>
+          {COPY.next}
+        </button>
+      );
+    }
+
+    if (stepNumber === 4) {
+      body = (
+        <>
+          {draft.ok && <Recap fields={draft.fields} />}
+          {message && shareState === 'manual' && (
+            <p className="manual-message">{message}</p>
+          )}
+        </>
+      );
+      cta = (
+        <>
           {code && (
             <Link className="vote-link" href={`/b/${code}`}>{voteUrl(code)}</Link>
           )}
           {shareState && <p className="share-note">{SHARE_NOTE[shareState]}</p>}
-          <button className="cta press" type="submit" disabled={saving}>
-            {saving ? 'Sending…' : 'Text friends'}
+          <button
+            className="cta press"
+            type="button"
+            disabled={saving}
+            onClick={onTextFriends}
+          >
+            {saving ? COPY.sending : COPY.textFriends}
           </button>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="nav-row">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Back"
+            onClick={() => onBack(stepNumber)}
+          >
+            <FiChevronLeft size={28} />
+          </button>
+          <Title className="nav-title">{titleFor(stepNumber)}</Title>
         </div>
-      </form>
+        <div className="scroll">
+          {body}
+          {error && stepNumber === step ? (
+            <p className="form-error" role="alert">{error}</p>
+          ) : null}
+        </div>
+        {cta ? <div className="cta-bar">{cta}</div> : null}
+      </>
+    );
+  };
+
+  if (invalidRoute) return null;
+
+  const paneClass = (stepNumber, active) => {
+    const names = ['create-pane', 'form-fill'];
+    if (stepNumber === 1) names.push('create-step-pick');
+    if (!active) names.push('is-leaving', `slide-${motion}`);
+    else if (hasMoved) names.push('is-entering', `slide-${motion}`);
+    return names.join(' ');
+  };
+
+  return (
+    <div className="phone create-flow">
+      <div className="create-viewport">
+        {leaving != null && (
+          <div
+            key={`leave-${leaving}`}
+            className={paneClass(leaving, false)}
+            aria-hidden="true"
+            inert
+            data-step={leaving}
+          >
+            {renderStep(leaving)}
+          </div>
+        )}
+        <div
+          key={step}
+          className={paneClass(step, true)}
+          data-step={step}
+        >
+          {renderStep(step)}
+        </div>
+      </div>
     </div>
   );
 };

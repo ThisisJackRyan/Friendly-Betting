@@ -478,6 +478,44 @@ body {
   margin-top: 8px;
 }
 
+.phone .field-hint {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.recap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: var(--radius-card);
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+}
+
+.recap-question {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.recap-choices {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.cta[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cta[aria-disabled='true']:active {
+  transform: none;
+}
+
 .tabbar {
   flex: none;
   display: flex;
@@ -770,6 +808,61 @@ body {
 @keyframes fade-tab {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+.create-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.create-pane.is-leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.create-pane.is-entering.slide-forward {
+  animation: create-in-forward 180ms ease-out;
+}
+
+.create-pane.is-leaving.slide-forward {
+  animation: create-out-forward 180ms ease-out;
+}
+
+.create-pane.is-entering.slide-back {
+  animation: create-in-back 180ms ease-out;
+}
+
+.create-pane.is-leaving.slide-back {
+  animation: create-out-back 180ms ease-out;
+}
+
+@keyframes create-in-forward {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes create-out-forward {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes create-in-back {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes create-out-back {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.create-flow .create-step-pick h1.screen-title {
+  margin-top: 12px;
 }
 
 .cta:focus-visible {
@@ -1125,5 +1218,16 @@ body {
   .bet-card:hover,
   .choice:hover {
     transform: none;
+  }
+
+  .create-pane.is-entering.slide-forward,
+  .create-pane.is-entering.slide-back {
+    animation: fade-tab 150ms ease-out;
+  }
+
+  .create-pane.is-leaving.slide-forward,
+  .create-pane.is-leaving.slide-back {
+    animation: none;
+    display: none;
   }
 }

@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FiList, FiPlus } from 'react-icons/fi';
+import { useCreateChrome } from './createChrome';
 
 const AppShell = ({ children }) => {
   const pathname = usePathname() || '/';
-  const phoneTabs = pathname === '/' || pathname === '/bets';
+  const { hidePhoneTabs } = useCreateChrome();
+  const phoneTabs = pathname === '/bets' || (pathname === '/' && !hidePhoneTabs);
   const createActive = pathname === '/' || pathname.startsWith('/new');
   const betsActive = pathname === '/bets' || pathname.startsWith('/bets/');
 
