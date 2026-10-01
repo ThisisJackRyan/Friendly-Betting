@@ -1,13 +1,13 @@
 import { buildDraft, formatSms, statusLabel, tallyCounts } from './model';
 
-test('formats a two-line-or-less text and drops an empty stake', () => {
+test('formats a multiline text and drops an empty stake', () => {
   expect(formatSms({
     name: 'Maya',
     question: 'Who is late?',
     choices: ['Yes', 'No'],
     stake: '',
     url: 'https://example.com/b/abc',
-  })).toBe('Maya: Who is late? Yes / No. Vote here: https://example.com/b/abc');
+  })).toBe('Who is late?\nYes / No\nVote here: https://example.com/b/abc');
 
   expect(formatSms({
     name: 'Maya',
@@ -15,15 +15,24 @@ test('formats a two-line-or-less text and drops an empty stake', () => {
     choices: ['Over 3.5', 'Under 3.5'],
     stake: 'a coffee',
     url: 'https://example.com/b/abc',
-  })).toBe('Maya: Who is late? Over 3.5 / Under 3.5 — a coffee. Vote here: https://example.com/b/abc');
+  })).toBe('Who is late?\nOver 3.5 / Under 3.5\na coffee\nVote here: https://example.com/b/abc');
 
   expect(formatSms({
     name: 'Jack',
+    question: 'Who will succeed the most this winter arc!',
+    choices: ['Jack', 'Mike', 'Benton', 'Gage'],
+    stake: 'Winner gets the Best Body!',
+    url: 'https://example.com/b/abc',
+  })).toBe(
+    'Who will succeed the most this winter arc!?\nJack / Mike / Benton / Gage\nWinner gets the Best Body!\nVote here: https://example.com/b/abc',
+  );
+
+  expect(formatSms({
     question: 'Who shows up last?',
     choices: ['Yes', 'No'],
-    stake: 'Pizza',
+    stake: '   ',
     url: 'https://example.com/b/abc',
-  })).toBe('Jack: Who shows up last? Yes / No — Pizza. Vote here: https://example.com/b/abc');
+  })).toBe('Who shows up last?\nYes / No\nVote here: https://example.com/b/abc');
 });
 
 test('builds all three bet types', () => {

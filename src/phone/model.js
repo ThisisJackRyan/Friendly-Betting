@@ -90,13 +90,14 @@ export function choiceLabels(bet) {
   return (bet?.options || []).map((option) => optionVoteLabel(bet, option));
 }
 
-export function formatSms({ name, question, choices, stake, url }) {
-  const who = (name || '').trim() || 'Friend';
+export function formatSms({ question, choices, stake, url }) {
   const q = String(question || '').trim().replace(/\?+$/, '');
   const choiceText = (choices || []).filter(Boolean).join(' / ');
   const stakeText = String(stake || '').trim();
-  const stakeClause = stakeText ? ` — ${stakeText}` : '';
-  return `${who}: ${q}? ${choiceText}${stakeClause}. Vote here: ${url}`;
+  const lines = [`${q}?`, choiceText];
+  if (stakeText) lines.push(stakeText);
+  lines.push(`Vote here: ${url}`);
+  return lines.join('\n');
 }
 
 export function parseCloses(value) {
