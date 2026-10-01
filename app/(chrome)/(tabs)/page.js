@@ -1,9 +1,10 @@
-import CreateForm from '../../../src/phone/CreateForm';
+import Landing from '../../../src/phone/Landing';
 
 export const metadata = {
-  title: 'New bet · Friendly',
+  title: 'Friendly',
+  description: 'Create a wager, text the link, vote once — no app.',
 };
 
 export default function HomePage() {
-  return <CreateForm />;
+  return <Landing />;
 }

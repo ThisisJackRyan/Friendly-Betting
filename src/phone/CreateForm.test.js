@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
 import CreateForm from './CreateForm';
-import TabLayout from './TabLayout';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
 import { shareMessage } from './share';
@@ -205,14 +204,12 @@ test('over-under still shares the same short vote text', async () => {
 });
 
 test('phone tabs hide after step 1 and return when the walkthrough is back on pick type', async () => {
-  navigation.pathname = '/';
+  navigation.pathname = '/new';
   navigation.params = {};
   render(
     <CreateChromeProvider>
       <AppShell>
-        <TabLayout>
-          <CreateForm />
-        </TabLayout>
+        <CreateForm />
       </AppShell>
     </CreateChromeProvider>,
   );
@@ -229,5 +226,5 @@ test('an unknown create route leaves the walkthrough', () => {
   navigation.pathname = '/new/nope';
   navigation.params = { type: 'nope' };
   render(<CreateForm />);
-  expect(navigation.replace).toHaveBeenCalledWith('/');
+  expect(navigation.replace).toHaveBeenCalledWith('/new');
 });

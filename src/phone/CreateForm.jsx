@@ -119,7 +119,7 @@ const CreateForm = () => {
   const draft = type ? buildDraft(type, input) : { ok: false, error: 'Pick a bet type.' };
 
   useEffect(() => {
-    if (invalidRoute) router.replace('/');
+    if (invalidRoute) router.replace('/new');
   }, [invalidRoute, router]);
 
   useEffect(() => {

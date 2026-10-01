@@ -43,7 +43,7 @@ const MyBets = () => {
           </span>
           <p className="empty-title">No bets yet</p>
           <p className="empty-copy">Create one and text it to friends.</p>
-          <Link className="secondary press" href="/">Create a bet</Link>
+          <Link className="secondary press" href="/new">Create a bet</Link>
         </div>
       )}
       <div className="bet-list">
