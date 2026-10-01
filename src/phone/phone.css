@@ -28,7 +28,8 @@
     0 16px 36px rgba(20, 36, 28, 0.16),
     inset 0 0 0 1px rgba(20, 36, 28, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
-  --shadow-primary: 0 1px 0 rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 122, 69, 0.28);
+  --shadow-primary: 0 1px 2px rgba(20, 36, 28, 0.16);
+  --hover-wash: #f1efec;
   --shadow-panel:
     0 0 0 1px rgba(20, 36, 28, 0.06),
     0 22px 56px rgba(20, 36, 28, 0.12);
@@ -197,9 +198,17 @@ body {
   color: #2c332f;
 }
 
-.type-card:hover .type-card-icon,
+.type-card:hover {
+  background: var(--hover-wash);
+}
+
+.type-card:hover .type-card-icon {
+  background: #e6e4e1;
+  color: #2c332f;
+}
+
 .type-card:active .type-card-icon,
-.type-card:focus-visible .type-card-icon {
+.type-card.is-selected .type-card-icon {
   background: var(--accent);
   color: #fff;
 }
@@ -348,7 +357,7 @@ body {
 
 .cta-bar {
   flex: none;
-  padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   background: var(--surface);
   box-shadow: var(--shadow-cta);
 }
@@ -367,16 +376,23 @@ body {
 }
 
 .cta {
+  height: 56px;
+  min-height: 56px;
+  padding: 0 18px;
+  box-sizing: border-box;
+  border-radius: 12px;
   background: var(--accent);
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
   box-shadow: var(--shadow-primary);
 }
 
-.cta:hover:not(:disabled) {
-  background: var(--accent-press);
+.cta:hover:not(:disabled),
+.cta:active:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
 }
 
 .cta:disabled,
@@ -880,7 +896,10 @@ body {
     box-shadow: none;
   }
 
-  .app-nav .tab:hover,
+  .app-nav .tab:hover {
+    background: var(--hover-wash);
+  }
+
   .app-nav .tab.active:hover {
     background: var(--wash);
   }
@@ -919,16 +938,16 @@ body {
   }
 
   .type-card:hover {
-    background: var(--raised);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-type-hover);
+    background: var(--hover-wash);
+    transform: none;
+    box-shadow: var(--shadow-type);
   }
 
   .bet-card:hover,
   .choice:hover {
-    background: var(--wash);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-card-hover);
+    background: var(--hover-wash);
+    transform: none;
+    box-shadow: var(--shadow-card);
   }
 
   .type-card:active,
@@ -938,7 +957,7 @@ body {
   }
 
   .secondary:hover {
-    background: var(--wash);
+    background: var(--hover-wash);
   }
 
   .bet-list {
@@ -996,6 +1015,12 @@ body {
   .app-shell .cta-bar {
     padding-left: 24px;
     padding-right: 24px;
+  }
+
+  .app-shell .cta {
+    width: fit-content;
+    min-width: 168px;
+    padding: 0 22px;
   }
 
   .focus-column {
