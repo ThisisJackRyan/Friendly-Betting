@@ -261,7 +261,6 @@ const CreateForm = () => {
     try {
       const id = await saveBet(code, fields);
       const text = formatSms({
-        name: fields.createdByName,
         question: fields.question,
         choices: choiceLabels(fields),
         stake: fields.stake,

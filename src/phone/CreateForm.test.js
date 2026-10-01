@@ -199,7 +199,7 @@ test('Text friends saves once and keeps the vote link without a second button', 
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Sam: Who is late? Yes / No — a coffee. Vote here: http://localhost/b/abc123',
+    'Who is late?\n1. Yes\n2. No\na coffee\nVote here: http://localhost/b/abc123',
   );
 });
 
@@ -212,7 +212,7 @@ test('over-under still shares the same short vote text', async () => {
   expect(screen.getByText('Over 13.5 / Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Sam: Rolls? Over 13.5 / Under 13.5. Vote here: http://localhost/b/abc123',
+    'Rolls?\n1. Over 13.5\n2. Under 13.5\nVote here: http://localhost/b/abc123',
   );
 });
 
