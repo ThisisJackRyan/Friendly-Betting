@@ -92,9 +92,11 @@ export function choiceLabels(bet) {
 
 export function formatSms({ question, choices, stake, url }) {
   const q = String(question || '').trim().replace(/\?+$/, '');
-  const choiceText = (choices || []).filter(Boolean).join(' / ');
+  const choiceLines = (choices || [])
+    .filter(Boolean)
+    .map((label, index) => `${index + 1}. ${label}`);
   const stakeText = String(stake || '').trim();
-  const lines = [`${q}?`, choiceText];
+  const lines = [`${q}?`, ...choiceLines];
   if (stakeText) lines.push(stakeText);
   lines.push(`Vote here: ${url}`);
   return lines.join('\n');

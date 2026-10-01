@@ -7,7 +7,7 @@ test('formats a multiline text and drops an empty stake', () => {
     choices: ['Yes', 'No'],
     stake: '',
     url: 'https://example.com/b/abc',
-  })).toBe('Who is late?\nYes / No\nVote here: https://example.com/b/abc');
+  })).toBe('Who is late?\n1. Yes\n2. No\nVote here: https://example.com/b/abc');
 
   expect(formatSms({
     name: 'Maya',
@@ -15,7 +15,7 @@ test('formats a multiline text and drops an empty stake', () => {
     choices: ['Over 3.5', 'Under 3.5'],
     stake: 'a coffee',
     url: 'https://example.com/b/abc',
-  })).toBe('Who is late?\nOver 3.5 / Under 3.5\na coffee\nVote here: https://example.com/b/abc');
+  })).toBe('Who is late?\n1. Over 3.5\n2. Under 3.5\na coffee\nVote here: https://example.com/b/abc');
 
   expect(formatSms({
     name: 'Jack',
@@ -24,7 +24,7 @@ test('formats a multiline text and drops an empty stake', () => {
     stake: 'Winner gets the Best Body!',
     url: 'https://example.com/b/abc',
   })).toBe(
-    'Who will succeed the most this winter arc!?\nJack / Mike / Benton / Gage\nWinner gets the Best Body!\nVote here: https://example.com/b/abc',
+    'Who will succeed the most this winter arc!?\n1. Jack\n2. Mike\n3. Benton\n4. Gage\nWinner gets the Best Body!\nVote here: https://example.com/b/abc',
   );
 
   expect(formatSms({
@@ -32,7 +32,7 @@ test('formats a multiline text and drops an empty stake', () => {
     choices: ['Yes', 'No'],
     stake: '   ',
     url: 'https://example.com/b/abc',
-  })).toBe('Who shows up last?\nYes / No\nVote here: https://example.com/b/abc');
+  })).toBe('Who shows up last?\n1. Yes\n2. No\nVote here: https://example.com/b/abc');
 });
 
 test('builds all three bet types', () => {
