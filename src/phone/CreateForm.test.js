@@ -148,7 +148,7 @@ test('back from later steps keeps the draft and slides left to right', async () 
   await goToStake('Who is late');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
-  expect(screen.getByText(/optional — skip if it’s just for fun/i)).toBeInTheDocument();
+  expect(screen.getByText(/or leave it for pride/i)).toBeInTheDocument();
   await userEvent.type(screen.getByLabelText(/^stake$/i), 'Pizza');
   expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
@@ -166,6 +166,7 @@ test('stake step is optional and the recap shows only filled stake and closes', 
   });
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  expect(screen.getByText('Send it')).toBeInTheDocument();
   expect(screen.getByText('Who is late')).toBeInTheDocument();
   expect(screen.getByText('Yes / No')).toBeInTheDocument();
   expect(screen.getByText(/^closes /i)).toBeInTheDocument();

@@ -34,7 +34,8 @@ const COPY = {
   newBet: 'New bet',
   stake: 'Stake',
   textFriendsTitle: 'Text friends',
-  stakeHint: 'Optional \u2014 skip if it\u2019s just for fun.',
+  stakeHint: 'Or leave it for pride.',
+  recapEyebrow: 'Send it',
   stakePlaceholder: 'Pizza, $5, bragging rights',
   questionPlaceholder: 'Who shows up last?',
   linePlaceholder: '13.5',
@@ -64,16 +65,19 @@ function draftInput(state) {
 function Recap({ fields }) {
   const choices = choiceLabels(fields);
   return (
-    <div className="recap-card">
-      <p className="recap-question">{fields.question}</p>
-      {choices.length > 0 && (
-        <p className="recap-choices">{choices.join(' / ')}</p>
-      )}
-      {fields.stake ? <p className="stake-line">{fields.stake}</p> : null}
-      {fields.closesAt ? (
-        <p className="closes">Closes {formatCloses(fields.closesAt)}</p>
-      ) : null}
-    </div>
+    <>
+      <p className="recap-eyebrow">{COPY.recapEyebrow}</p>
+      <div className="recap-card">
+        <p className="recap-question">{fields.question}</p>
+        {choices.length > 0 && (
+          <p className="recap-choices">{choices.join(' / ')}</p>
+        )}
+        {fields.stake ? <p className="stake-line">{fields.stake}</p> : null}
+        {fields.closesAt ? (
+          <p className="closes">Closes {formatCloses(fields.closesAt)}</p>
+        ) : null}
+      </div>
+    </>
   );
 }
 

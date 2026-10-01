@@ -54,7 +54,7 @@ test('opens on a landing page whose only action starts a bet', () => {
   expect(document.querySelector('.landing-mark')).toHaveTextContent('Friendly');
   expect(screen.getByRole('heading', { name: 'Bet with friends by text' })).toBeInTheDocument();
   expect(screen.getByText('Create a wager, text the link, vote once — no app.')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+  expect(screen.getByRole('link', { name: 'Make the bet' })).toHaveAttribute('href', '/new');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
   expect(document.querySelector('.landing-cta')).toHaveClass('cta');
