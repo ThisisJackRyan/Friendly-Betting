@@ -70,6 +70,7 @@ test('my bets is a tab with an empty state', () => {
   );
   expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
+  expect(screen.getByText(/create one and text it to friends/i)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/');
 });
 
