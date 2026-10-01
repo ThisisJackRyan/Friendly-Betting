@@ -15,6 +15,7 @@ import {
   votingOpen,
 } from './model';
 import Bars from './Bars';
+import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 
 const VoteScreen = () => {
   const params = useParams();
@@ -25,6 +26,7 @@ const VoteScreen = () => {
   const [name, setName] = useState('');
   const [pendingId, setPendingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const minElapsed = useMinHold(code);
 
   useEffect(() => {
     document.title = 'Vote · Friendly';
@@ -33,6 +35,8 @@ const VoteScreen = () => {
 
   useEffect(() => {
     let cancelled = false;
+    setBet(undefined);
+    setError('');
     const unsubscribe = subscribeBet(code, (next, err) => {
       if (cancelled) return;
       if (err) {
@@ -65,6 +69,7 @@ const VoteScreen = () => {
   const selected = (bet?.options || []).find((option) => option.id === selectedId);
   const open = bet ? votingOpen(bet) : false;
   const showVoted = Boolean(selected);
+  const reveal = minElapsed && bet !== undefined;
 
   const choose = async (optionId) => {
     if (!bet || !user || !open || saving) return;
@@ -90,15 +95,15 @@ const VoteScreen = () => {
   return (
     <div className="phone focus-column">
       <div className="scroll screen-fade vote-screen">
-        {bet === undefined && <p className="muted center">Loading…</p>}
-        {bet === null && (
+        {!reveal && <FriendlyLoader />}
+        {reveal && bet === null && (
           <div className="empty">
             <FiLink className="empty-glyph" size={18} aria-hidden="true" />
             <p className="empty-title">This bet isn&apos;t here</p>
             <Link className="secondary press" href="/">Home</Link>
           </div>
         )}
-        {bet && (
+        {reveal && bet && (
           <>
             <p className="inviter">{bet.createdByName || 'A friend'}</p>
             <h1 className="question-xl">{questionOf(bet)}</h1>
