@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft } from 'react-icons/fi';
 import { hydrateBet, settleBet, subscribeBet } from './api';
+import { isCreator } from './creator';
 import { useIdentity } from './identity';
+import PhoneGate from './PhoneGate';
 import {
   choiceLabels,
   formatCloses,
@@ -34,6 +36,8 @@ const TallyScreen = () => {
   const betId = params.code || params.id;
   const router = useRouter();
   const user = useIdentity();
+  const [session, setSession] = useState(null);
+  const [authGate, setAuthGate] = useState(false);
   const [bet, setBet] = useState(undefined);
   const [error, setError] = useState('');
   const [settling, setSettling] = useState(false);
@@ -44,8 +48,10 @@ const TallyScreen = () => {
   const minElapsed = useMinHold(betId);
 
   useEffect(() => {
+    if (authGate) return undefined;
     document.title = 'Tally · Friendly';
-  }, []);
+    return undefined;
+  }, [authGate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +84,26 @@ const TallyScreen = () => {
     };
   }, [betId]);
 
+  const activeUser = session || user;
+
+  const onVerified = (next) => {
+    setSession(next);
+    setAuthGate(false);
+    if (next && bet && isCreator(next) && next.uid === bet.createdByID && bet.status !== 'closed') {
+      setSettling(true);
+      return;
+    }
+    if (next && bet && next.uid !== bet.createdByID) {
+      setError('This phone doesn\u2019t own this bet.');
+    }
+  };
+
   const confirmSettle = async (winnerId) => {
+    if (!isCreator(activeUser) || !bet || activeUser.uid !== bet.createdByID) {
+      setError('Only the creator can settle this bet.');
+      setSettling(false);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -110,11 +135,19 @@ const TallyScreen = () => {
     }
   };
 
-  const isCreator = Boolean(user && bet && user.uid === bet.createdByID);
-  const canSettle = isCreator && bet && bet.status !== 'closed';
+  const ownsBet = Boolean(activeUser && bet && activeUser.uid === bet.createdByID);
+  const canSettle = ownsBet && bet.status !== 'closed';
   const won = bet ? winnerLabel(bet) : '';
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
+
+  if (authGate) {
+    return (
+      <div className="phone screen-push">
+        <PhoneGate onBack={() => setAuthGate(false)} onVerified={onVerified} />
+      </div>
+    );
+  }
 
   return (
     <div className="phone screen-push">
@@ -156,7 +189,14 @@ const TallyScreen = () => {
               </button>
             </div>
             {canSettle && !settling && (
-              <button type="button" className="danger press" onClick={() => setSettling(true)}>
+              <button
+                type="button"
+                className="danger press"
+                onClick={() => {
+                  if (!isCreator(activeUser)) setAuthGate(true);
+                  else setSettling(true);
+                }}
+              >
                 Close & settle
               </button>
             )}

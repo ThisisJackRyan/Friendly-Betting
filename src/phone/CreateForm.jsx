@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
+import { isCreator } from './creator';
 import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
 import { creatorName, useIdentity } from './identity';
+import PhoneGate from './PhoneGate';
 import {
   buildDraft,
   choiceLabels,
@@ -107,8 +109,10 @@ const CreateForm = () => {
   const [shareState, setShareState] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [phoneUser, setPhoneUser] = useState(null);
 
   const meta = TYPE_META[type] || null;
+  const session = phoneUser || user;
   const input = draftInput({
     question,
     stake,
@@ -131,13 +135,15 @@ const CreateForm = () => {
   }, [invalidRoute, router]);
 
   useEffect(() => {
+    if (step === 4) return undefined;
     const titles = {
       1: COPY.newBet,
       2: meta?.label || COPY.newBet,
       3: COPY.stake,
-      4: COPY.textFriendsTitle,
+      5: COPY.textFriendsTitle,
     };
     document.title = `${titles[step] || COPY.newBet} · Friendly`;
+    return undefined;
   }, [step, meta]);
 
   useEffect(() => {
@@ -158,7 +164,7 @@ const CreateForm = () => {
   }, [exitHome, router]);
 
   const go = (next) => {
-    if (exitHome || next === step || next < 1 || next > 4) return;
+    if (exitHome || next === step || next < 1 || next > 5) return;
     setMotion(next > step ? 'forward' : 'back');
     setLeaving(step);
     setHasMoved(true);
@@ -210,6 +216,10 @@ const CreateForm = () => {
       goHome();
       return;
     }
+    if (stepNumber === 5) {
+      go(3);
+      return;
+    }
     go(stepNumber - 1);
   };
 
@@ -238,23 +248,37 @@ const CreateForm = () => {
     go(3);
   };
 
+  const onStakeNext = () => {
+    if (!session) {
+      setError('Still connecting. Try again in a second.');
+      return;
+    }
+    if (isCreator(session)) go(5);
+    else go(4);
+  };
+
   const onTextFriends = async () => {
     const ready = buildDraft(type, input);
     if (!ready.ok) {
       setError(ready.error);
       return;
     }
-    if (!user) {
+    if (!session) {
       setError('Still connecting. Try again in a second.');
+      return;
+    }
+    if (!isCreator(session)) {
+      setError('Verify your phone to text this bet.');
+      go(4);
       return;
     }
 
     const fields = {
       ...ready.fields,
-      createdByID: user.uid,
-      createdByName: creatorName(user),
+      createdByID: session.uid,
+      createdByName: creatorName(session),
     };
-    if (user.email) fields.createdByEmail = user.email;
+    if (session.email) fields.createdByEmail = session.email;
 
     setSaving(true);
     setError('');
@@ -280,7 +304,7 @@ const CreateForm = () => {
   const titleFor = (stepNumber) => {
     if (stepNumber === 2) return meta?.label || COPY.newBet;
     if (stepNumber === 3) return COPY.stake;
-    if (stepNumber === 4) return COPY.textFriendsTitle;
+    if (stepNumber === 5) return COPY.textFriendsTitle;
     return COPY.newBet;
   };
 
@@ -465,13 +489,26 @@ const CreateForm = () => {
         </>
       );
       cta = (
-        <button type="button" className="cta press" onClick={() => go(4)}>
+        <button type="button" className="cta press" onClick={onStakeNext}>
           {COPY.next}
         </button>
       );
     }
 
     if (stepNumber === 4) {
+      return (
+        <PhoneGate
+          onBack={() => onBack(4)}
+          onHomeClick={onHomeClick}
+          onVerified={(next) => {
+            if (next) setPhoneUser(next);
+            go(5);
+          }}
+        />
+      );
+    }
+
+    if (stepNumber === 5) {
       body = (
         <>
           {draft.ok && <Recap fields={draft.fields} />}

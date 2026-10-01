@@ -34,8 +34,18 @@ jest.mock('./phone/api', () => ({
   settleBet: jest.fn(),
 }));
 
+jest.mock('./phone/phoneAuth', () => ({
+  sendPhoneCode: jest.fn(),
+  confirmPhoneCode: jest.fn(),
+}));
+
 jest.mock('./phone/identity', () => ({
-  useIdentity: () => ({ uid: 'user-1', email: 'sam@example.com' }),
+  useIdentity: () => ({
+    uid: 'user-1',
+    email: 'sam@example.com',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone', phoneNumber: '+15551234567' }],
+  }),
   creatorName: () => 'Sam',
   rememberName: () => {},
   savedName: () => '',
@@ -91,6 +101,8 @@ test('my bets is a tab with an empty state', () => {
     expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
     expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
+    expect(screen.queryByText(/we'll text a code/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
     expect(within(nav).getByRole('link', { name: 'My bets' })).toHaveAttribute('href', '/bets');

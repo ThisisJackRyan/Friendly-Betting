@@ -8,8 +8,9 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../Config/firebase-config';
+import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
+import { settleBlock } from './creator';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -144,9 +145,18 @@ export async function castVote(code, vote) {
 }
 
 export async function settleBet(code, winnerId) {
-  await updateDoc(doc(db, 'bets', code), {
-    status: 'closed',
-    winnerId: winnerId || null,
-    settledAt: Date.now(),
+  const user = auth?.currentUser || null;
+  const ref = doc(db, 'bets', code);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('This bet is gone.');
+    const data = snap.data();
+    const block = settleBlock(user, data);
+    if (block) throw new Error(block);
+    tx.update(ref, {
+      status: 'closed',
+      winnerId: winnerId || null,
+      settledAt: Date.now(),
+    });
   });
 }

@@ -4,21 +4,26 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FiPlus } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
+import { isCreator } from './creator';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
+import PhoneGate from './PhoneGate';
 
 const MyBets = () => {
   const user = useIdentity();
-  const uid = user?.uid;
+  const creator = isCreator(user);
+  const uid = creator ? user.uid : '';
   const [bets, setBets] = useState(null);
   const [error, setError] = useState('');
   const minElapsed = useMinHold();
   const reveal = minElapsed && bets !== null;
 
   useEffect(() => {
+    if (user && !creator) return undefined;
     document.title = 'My bets · Friendly';
-  }, []);
+    return undefined;
+  }, [user, creator]);
 
   useEffect(() => {
     if (!uid) return undefined;
@@ -32,6 +37,15 @@ const MyBets = () => {
       setBets(rows || []);
     });
   }, [uid]);
+
+  if (user && !creator) {
+    return (
+      <PhoneGate
+        layout="plain"
+        onVerified={() => {}}
+      />
+    );
+  }
 
   return (
     <div className="stack">
