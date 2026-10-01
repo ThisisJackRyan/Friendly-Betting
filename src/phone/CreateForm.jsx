@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
 import { useCreateChrome } from './createChrome';
+import { armHomeArrival, prefersReducedMotion } from './createMotion';
 import { creatorName, useIdentity } from './identity';
 import {
   buildDraft,
@@ -18,6 +19,7 @@ import {
 } from './model';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
+import Landing from './Landing';
 import TypePicker from './TypePicker';
 
 const SHARE_NOTE = {
@@ -88,6 +90,7 @@ const CreateForm = () => {
   const [leaving, setLeaving] = useState(null);
   const [motion, setMotion] = useState('forward');
   const [hasMoved, setHasMoved] = useState(false);
+  const [exitHome, setExitHome] = useState(false);
   const [type, setType] = useState(routeType);
   const [question, setQuestion] = useState('');
   const [stake, setStake] = useState('');
@@ -138,13 +141,19 @@ const CreateForm = () => {
   }, [step, leaving, setHidePhoneTabs]);
 
   useEffect(() => {
-    if (leaving == null) return undefined;
+    if (leaving == null || exitHome) return undefined;
     const id = window.setTimeout(() => setLeaving(null), SLIDE_MS);
     return () => window.clearTimeout(id);
-  }, [leaving, step]);
+  }, [leaving, step, exitHome]);
+
+  useEffect(() => {
+    if (!exitHome) return undefined;
+    const id = window.setTimeout(() => router.push('/'), SLIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [exitHome, router]);
 
   const go = (next) => {
-    if (next === step || next < 1 || next > 4) return;
+    if (exitHome || next === step || next < 1 || next > 4) return;
     setMotion(next > step ? 'forward' : 'back');
     setLeaving(step);
     setHasMoved(true);
@@ -152,7 +161,36 @@ const CreateForm = () => {
     setStep(next);
   };
 
+  const goHome = () => {
+    if (exitHome) return;
+    armHomeArrival();
+    setHidePhoneTabs(true);
+    if (prefersReducedMotion()) {
+      router.push('/');
+      return;
+    }
+    setMotion('back');
+    setLeaving(step);
+    setHasMoved(true);
+    setExitHome(true);
+  };
+
+  const onHomeClick = (event) => {
+    if (
+      event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+      || event.button !== 0
+    ) {
+      return;
+    }
+    event.preventDefault();
+    goHome();
+  };
+
   const pickType = (id) => {
+    if (exitHome) return;
     setType(id);
     setMotion('forward');
     setLeaving(step);
@@ -162,8 +200,9 @@ const CreateForm = () => {
   };
 
   const onBack = (stepNumber) => {
+    if (exitHome) return;
     if (stepNumber <= 1) {
-      router.push('/bets');
+      goHome();
       return;
     }
     go(stepNumber - 1);
@@ -242,7 +281,6 @@ const CreateForm = () => {
   };
 
   const renderStep = (stepNumber) => {
-    const Title = stepNumber === 1 ? 'p' : 'h1';
     let body = null;
     let cta = null;
 
@@ -460,7 +498,10 @@ const CreateForm = () => {
           >
             <FiChevronLeft size={28} />
           </button>
-          <Title className="nav-title">{titleFor(stepNumber)}</Title>
+          <h1 className="nav-title">{titleFor(stepNumber)}</h1>
+          <Link href="/" className="nav-home wordmark" onClick={onHomeClick}>
+            Friendly
+          </Link>
         </div>
         <div className="scroll">
           {body}
@@ -484,7 +525,7 @@ const CreateForm = () => {
   };
 
   return (
-    <div className="phone create-flow">
+    <div className={exitHome ? 'phone create-flow is-exiting' : 'phone create-flow'}>
       <div className="create-viewport">
         {leaving != null && (
           <div
@@ -497,13 +538,19 @@ const CreateForm = () => {
             {renderStep(leaving)}
           </div>
         )}
-        <div
-          key={step}
-          className={paneClass(step, true)}
-          data-step={step}
-        >
-          {renderStep(step)}
-        </div>
+        {exitHome ? (
+          <div className="create-pane form-fill is-entering slide-back" data-step="home">
+            <Landing quiet />
+          </div>
+        ) : (
+          <div
+            key={step}
+            className={paneClass(step, true)}
+            data-step={step}
+          >
+            {renderStep(step)}
+          </div>
+        )}
       </div>
     </div>
   );

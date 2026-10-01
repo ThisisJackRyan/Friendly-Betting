@@ -249,8 +249,32 @@ body {
 }
 
 .nav-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 17px;
   font-weight: 500;
+}
+
+.nav-home {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  height: 56px;
+  margin-left: 8px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .icon-btn {
@@ -819,6 +843,22 @@ body {
   flex-direction: column;
 }
 
+.create-pane {
+  background: var(--surface);
+  min-height: 0;
+}
+
+.create-viewport .landing {
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  height: auto;
+}
+
+.create-flow.is-exiting .create-pane {
+  pointer-events: none;
+}
+
 .create-pane.is-leaving {
   position: absolute;
   inset: 0;
@@ -861,8 +901,8 @@ body {
   to { transform: translateX(100%); }
 }
 
-.create-flow .create-step-pick h1.screen-title {
-  margin-top: 12px;
+.create-step-pick .section-label {
+  margin-top: 8px;
 }
 
 .cta:focus-visible {
@@ -874,6 +914,7 @@ body {
 .danger:focus-visible,
 .text-link:focus-visible,
 .icon-btn:focus-visible,
+.nav-home:focus-visible,
 .tab:focus-visible,
 .vote-link:focus-visible {
   outline: none;
@@ -980,6 +1021,10 @@ body {
 
   .app-main .wordmark {
     display: none;
+  }
+
+  .app-main .nav-row .nav-home {
+    display: inline-flex;
   }
 
   .app-nav .tab {
@@ -1252,6 +1297,10 @@ body {
   min-height: 56px;
 }
 
+html[data-arrive='home'] .landing-body.screen-fade {
+  animation: none;
+}
+
 @media (min-width: 768px) {
   .app-main .landing-mark {
     display: block;
@@ -1269,6 +1318,7 @@ body {
   .screen-fade,
   .voted-in,
   .press,
+  .nav-home,
   .bar-fill,
   .cta,
   .type-card,

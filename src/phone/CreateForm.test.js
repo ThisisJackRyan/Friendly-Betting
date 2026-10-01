@@ -26,6 +26,7 @@ jest.mock('./share', () => ({
 }));
 
 beforeEach(() => {
+  delete document.documentElement.dataset.arrive;
   navigation.pathname = '/';
   navigation.params = {};
   navigation.push.mockReset();
@@ -54,10 +55,17 @@ async function goToStake(question = 'Who is late') {
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 }
 
-test('step 1 is the type picker and back leaves create for My bets', async () => {
+test('step 1 is the type picker and back returns home', async () => {
   renderForm();
-  expect(screen.getByText('Friendly')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'New bet' })).toBeInTheDocument();
+  const home = screen.getByRole('link', { name: 'Friendly' });
+  const row = home.closest('.nav-row');
+  expect(home).toHaveClass('nav-home');
+  expect(home).toHaveAttribute('href', '/');
+  expect(home.querySelector('svg')).not.toBeInTheDocument();
+  expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('heading', { name: 'New bet' })).toHaveClass('nav-title');
+  expect(document.querySelector('.stack .wordmark')).not.toBeInTheDocument();
+  expect(document.querySelector('h1.screen-title')).not.toBeInTheDocument();
   expect(screen.getByText('Pick a type')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
@@ -66,7 +74,10 @@ test('step 1 is the type picker and back leaves create for My bets', async () =>
   expect(screen.queryByRole('button', { name: /text friends/i })).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
-  expect(navigation.push).toHaveBeenCalledWith('/bets');
+  expect(document.querySelector('.create-pane.is-leaving')).toHaveClass('slide-back');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
+  expect(navigation.push).not.toHaveBeenCalledWith('/bets');
   expect(saveBet).not.toHaveBeenCalled();
 });
 
@@ -143,6 +154,7 @@ test('back from later steps keeps the draft and slides left to right', async () 
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
   expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
+  expect(navigation.push).not.toHaveBeenCalled();
   expect(saveBet).not.toHaveBeenCalled();
 });
 
@@ -220,6 +232,58 @@ test('phone tabs hide after step 1 and return when the walkthrough is back on pi
   await waitFor(() => {
     expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   });
+});
+
+test('Friendly in the create nav returns home from every later step', async () => {
+  renderForm('/new/prop');
+
+  const homeInNav = () => {
+    const link = screen.getByRole('link', { name: 'Friendly' });
+    expect(link).toHaveClass('nav-home');
+    expect(link.closest('.nav-row')).toContainElement(screen.getByRole('button', { name: 'Back' }));
+    return link;
+  };
+
+  expect(screen.getByRole('heading', { name: 'Prop' })).toBeInTheDocument();
+  homeInNav();
+
+  await userEvent.type(screen.getByLabelText(/question/i), 'Who is last');
+  await userEvent.type(screen.getByLabelText(/option 1/i), 'Maya');
+  await userEvent.type(screen.getByLabelText(/option 2/i), 'Sam');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+  homeInNav();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  await userEvent.click(homeInNav());
+  expect(document.querySelector('.create-pane.is-leaving')).toHaveClass('slide-back');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+  expect(document.querySelector('.create-pane.is-entering .landing')).toBeInTheDocument();
+  expect(navigation.push).not.toHaveBeenCalled();
+  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
+  expect(navigation.push).not.toHaveBeenCalledWith('/bets');
+  expect(saveBet).not.toHaveBeenCalled();
+});
+
+test('reduced motion skips the home slide', async () => {
+  const previous = window.matchMedia;
+  window.matchMedia = jest.fn((query) => ({
+    matches: query === '(prefers-reduced-motion: reduce)',
+    media: query,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+  }));
+  try {
+    renderForm('/new/money-line');
+    await userEvent.click(screen.getByRole('link', { name: 'Friendly' }));
+    expect(navigation.push).toHaveBeenCalledWith('/');
+    expect(document.querySelector('.create-pane.is-leaving')).not.toBeInTheDocument();
+    expect(saveBet).not.toHaveBeenCalled();
+  } finally {
+    if (previous) window.matchMedia = previous;
+    else delete window.matchMedia;
+  }
 });
 
 test('an unknown create route leaves the walkthrough', () => {
