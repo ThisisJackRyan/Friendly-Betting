@@ -761,12 +761,16 @@ body {
   color: var(--muted);
 }
 
-.scroll:has(> .tally-load) {
+.scroll:has(.friendly-load) {
   display: flex;
   flex-direction: column;
 }
 
-.tally-load {
+.stack:has(> .friendly-load) {
+  flex: 1;
+}
+
+.friendly-load {
   flex: 1;
   box-sizing: border-box;
   display: flex;
@@ -777,7 +781,7 @@ body {
   padding: 48px 0 64px;
 }
 
-.tally-load-mark {
+.friendly-load-mark {
   margin: 0;
   font-size: 15px;
   font-weight: 700;
@@ -786,7 +790,7 @@ body {
   color: #007a45;
 }
 
-.tally-load-bars {
+.friendly-load-bars {
   width: 168px;
   display: flex;
   flex-direction: column;
@@ -794,27 +798,27 @@ body {
   gap: 10px;
 }
 
-.tally-load-bar {
+.friendly-load-bar {
   display: block;
   height: 12px;
   width: 100%;
   border-radius: 999px;
   background: #9dc9a4;
   opacity: 1;
-  animation: tally-load-pulse 1.4s ease-in-out infinite;
+  animation: friendly-load-pulse 1.4s ease-in-out infinite;
 }
 
-.tally-load-bar:nth-child(2) {
+.friendly-load-bar:nth-child(2) {
   width: 74%;
   animation-delay: 0.18s;
 }
 
-.tally-load-bar:nth-child(3) {
+.friendly-load-bar:nth-child(3) {
   width: 48%;
   animation-delay: 0.36s;
 }
 
-@keyframes tally-load-pulse {
+@keyframes friendly-load-pulse {
   0%,
   100% {
     opacity: 0.4;
@@ -1439,7 +1443,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .press,
   .nav-home,
   .bar-fill,
-  .tally-load-bar,
+  .friendly-load-bar,
   .cta,
   .type-card,
   .bet-card,

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './phone/AppShell';
 import TabLayout from './phone/TabLayout';
@@ -65,21 +65,39 @@ test('opens on a landing page whose only action starts a bet', () => {
 });
 
 test('my bets is a tab with an empty state', () => {
-  navigation.pathname = '/bets';
-  render(
-    <AppShell>
-      <TabLayout>
-        <MyBets />
-      </TabLayout>
-    </AppShell>,
-  );
-  expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
-  expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
-  expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
-  const nav = screen.getByRole('navigation', { name: 'Primary' });
-  expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
-  expect(within(nav).getByRole('link', { name: 'My bets' })).toHaveAttribute('href', '/bets');
+  jest.useFakeTimers();
+  try {
+    navigation.pathname = '/bets';
+    render(
+      <AppShell>
+        <TabLayout>
+          <MyBets />
+        </TabLayout>
+      </AppShell>,
+    );
+    const loader = screen.getByRole('status', { name: 'Loading' });
+    expect(within(loader).getByText('Friendly')).toHaveClass('friendly-load-mark');
+    expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
+    act(() => {
+      jest.advanceTimersByTime(449);
+    });
+    expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
+    expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
+    expect(within(nav).getByRole('link', { name: 'My bets' })).toHaveAttribute('href', '/bets');
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test('Start a bet slides forward into Pick a type', async () => {
@@ -138,5 +156,7 @@ test('a vote link stays focused and does not render the app nav', () => {
   navigation.params = { code: 'abc123' };
   render(<VoteScreen />);
   expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
-  expect(screen.getByText(/loading/i)).toBeInTheDocument();
+  expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
+  expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
 });

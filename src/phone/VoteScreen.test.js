@@ -71,7 +71,7 @@ function renderAt(path, element) {
 
 test('a shared link opens the vote screen and records a one-tap choice', async () => {
   renderAt('/b/abc123', <VoteScreen />);
-  expect(screen.getByText('Maya')).toBeInTheDocument();
+  expect(await screen.findByText('Maya')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Who is late' })).toBeInTheDocument();
   expect(screen.queryByText(/place bet/i)).not.toBeInTheDocument();
 
@@ -132,8 +132,8 @@ test('tally shows the Friendly loader instead of a loading line', () => {
   subscribeBet.mockImplementation(() => () => {});
   renderAt('/t/abc123', <TallyScreen />);
   expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-  expect(screen.getByText('Friendly')).toHaveClass('tally-load-mark');
-  expect(document.querySelectorAll('.tally-load-bar')).toHaveLength(3);
+  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
+  expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
   expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
 });
@@ -168,9 +168,46 @@ test('the loader holds for at least 450ms before the tally appears', () => {
 test('reduced motion keeps the tally loader static', () => {
   const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
   const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
-  expect(css).toContain('@keyframes tally-load-pulse');
+  expect(css).toContain('@keyframes friendly-load-pulse');
   expect(css).toContain('opacity: 0.4');
   expect(css).toContain('color: #007a45');
-  expect(reduced).toContain('.tally-load-bar');
+  expect(reduced).toContain('.friendly-load-bar');
   expect(reduced).toContain('animation: none');
+});
+
+test('vote shows the Friendly loader instead of a loading line', () => {
+  subscribeBet.mockImplementation(() => () => {});
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
+  expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+  expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+  expect(screen.queryByText('Who is late')).not.toBeInTheDocument();
+});
+
+test('the loader holds for at least 450ms before the vote appears', () => {
+  jest.useFakeTimers();
+  try {
+    let publish = () => {};
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = () => onChange(openBet);
+      return () => {};
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+    act(() => {
+      publish();
+    });
+    expect(screen.queryByText('Who is late')).not.toBeInTheDocument();
+    act(() => {
+      jest.advanceTimersByTime(449);
+    });
+    expect(screen.getByText('Friendly')).toBeInTheDocument();
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });

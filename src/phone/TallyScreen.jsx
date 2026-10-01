@@ -19,8 +19,7 @@ import {
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import Bars from './Bars';
-
-const TALLY_LOAD_MS = 450;
+import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -29,19 +28,6 @@ const SHARE_NOTE = {
   aborted: 'Saved. Text when you\u2019re ready.',
   manual: 'Copy the message below.',
 };
-
-function TallyLoading() {
-  return (
-    <div className="tally-load" role="status" aria-label="Loading">
-      <p className="tally-load-mark">Friendly</p>
-      <div className="tally-load-bars" aria-hidden="true">
-        <span className="tally-load-bar" />
-        <span className="tally-load-bar" />
-        <span className="tally-load-bar" />
-      </div>
-    </div>
-  );
-}
 
 const TallyScreen = () => {
   const params = useParams() || {};
@@ -52,10 +38,10 @@ const TallyScreen = () => {
   const [error, setError] = useState('');
   const [settling, setSettling] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [minElapsed, setMinElapsed] = useState(false);
   const [message, setMessage] = useState('');
   const [shareState, setShareState] = useState('');
   const [sharing, setSharing] = useState(false);
+  const minElapsed = useMinHold(betId);
 
   useEffect(() => {
     document.title = 'Tally · Friendly';
@@ -65,10 +51,6 @@ const TallyScreen = () => {
     let cancelled = false;
     setBet(undefined);
     setError('');
-    setMinElapsed(false);
-    const minTimer = window.setTimeout(() => {
-      if (!cancelled) setMinElapsed(true);
-    }, TALLY_LOAD_MS);
     const unsubscribe = subscribeBet(betId, (next, err) => {
       if (cancelled) return;
       if (err) {
@@ -92,7 +74,6 @@ const TallyScreen = () => {
     });
     return () => {
       cancelled = true;
-      window.clearTimeout(minTimer);
       unsubscribe();
     };
   }, [betId]);
@@ -144,7 +125,7 @@ const TallyScreen = () => {
         <h1 className="nav-title">Tally</h1>
       </div>
       <div className="scroll">
-        {!reveal && <TallyLoading />}
+        {!reveal && <FriendlyLoader />}
         {reveal && bet === null && <p className="muted">This bet is gone.</p>}
         {reveal && bet && (
           <>
