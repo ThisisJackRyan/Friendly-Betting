@@ -23,10 +23,10 @@ import CreatePick from './CreatePick';
 import Landing from './Landing';
 
 const SHARE_NOTE = {
-  shared: 'Share sheet opened.',
+  shared: 'Pick who gets it.',
   sms: 'Opening Messages.',
-  copied: 'Message copied. Paste it into a text.',
-  aborted: 'Saved. Text friends when you are ready.',
+  copied: 'Copied \u2014 paste into a text.',
+  aborted: 'Saved. Text when you\u2019re ready.',
   manual: 'Copy the message below.',
 };
 
