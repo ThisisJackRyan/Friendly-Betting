@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import AppShell from './phone/AppShell';
 import TabLayout from './phone/TabLayout';
-import CreateForm from './phone/CreateForm';
+import Landing from './phone/Landing';
 import MyBets from './phone/MyBets';
 import VoteScreen from './phone/VoteScreen';
 import { navigation } from 'next/navigation';
@@ -42,21 +42,21 @@ function renderHome() {
   return render(
     <AppShell>
       <TabLayout>
-        <CreateForm />
+        <Landing />
       </TabLayout>
     </AppShell>,
   );
 }
 
-test('opens on New bet with all three types and a Create / My bets tab bar', () => {
+test('opens on a landing page whose only action starts a bet', () => {
   renderHome();
-  expect(screen.getAllByRole('navigation', { name: 'Primary' })).toHaveLength(1);
-  expect(screen.getByRole('heading', { name: 'New bet' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /prop/i })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /create/i })).toHaveAttribute('href', '/');
-  expect(screen.getByRole('link', { name: /my bets/i })).toHaveAttribute('href', '/bets');
+  expect(document.querySelector('.landing-mark')).toHaveTextContent('Friendly');
+  expect(screen.getByRole('heading', { name: 'Bet with friends by text' })).toBeInTheDocument();
+  expect(screen.getByText('Create a wager, text the link, vote once — no app.')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+  expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
+  expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
+  expect(document.querySelector('.landing-cta')).toHaveClass('cta');
 });
 
 test('my bets is a tab with an empty state', () => {
@@ -71,7 +71,10 @@ test('my bets is a tab with an empty state', () => {
   expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
   expect(screen.getByText(/create one and text it to friends/i)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/');
+  expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
+  const nav = screen.getByRole('navigation', { name: 'Primary' });
+  expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
+  expect(within(nav).getByRole('link', { name: 'My bets' })).toHaveAttribute('href', '/bets');
 });
 
 test('a vote link stays focused and does not render the app nav', () => {

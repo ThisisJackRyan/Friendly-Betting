@@ -8,18 +8,24 @@ import { useCreateChrome } from './createChrome';
 const AppShell = ({ children }) => {
   const pathname = usePathname() || '/';
   const { hidePhoneTabs } = useCreateChrome();
-  const phoneTabs = pathname === '/bets' || (pathname === '/' && !hidePhoneTabs);
-  const createActive = pathname === '/' || pathname.startsWith('/new');
+  const landing = pathname === '/';
+  const phoneTabs = pathname === '/bets' || (pathname === '/new' && !hidePhoneTabs);
+  const createActive = pathname === '/new' || pathname.startsWith('/new/');
   const betsActive = pathname === '/bets' || pathname.startsWith('/bets/');
+  const shell = landing
+    ? 'app-shell shell-stack shell-landing'
+    : phoneTabs
+      ? 'app-shell shell-tabs'
+      : 'app-shell shell-stack';
 
   return (
-    <div className={phoneTabs ? 'app-shell shell-tabs' : 'app-shell shell-stack'}>
+    <div className={shell}>
       <div className="app-main">
         {children}
       </div>
       <nav className="tabbar app-nav" aria-label="Primary">
         <p className="wordmark nav-brand">Friendly</p>
-        <Link href="/" className={createActive ? 'tab active' : 'tab'}>
+        <Link href="/new" className={createActive ? 'tab active' : 'tab'}>
           <FiPlus size={22} aria-hidden="true" />
           <span>Create</span>
         </Link>
