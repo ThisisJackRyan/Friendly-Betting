@@ -22,8 +22,12 @@ const TypePicker = ({ onPick }) => {
 
   return (
     <div className="stack">
-      <p className="wordmark">Friendly</p>
-      <h1 className="screen-title">New bet</h1>
+      {!onPick && (
+        <>
+          <p className="wordmark">Friendly</p>
+          <h1 className="screen-title">New bet</h1>
+        </>
+      )}
       <p className="section-label">Pick a type</p>
       <div className="type-list">
         {TYPE_ORDER.map((id) => {

@@ -10,6 +10,7 @@ jest.mock('next/navigation');
 jest.mock('next/link');
 
 beforeEach(() => {
+  delete document.documentElement.dataset.arrive;
   navigation.pathname = '/';
   navigation.params = {};
   navigation.push.mockReset();
