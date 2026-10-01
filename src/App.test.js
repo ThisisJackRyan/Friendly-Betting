@@ -1,9 +1,13 @@
-import { render, screen, within } from '@testing-library/react';
+import fs from 'fs';
+import path from 'path';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AppShell from './phone/AppShell';
 import TabLayout from './phone/TabLayout';
 import Landing from './phone/Landing';
 import MyBets from './phone/MyBets';
 import VoteScreen from './phone/VoteScreen';
+import { CreateChromeProvider } from './phone/createChrome';
 import { navigation } from 'next/navigation';
 
 jest.mock('next/navigation');
@@ -76,6 +80,57 @@ test('my bets is a tab with an empty state', () => {
   const nav = screen.getByRole('navigation', { name: 'Primary' });
   expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
   expect(within(nav).getByRole('link', { name: 'My bets' })).toHaveAttribute('href', '/bets');
+});
+
+test('Start a bet slides forward into Pick a type', async () => {
+  navigation.pathname = '/';
+  render(
+    <CreateChromeProvider>
+      <AppShell>
+        <TabLayout>
+          <Landing />
+        </TabLayout>
+      </AppShell>
+    </CreateChromeProvider>,
+  );
+
+  await userEvent.click(screen.getByRole('link', { name: 'Start a bet' }));
+
+  const entering = document.querySelector('.create-pane.is-entering');
+  const leaving = document.querySelector('.create-pane.is-leaving');
+  expect(entering).toHaveClass('slide-forward');
+  expect(leaving).toHaveClass('slide-forward');
+  expect(entering).toHaveTextContent('Pick a type');
+  expect(leaving.querySelector('.landing-title')).toHaveTextContent('Bet with friends by text');
+  expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
+  expect(navigation.push).not.toHaveBeenCalled();
+
+  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/new'));
+  expect(navigation.push).not.toHaveBeenCalledWith('/bets');
+});
+
+test('a modified Start a bet click keeps the browser link', () => {
+  navigation.pathname = '/';
+  render(
+    <CreateChromeProvider>
+      <AppShell>
+        <Landing />
+      </AppShell>
+    </CreateChromeProvider>,
+  );
+  fireEvent.click(screen.getByRole('link', { name: 'Start a bet' }), { metaKey: true });
+  expect(navigation.push).not.toHaveBeenCalled();
+  expect(document.querySelector('.create-pane')).not.toBeInTheDocument();
+});
+
+test('reduced motion fades create slides instead of translating them', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone/phone.css'), 'utf8');
+  const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  expect(reduced).toContain('.create-pane.is-entering.slide-forward');
+  expect(reduced).toContain('animation: fade-tab 150ms ease-out');
+  expect(reduced).toContain('.create-pane.is-leaving.slide-forward');
+  expect(reduced).toContain('animation: none');
+  expect(reduced).toContain('display: none');
 });
 
 test('a vote link stays focused and does not render the app nav', () => {

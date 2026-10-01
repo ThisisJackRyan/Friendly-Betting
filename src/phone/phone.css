@@ -862,23 +862,25 @@ body {
 .create-pane.is-leaving {
   position: absolute;
   inset: 0;
+  display: flex;
+  flex-direction: column;
   pointer-events: none;
 }
 
 .create-pane.is-entering.slide-forward {
-  animation: create-in-forward 180ms ease-out;
+  animation: create-in-forward 180ms ease-out forwards;
 }
 
 .create-pane.is-leaving.slide-forward {
-  animation: create-out-forward 180ms ease-out;
+  animation: create-out-forward 180ms ease-out forwards;
 }
 
 .create-pane.is-entering.slide-back {
-  animation: create-in-back 180ms ease-out;
+  animation: create-in-back 180ms ease-out forwards;
 }
 
 .create-pane.is-leaving.slide-back {
-  animation: create-out-back 180ms ease-out;
+  animation: create-out-back 180ms ease-out forwards;
 }
 
 @keyframes create-in-forward {

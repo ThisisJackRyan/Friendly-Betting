@@ -1,3 +1,5 @@
+export const SLIDE_MS = 180;
+
 const HOME = 'home';
 
 export function armHomeArrival() {

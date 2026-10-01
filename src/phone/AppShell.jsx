@@ -7,9 +7,9 @@ import { useCreateChrome } from './createChrome';
 
 const AppShell = ({ children }) => {
   const pathname = usePathname() || '/';
-  const { hidePhoneTabs } = useCreateChrome();
-  const landing = pathname === '/';
-  const phoneTabs = pathname === '/bets' || (pathname === '/new' && !hidePhoneTabs);
+  const { hidePhoneTabs, pinPhoneTabs } = useCreateChrome();
+  const landing = pathname === '/' && !pinPhoneTabs;
+  const phoneTabs = pathname === '/bets' || ((pathname === '/new' || pinPhoneTabs) && !hidePhoneTabs);
   const createActive = pathname === '/new' || pathname.startsWith('/new/');
   const betsActive = pathname === '/bets' || pathname.startsWith('/bets/');
   const shell = landing

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
 import { useCreateChrome } from './createChrome';
-import { armHomeArrival, prefersReducedMotion } from './createMotion';
+import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
 import { creatorName, useIdentity } from './identity';
 import {
   buildDraft,
@@ -19,8 +19,8 @@ import {
 } from './model';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
+import CreatePick from './CreatePick';
 import Landing from './Landing';
-import TypePicker from './TypePicker';
 
 const SHARE_NOTE = {
   shared: 'Share sheet opened.',
@@ -44,8 +44,6 @@ const COPY = {
   textFriends: 'Text friends',
   sending: 'Sending\u2026',
 };
-
-const SLIDE_MS = 180;
 
 function draftInput(state) {
   return {
@@ -81,7 +79,7 @@ const CreateForm = () => {
   const params = useParams();
   const router = useRouter();
   const user = useIdentity();
-  const { setHidePhoneTabs } = useCreateChrome();
+  const { setHidePhoneTabs, setPinPhoneTabs } = useCreateChrome();
   const rawType = params?.type;
   const routeType = TYPE_META[rawType] ? rawType : null;
   const invalidRoute = Boolean(rawType) && !routeType;
@@ -120,6 +118,10 @@ const CreateForm = () => {
     propOptions,
   });
   const draft = type ? buildDraft(type, input) : { ok: false, error: 'Pick a bet type.' };
+
+  useLayoutEffect(() => {
+    setPinPhoneTabs(false);
+  }, [setPinPhoneTabs]);
 
   useEffect(() => {
     if (invalidRoute) router.replace('/new');
@@ -285,7 +287,14 @@ const CreateForm = () => {
     let cta = null;
 
     if (stepNumber === 1) {
-      body = <TypePicker onPick={pickType} />;
+      return (
+        <CreatePick
+          onBack={() => onBack(1)}
+          onHomeClick={onHomeClick}
+          onPick={pickType}
+          error={error && stepNumber === step ? error : ''}
+        />
+      );
     }
 
     if (stepNumber === 2 && meta) {
