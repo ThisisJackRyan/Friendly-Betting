@@ -370,6 +370,126 @@ body {
     var(--shadow-card);
 }
 
+.phone-field {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+}
+
+.phone-field:focus-within {
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    var(--focus),
+    var(--shadow-card);
+}
+
+.phone-cc {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.phone-field input,
+.create-flow .field .phone-field input,
+.create-flow .field .phone-field input:focus,
+.phone-field input:focus {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  min-height: 56px;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.otp-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.otp-cell {
+  flex: 1;
+  min-width: 0;
+  height: 64px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+  font: inherit;
+  font-size: 28px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink);
+}
+
+.otp-cell:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    var(--focus);
+}
+
+.otp-cell:disabled {
+  opacity: 0.55;
+}
+
+.otp-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.otp-links button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.otp-links button:disabled {
+  opacity: 0.55;
+}
+
+.otp-dot {
+  color: var(--muted);
+}
+
+.recaptcha-slot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.creator-auth {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+
+.creator-auth .create-viewport {
+  flex: 1;
+}
+
 .option-row {
   display: flex;
   align-items: flex-end;

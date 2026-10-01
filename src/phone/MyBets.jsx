@@ -2,23 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FiPlus } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
+import CreatorAuthFlow from './AuthSlides';
+import { isCreator } from './creatorSession';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 
-const MyBets = () => {
-  const user = useIdentity();
-  const uid = user?.uid;
+export function MyBetsList({ user }) {
+  const uid = isCreator(user) ? user.uid : '';
   const [bets, setBets] = useState(null);
   const [error, setError] = useState('');
-  const minElapsed = useMinHold();
+  const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
-
-  useEffect(() => {
-    document.title = 'My bets · Friendly';
-  }, []);
 
   useEffect(() => {
     if (!uid) return undefined;
@@ -69,6 +67,26 @@ const MyBets = () => {
       )}
     </div>
   );
+}
+
+const MyBets = () => {
+  const user = useIdentity();
+  const router = useRouter();
+
+  useEffect(() => {
+    document.title = 'My bets · Friendly';
+  }, []);
+
+  if (user && !isCreator(user)) {
+    return (
+      <CreatorAuthFlow
+        onCancel={() => router.push('/')}
+        renderDone={(next) => <MyBetsList user={next} />}
+      />
+    );
+  }
+
+  return <MyBetsList user={user} />;
 };
 
 export default MyBets;

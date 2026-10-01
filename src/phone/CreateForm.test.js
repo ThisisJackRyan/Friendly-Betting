@@ -1,11 +1,22 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
 import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
+import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
+import { AUTH_COPY, codeSentCopy } from './creatorSession';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
+
+const phoneCreator = {
+  uid: 'user-1',
+  email: 'sam@example.com',
+  phoneNumber: '+15551234567',
+  providerData: [{ providerId: 'phone' }],
+};
+
+const mockIdentity = { user: phoneCreator };
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -14,8 +25,13 @@ jest.mock('./api', () => ({
   saveBet: jest.fn(),
 }));
 
+jest.mock('./creatorAuth', () => ({
+  sendPhoneCode: jest.fn(),
+  verifyPhoneCode: jest.fn(),
+}));
+
 jest.mock('./identity', () => ({
-  useIdentity: () => ({ uid: 'user-1', email: 'sam@example.com' }),
+  useIdentity: () => mockIdentity.user,
   creatorName: () => 'Sam',
   rememberName: () => {},
   savedName: () => '',
@@ -26,6 +42,9 @@ jest.mock('./share', () => ({
 }));
 
 beforeEach(() => {
+  mockIdentity.user = phoneCreator;
+  sendPhoneCode.mockReset();
+  verifyPhoneCode.mockReset();
   delete document.documentElement.dataset.arrive;
   navigation.pathname = '/';
   navigation.params = {};
@@ -285,6 +304,102 @@ test('reduced motion skips the home slide', async () => {
     if (previous) window.matchMedia = previous;
     else delete window.matchMedia;
   }
+});
+
+test('a signed-in creator skips the phone and code slides', async () => {
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '6');
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  expect(screen.queryByText(AUTH_COPY.textLine)).not.toBeInTheDocument();
+  expect(sendPhoneCode).not.toHaveBeenCalled();
+});
+
+test('create slides run type, details, stake, phone, code, then text friends', async () => {
+  mockIdentity.user = {
+    uid: 'anon-1',
+    isAnonymous: true,
+    providerData: [{ providerId: 'anonymous' }],
+  };
+  let finishSend = () => {};
+  let finishVerify = () => {};
+  sendPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    finishSend = () => resolve('vid-1');
+  }));
+  verifyPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    finishVerify = () => resolve({
+      uid: 'anon-1',
+      phoneNumber: '+15551234567',
+      providerData: [{ providerId: 'phone' }],
+    });
+  }));
+
+  renderForm();
+  expect(document.querySelector('.create-pane')).toHaveAttribute('data-step', '1');
+  expect(screen.getByRole('heading', { name: 'New bet' })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+  expect(screen.getByRole('heading', { name: 'Money Line' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '2');
+
+  await userEvent.type(screen.getByLabelText(/question/i), 'Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '3');
+  expect(sendPhoneCode).not.toHaveBeenCalled();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '4');
+  expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
+  expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
+  expect(screen.getByText('+1')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Text friends' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  await act(async () => {
+    finishSend();
+  });
+
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '5');
+  expect(screen.getByText(codeSentCopy('+15551234567'))).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Resend' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
+
+  '123456'.split('').forEach((digit, index) => {
+    fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
+      target: { value: digit },
+    });
+  });
+  expect(screen.getByRole('button', { name: 'Verifying…' })).toBeDisabled();
+  expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  await act(async () => {
+    finishVerify();
+  });
+
+  expect(await screen.findByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '6');
+
+  await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
+  expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
+    createdByID: 'anon-1',
+    question: 'Who is late',
+  }));
 });
 
 test('an unknown create route leaves the walkthrough', () => {

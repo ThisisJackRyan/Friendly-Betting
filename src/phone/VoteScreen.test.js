@@ -40,8 +40,23 @@ jest.mock('./api', () => ({
   settleBet: jest.fn(async () => {}),
 }));
 
+jest.mock('./creatorAuth', () => ({
+  sendPhoneCode: jest.fn(),
+  verifyPhoneCode: jest.fn(),
+}));
+
+const phoneCreator = {
+  uid: 'user-1',
+  phoneNumber: '+15551234567',
+  providerData: [{ providerId: 'phone' }],
+};
+
 jest.mock('./identity', () => ({
-  useIdentity: jest.fn(() => ({ uid: 'user-1' })),
+  useIdentity: jest.fn(() => ({
+    uid: 'user-1',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone' }],
+  })),
   rememberName: jest.fn(),
   savedName: () => 'Sam',
   creatorName: () => 'Sam',
@@ -52,7 +67,7 @@ jest.mock('./share', () => ({
 }));
 
 beforeEach(() => {
-  useIdentity.mockReturnValue({ uid: 'user-1' });
+  useIdentity.mockReturnValue(phoneCreator);
   subscribeBet.mockImplementation((_code, onChange) => {
     onChange(openBet);
     return () => {};
@@ -83,6 +98,10 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
   });
   expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
   expect(screen.getByRole('link', { name: 'Tally' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/^phone$/i)).not.toBeInTheDocument();
 });
 
 const textFriendsMessage = [
@@ -113,6 +132,8 @@ test('anyone can share the text-friends message from the tally', async () => {
   renderAt('/t/abc123', <TallyScreen />);
   const share = await screen.findByRole('button', { name: 'Share' });
   expect(screen.queryByRole('button', { name: /close & settle/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
   await userEvent.click(share);
   expect(shareMessage).toHaveBeenCalledWith(textFriendsMessage);
   expect(await screen.findByText('Copied — paste into a text.')).toBeInTheDocument();

@@ -27,7 +27,8 @@ GitHub Pages and Create React App are no longer used. Production is a Next.js Ap
 2. Framework preset: **Next.js**. Production branch: **`main`**. Leave the build command as `next build` (or `npm run build`). No extra environment variables are required for this app.
 3. Deploy.
 4. Optional: add a production domain on the Vercel project and point DNS at Vercel.
-5. In Firebase Authentication → Settings → Authorized domains, add the `*.vercel.app` host and any custom domain. Anonymous sign-in fails on a host that is not authorized, so create / vote / settle will not work until that domain is listed. `localhost` is already allowed for local dev.
+5. In Firebase Authentication → Settings → Authorized domains, add the `*.vercel.app` host and any custom domain. Auth fails on a host that is not authorized. `localhost` is already allowed for local dev. Production needs `friendly-betting-teal.vercel.app`.
+6. Creator sign-in is Firebase Phone OTP only. In Authentication → Sign-in method, turn **Phone** on and leave **Anonymous** on. Add test numbers with fixed codes for the crew (those work without sending SMS). Real texts need the Blaze plan. Bettors never sign in.
 
 An agent cannot connect the Vercel account or set the production domain. Those steps stay in the dashboard.
 
