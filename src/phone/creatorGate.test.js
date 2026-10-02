@@ -280,7 +280,63 @@ test('the owning phone can settle after the code slide', async () => {
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
 });
 
-test('a phone that does not own the bet cannot settle', () => {
+test('close and settle stays on an open bet after the creator logs out', async () => {
+  jest.useFakeTimers();
+  try {
+    mockIdentity.user = {
+      uid: 'anon-after-logout',
+      isAnonymous: true,
+      providerData: [{ providerId: 'anonymous' }],
+    };
+    navigation.pathname = '/t/abc123';
+    navigation.params = { code: 'abc123' };
+    render(
+      <div className="phone">
+        <TallyScreen />
+      </div>,
+    );
+    act(() => {
+      jest.advanceTimersByTime(450);
+    });
+  } finally {
+    jest.useRealTimers();
+  }
+
+  const close = screen.getByRole('button', { name: /close & settle/i });
+  expect(close).toHaveClass('danger', 'press');
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+  expect(settleBet).not.toHaveBeenCalled();
+
+  sendPhoneCode.mockResolvedValue('vid-logout');
+  verifyPhoneCode.mockResolvedValue({
+    uid: 'anon-1',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone' }],
+  });
+
+  await userEvent.click(close);
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
+  expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
+  expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+  '123456'.split('').forEach((digit, index) => {
+    fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
+      target: { value: digit },
+    });
+  });
+  expect(await screen.findByRole('heading', { name: 'Settle' })).toBeInTheDocument();
+  expect(screen.getByText('Who won?')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
+});
+
+test('a phone that does not own the bet cannot settle', async () => {
   jest.useFakeTimers();
   try {
     mockIdentity.user = {
@@ -298,10 +354,58 @@ test('a phone that does not own the bet cannot settle', () => {
     act(() => {
       jest.advanceTimersByTime(450);
     });
+  } finally {
+    jest.useRealTimers();
+  }
+
+  const close = screen.getByRole('button', { name: /close & settle/i });
+  expect(close).toHaveClass('danger', 'press');
+  expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+  expect(settleBet).not.toHaveBeenCalled();
+
+  sendPhoneCode.mockResolvedValue('vid-other');
+  verifyPhoneCode.mockResolvedValue({
+    uid: 'creator-9',
+    phoneNumber: '+15550000000',
+    providerData: [{ providerId: 'phone' }],
+  });
+
+  await userEvent.click(close);
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5550000000' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+  '000000'.split('').forEach((digit, index) => {
+    fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
+      target: { value: digit },
+    });
+  });
+  expect(await screen.findByText(/only the creator can settle/i)).toBeInTheDocument();
+  expect(settleBet).not.toHaveBeenCalled();
+});
+
+test('a closed bet does not offer close and settle', () => {
+  jest.useFakeTimers();
+  try {
+    subscribeBet.mockImplementation((_code, onChange) => {
+      onChange({ ...openBet, status: 'closed', winnerId: 'a' });
+      return () => {};
+    });
+    navigation.pathname = '/t/abc123';
+    navigation.params = { code: 'abc123' };
+    render(
+      <div className="phone">
+        <TallyScreen />
+      </div>,
+    );
+    act(() => {
+      jest.advanceTimersByTime(450);
+    });
     expect(screen.getByText('Who is late')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /close & settle/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
-    expect(settleBet).not.toHaveBeenCalled();
   } finally {
     jest.useRealTimers();
   }
