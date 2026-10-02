@@ -37,6 +37,7 @@ jest.mock('./phone/api', () => ({
 jest.mock('./phone/creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
+  signOutCreator: jest.fn(),
 }));
 
 jest.mock('./phone/identity', () => ({
@@ -102,6 +103,9 @@ test('my bets is a tab with an empty state', () => {
     expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
     expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
     expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
+    const logout = screen.getByRole('button', { name: 'Log out' });
+    expect(logout).toHaveClass('logout-link');
+    expect(logout).not.toHaveClass('cta');
     expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');

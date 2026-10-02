@@ -3,6 +3,7 @@ import {
   RecaptchaVerifier,
   linkWithCredential,
   signInWithCredential,
+  signOut,
 } from 'firebase/auth';
 import { auth } from '../Config/firebase-config';
 
@@ -62,6 +63,11 @@ export async function sendPhoneCode(e164, container) {
 async function signInWithPhone(credential) {
   const result = await signInWithCredential(auth, credential);
   return result.user;
+}
+
+export function signOutCreator() {
+  if (!auth) return Promise.resolve();
+  return signOut(auth);
 }
 
 export async function verifyPhoneCode(verificationId, code) {

@@ -102,6 +102,7 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
   expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/^phone$/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
 });
 
 const textFriendsMessage = [
@@ -125,6 +126,7 @@ test('the creator can close and settle from the tally', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'No' }));
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
   expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
 });
 
 test('anyone can share the text-friends message from the tally', async () => {
@@ -133,6 +135,7 @@ test('anyone can share the text-friends message from the tally', async () => {
   const share = await screen.findByRole('button', { name: 'Share' });
   expect(screen.queryByRole('button', { name: /close & settle/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
   expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
   await userEvent.click(share);
   expect(shareMessage).toHaveBeenCalledWith(textFriendsMessage);

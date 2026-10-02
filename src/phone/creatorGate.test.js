@@ -1,9 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MyBets from './MyBets';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet, subscribeMyBets } from './api';
-import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
+import { sendPhoneCode, signOutCreator, verifyPhoneCode } from './creatorAuth';
 import { AUTH_COPY } from './creatorSession';
 import { useIdentity } from './identity';
 import { navigation } from 'next/navigation';
@@ -52,6 +54,7 @@ jest.mock('./api', () => ({
 jest.mock('./creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
+  signOutCreator: jest.fn(),
 }));
 
 jest.mock('./identity', () => ({
@@ -76,6 +79,7 @@ beforeEach(() => {
   navigation.params = {};
   sendPhoneCode.mockReset();
   verifyPhoneCode.mockReset();
+  signOutCreator.mockReset();
   settleBet.mockClear();
   subscribeMyBets.mockClear();
   subscribeBet.mockImplementation((_code, onChange) => {
@@ -103,6 +107,9 @@ test('my bets skips the phone gate when a creator session exists', () => {
       jest.advanceTimersByTime(450);
     });
     expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
+    const logout = screen.getByRole('button', { name: 'Log out' });
+    expect(logout).toHaveClass('logout-link');
+    expect(logout).not.toHaveClass('cta');
     expect(subscribeMyBets).toHaveBeenCalledWith('creator-1', expect.any(Function));
   } finally {
     jest.useRealTimers();
@@ -126,6 +133,7 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
   expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
   expect(subscribeMyBets).not.toHaveBeenCalled();
 
   fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
@@ -142,6 +150,47 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(await screen.findByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', 'done');
   expect(subscribeMyBets).toHaveBeenCalledWith('anon-1', expect.any(Function));
+});
+
+test('log out drops the creator session and the phone gate returns', async () => {
+  mockIdentity.user = {
+    uid: 'creator-1',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone' }],
+  };
+  const view = render(
+    <div className="phone">
+      <MyBets />
+    </div>,
+  );
+  const logout = await screen.findByRole('button', { name: 'Log out' });
+  expect(logout).toHaveClass('logout-link');
+  expect(logout).not.toHaveClass('cta');
+  expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+
+  await userEvent.click(logout);
+  expect(signOutCreator).toHaveBeenCalledTimes(1);
+
+  mockIdentity.user = {
+    uid: 'anon-after',
+    isAnonymous: true,
+    providerData: [{ providerId: 'anonymous' }],
+  };
+  view.rerender(
+    <div className="phone">
+      <MyBets />
+    </div>,
+  );
+
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send code' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
+
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const rule = css.slice(css.indexOf('.logout-link'), css.indexOf('.logout-link') + 280);
+  expect(rule).toContain('color: var(--muted)');
+  expect(rule).not.toContain('#007a45');
 });
 
 test('settle stays closed until the owning phone verifies', async () => {
@@ -225,6 +274,7 @@ test('the owning phone can settle after the code slide', async () => {
     });
   });
   expect(await screen.findByRole('heading', { name: 'Settle' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   await userEvent.click(screen.getByRole('button', { name: 'No' }));
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');

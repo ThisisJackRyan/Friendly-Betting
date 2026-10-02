@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { FiPlus } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
 import CreatorAuthFlow from './AuthSlides';
+import { signOutCreator } from './creatorAuth';
 import { isCreator } from './creatorSession';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
@@ -63,6 +64,9 @@ export function MyBetsList({ user }) {
               );
             })}
           </div>
+          <button type="button" className="logout-link" onClick={() => signOutCreator()}>
+            Log out
+          </button>
         </>
       )}
     </div>

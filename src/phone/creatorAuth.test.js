@@ -2,6 +2,7 @@ const mockVerifyPhoneNumber = jest.fn();
 const mockCredential = jest.fn((verificationId, code) => ({ verificationId, code }));
 const mockLinkWithCredential = jest.fn();
 const mockSignInWithCredential = jest.fn();
+const mockSignOut = jest.fn();
 const mockRecaptchaClear = jest.fn();
 const mockAuthState = { currentUser: null };
 
@@ -15,6 +16,7 @@ jest.mock('firebase/auth', () => {
     RecaptchaVerifier: jest.fn(() => ({ clear: mockRecaptchaClear })),
     linkWithCredential: (...args) => mockLinkWithCredential(...args),
     signInWithCredential: (...args) => mockSignInWithCredential(...args),
+    signOut: (...args) => mockSignOut(...args),
   };
 });
 
@@ -23,13 +25,14 @@ jest.mock('../Config/firebase-config', () => ({
 }));
 
 const { RecaptchaVerifier } = require('firebase/auth');
-const { resetPhoneAuthForTests, sendPhoneCode, verifyPhoneCode } = require('./creatorAuth');
+const { resetPhoneAuthForTests, sendPhoneCode, signOutCreator, verifyPhoneCode } = require('./creatorAuth');
 
 beforeEach(() => {
   mockVerifyPhoneNumber.mockReset();
   mockCredential.mockClear();
   mockLinkWithCredential.mockReset();
   mockSignInWithCredential.mockReset();
+  mockSignOut.mockReset();
   mockRecaptchaClear.mockReset();
   RecaptchaVerifier.mockClear();
   mockAuthState.currentUser = null;
@@ -93,4 +96,22 @@ test('with no session, verify signs in with the phone credential', async () => {
   expect(mockLinkWithCredential).not.toHaveBeenCalled();
   expect(mockSignInWithCredential).toHaveBeenCalled();
   expect(user.uid).toBe('creator-2');
+});
+
+test('log out only calls signOut', async () => {
+  mockSignOut.mockResolvedValue();
+  await signOutCreator();
+  expect(mockSignOut).toHaveBeenCalledTimes(1);
+  expect(mockSignOut).toHaveBeenCalledWith(mockAuthState);
+  expect(mockLinkWithCredential).not.toHaveBeenCalled();
+  expect(mockSignInWithCredential).not.toHaveBeenCalled();
+});
+
+test('an expired code does not sign the creator out', async () => {
+  mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true };
+  const expired = new Error('expired');
+  expired.code = 'auth/code-expired';
+  mockLinkWithCredential.mockRejectedValue(expired);
+  await expect(verifyPhoneCode('vid-1', '111111')).rejects.toBe(expired);
+  expect(mockSignOut).not.toHaveBeenCalled();
 });
