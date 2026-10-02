@@ -27,7 +27,10 @@ function ensureSignedIn() {
   if (!ensuring) {
     ensuring = signInAnonymously(auth)
       .then((cred) => cred.user)
-      .catch(() => localUser());
+      .catch(() => localUser())
+      .finally(() => {
+        ensuring = null;
+      });
   }
   return ensuring;
 }

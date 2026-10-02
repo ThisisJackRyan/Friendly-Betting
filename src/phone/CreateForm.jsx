@@ -1,12 +1,26 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
+import {
+  CodeBody,
+  PhoneBody,
+  RecaptchaSlot,
+  SendButton,
+  VerifyButton,
+  useCreatorPhone,
+} from './AuthSlides';
 import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
+import {
+  AUTH_COPY,
+  CREATE_STEP,
+  adjacentCreateStep,
+  isCreator,
+} from './creatorSession';
 import { creatorName, useIdentity } from './identity';
 import {
   buildDraft,
@@ -81,7 +95,12 @@ function Recap({ fields }) {
 const CreateForm = () => {
   const params = useParams();
   const router = useRouter();
-  const user = useIdentity();
+  const identity = useIdentity();
+  const [linkedUser, setLinkedUser] = useState(null);
+  const user = linkedUser || identity;
+  const phone = useCreatorPhone();
+  const advancedAuth = useRef(false);
+  const stepRef = useRef(1);
   const { setHidePhoneTabs, setPinPhoneTabs } = useCreateChrome();
   const rawType = params?.type;
   const routeType = TYPE_META[rawType] ? rawType : null;
@@ -135,7 +154,9 @@ const CreateForm = () => {
       1: COPY.newBet,
       2: meta?.label || COPY.newBet,
       3: COPY.stake,
-      4: COPY.textFriendsTitle,
+      4: AUTH_COPY.phoneTitle,
+      5: AUTH_COPY.codeTitle,
+      6: COPY.textFriendsTitle,
     };
     document.title = `${titles[step] || COPY.newBet} · Friendly`;
   }, [step, meta]);
@@ -157,8 +178,21 @@ const CreateForm = () => {
     return () => window.clearTimeout(id);
   }, [exitHome, router]);
 
+  stepRef.current = step;
+
+  useEffect(() => {
+    if (!phone.verifiedUser || advancedAuth.current) return;
+    advancedAuth.current = true;
+    setLinkedUser(phone.verifiedUser);
+    setMotion('forward');
+    setLeaving(stepRef.current);
+    setHasMoved(true);
+    setError('');
+    setStep(CREATE_STEP.share);
+  }, [phone.verifiedUser]);
+
   const go = (next) => {
-    if (exitHome || next === step || next < 1 || next > 4) return;
+    if (exitHome || next == null || next === step || next < 1 || next > CREATE_STEP.share) return;
     setMotion(next > step ? 'forward' : 'back');
     setLeaving(step);
     setHasMoved(true);
@@ -206,11 +240,12 @@ const CreateForm = () => {
 
   const onBack = (stepNumber) => {
     if (exitHome) return;
-    if (stepNumber <= 1) {
+    const prev = adjacentCreateStep(stepNumber, user, -1);
+    if (prev == null) {
       goHome();
       return;
     }
-    go(stepNumber - 1);
+    go(prev);
   };
 
   const updateProp = (index, value) => {
@@ -244,8 +279,8 @@ const CreateForm = () => {
       setError(ready.error);
       return;
     }
-    if (!user) {
-      setError('Still connecting. Try again in a second.');
+    if (!isCreator(user)) {
+      go(CREATE_STEP.phone);
       return;
     }
 
@@ -278,10 +313,17 @@ const CreateForm = () => {
   };
 
   const titleFor = (stepNumber) => {
-    if (stepNumber === 2) return meta?.label || COPY.newBet;
-    if (stepNumber === 3) return COPY.stake;
-    if (stepNumber === 4) return COPY.textFriendsTitle;
+    if (stepNumber === CREATE_STEP.details) return meta?.label || COPY.newBet;
+    if (stepNumber === CREATE_STEP.stake) return COPY.stake;
+    if (stepNumber === CREATE_STEP.phone) return AUTH_COPY.phoneTitle;
+    if (stepNumber === CREATE_STEP.code) return AUTH_COPY.codeTitle;
+    if (stepNumber === CREATE_STEP.share) return COPY.textFriendsTitle;
     return COPY.newBet;
+  };
+
+  const onSendCode = async () => {
+    const sent = await phone.send();
+    if (sent) go(CREATE_STEP.code);
   };
 
   const renderStep = (stepNumber) => {
@@ -465,13 +507,66 @@ const CreateForm = () => {
         </>
       );
       cta = (
-        <button type="button" className="cta press" onClick={() => go(4)}>
+        <button
+          type="button"
+          className="cta press"
+          onClick={() => {
+            if (!user) {
+              setError('Still connecting. Try again in a second.');
+              return;
+            }
+            go(adjacentCreateStep(CREATE_STEP.stake, user, 1));
+          }}
+        >
           {COPY.next}
         </button>
       );
     }
 
-    if (stepNumber === 4) {
+    if (stepNumber === CREATE_STEP.phone) {
+      body = (
+        <>
+          <PhoneBody
+            formatted={phone.formatted}
+            onNational={phone.onNational}
+            busy={phone.busy}
+          />
+          {phone.error && stepNumber === step ? (
+            <p className="form-error" role="alert">{phone.error}</p>
+          ) : null}
+        </>
+      );
+      cta = (
+        <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSendCode} />
+      );
+    }
+
+    if (stepNumber === CREATE_STEP.code) {
+      body = (
+        <>
+          <CodeBody
+            e164={phone.e164}
+            otp={phone.otp}
+            onOtp={phone.onOtp}
+            onResend={() => phone.send()}
+            onChangeNumber={() => go(CREATE_STEP.phone)}
+            busy={phone.busy}
+          />
+          {phone.error && stepNumber === step ? (
+            <p className="form-error" role="alert">{phone.error}</p>
+          ) : null}
+        </>
+      );
+      cta = (
+        <VerifyButton
+          busy={phone.busy}
+          ready={phone.readyCode}
+          onVerify={() => phone.verify()}
+        />
+      );
+    }
+
+    if (stepNumber === CREATE_STEP.share) {
       body = (
         <>
           {draft.ok && <Recap fields={draft.fields} />}
@@ -537,6 +632,7 @@ const CreateForm = () => {
 
   return (
     <div className={exitHome ? 'phone create-flow is-exiting' : 'phone create-flow'}>
+      <RecaptchaSlot containerRef={phone.containerRef} />
       <div className="create-viewport">
         {leaving != null && (
           <div

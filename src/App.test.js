@@ -34,8 +34,19 @@ jest.mock('./phone/api', () => ({
   settleBet: jest.fn(),
 }));
 
+jest.mock('./phone/creatorAuth', () => ({
+  sendPhoneCode: jest.fn(),
+  verifyPhoneCode: jest.fn(),
+  signOutCreator: jest.fn(),
+}));
+
 jest.mock('./phone/identity', () => ({
-  useIdentity: () => ({ uid: 'user-1', email: 'sam@example.com' }),
+  useIdentity: () => ({
+    uid: 'user-1',
+    email: 'sam@example.com',
+    phoneNumber: '+15551234567',
+    providerData: [{ providerId: 'phone' }],
+  }),
   creatorName: () => 'Sam',
   rememberName: () => {},
   savedName: () => '',
@@ -88,8 +99,13 @@ test('my bets is a tab with an empty state', () => {
       jest.advanceTimersByTime(1);
     });
     expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
     expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
     expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
+    const logout = screen.getByRole('button', { name: 'Log out' });
+    expect(logout).toHaveClass('logout-link');
+    expect(logout).not.toHaveClass('cta');
     expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');
