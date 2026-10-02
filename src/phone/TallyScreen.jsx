@@ -156,10 +156,7 @@ const TallyScreen = () => {
   };
 
   const canSettle = canSettleBet(user, bet);
-  const ownsOpenBet = Boolean(
-    user && bet && user.uid === bet.createdByID && bet.status !== 'closed',
-  );
-  const needsCreatorAuth = ownsOpenBet && !canSettle;
+  const betIsOpen = Boolean(bet && bet.status !== 'closed');
   const won = bet ? winnerLabel(bet) : '';
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
@@ -203,13 +200,12 @@ const TallyScreen = () => {
                 Share
               </button>
             </div>
-            {canSettle && !settling && !authGate && (
-              <button type="button" className="danger press" onClick={() => setSettling(true)}>
-                Close & settle
-              </button>
-            )}
-            {needsCreatorAuth && !authGate && (
-              <button type="button" className="danger press" onClick={() => setAuthGate(true)}>
+            {betIsOpen && !settling && !authGate && (
+              <button
+                type="button"
+                className="danger press"
+                onClick={() => (canSettle ? setSettling(true) : setAuthGate(true))}
+              >
                 Close & settle
               </button>
             )}
