@@ -1155,7 +1155,7 @@ body {
 
 @keyframes create-in-forward {
   from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  to { transform: none; }
 }
 
 @keyframes create-out-forward {
@@ -1165,7 +1165,7 @@ body {
 
 @keyframes create-in-back {
   from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  to { transform: none; }
 }
 
 @keyframes create-out-back {

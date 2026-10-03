@@ -543,6 +543,30 @@ test('a failed person check stays on the phone step with the check still there',
   expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
 });
 
+test('send after a check does not reload or show the person sentence', async () => {
+  let release;
+  sendPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    release = () => resolve('vid-solved');
+  }));
+  await reachPhone();
+  const href = window.location.href;
+  const button = screen.getByRole('button', { name: 'Send code' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(sendPhoneCode).toHaveBeenCalledTimes(1);
+  const submit = new Event('submit', { bubbles: true, cancelable: true });
+  document.dispatchEvent(submit);
+  expect(submit.defaultPrevented).toBe(true);
+  expect(window.location.href).toBe(href);
+  expect(screen.queryByText(/Couldn\u2019t confirm you\u2019re a person/)).not.toBeInTheDocument();
+  await act(async () => {
+    release();
+  });
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+  expect(screen.queryByText(/Couldn\u2019t confirm you\u2019re a person/)).not.toBeInTheDocument();
+  expect(window.location.href).toBe(href);
+});
+
 test('the person check slot is in the phone step and is not clipped shut', () => {
   const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
   const start = css.indexOf('.recaptcha-slot {');
@@ -553,6 +577,10 @@ test('the person check slot is in the phone step and is not clipped shut', () =>
   expect(block).not.toContain('hidden');
   expect(css).toContain('.person-check');
   expect(css).toContain('overflow: visible');
+  const entering = css.slice(css.indexOf('@keyframes create-in-forward'));
+  const enteringEnd = entering.indexOf('@keyframes create-out-forward');
+  expect(entering.slice(0, enteringEnd)).toContain('transform: none');
+  expect(entering.slice(0, enteringEnd)).not.toContain('translateX(0)');
 });
 
 test('an unknown create route leaves the walkthrough', () => {
