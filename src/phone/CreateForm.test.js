@@ -402,6 +402,56 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   }));
 });
 
+test('an unmapped send failure shows the Firebase reason in the red alert', async () => {
+  mockIdentity.user = {
+    uid: 'anon-1',
+    isAnonymous: true,
+    providerData: [{ providerId: 'anonymous' }],
+  };
+  const err = new Error(
+    'Firebase: The given sign-in provider is disabled for this Firebase project. (auth/operation-not-allowed).',
+  );
+  err.code = 'auth/operation-not-allowed';
+  sendPhoneCode.mockRejectedValue(err);
+
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveClass('form-error');
+  expect(alert).toHaveTextContent(
+    'auth/operation-not-allowed: The given sign-in provider is disabled for this Firebase project.',
+  );
+  expect(alert).not.toHaveTextContent('Could not text a code.');
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
+test('a network send failure still says you are offline', async () => {
+  mockIdentity.user = {
+    uid: 'anon-1',
+    isAnonymous: true,
+    providerData: [{ providerId: 'anonymous' }],
+  };
+  const err = new Error('Firebase: Error (auth/network-request-failed).');
+  err.code = 'auth/network-request-failed';
+  sendPhoneCode.mockRejectedValue(err);
+
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('You\u2019re offline. Try again.');
+  expect(alert).not.toHaveTextContent('auth/network-request-failed');
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+});
+
 test('an unknown create route leaves the walkthrough', () => {
   navigation.pathname = '/new/nope';
   navigation.params = { type: 'nope' };

@@ -76,8 +76,25 @@ export function codeSentCopy(e164) {
   return `Code sent to ${maskPhone(e164)}.`;
 }
 
+function humanFirebaseMessage(message, code) {
+  if (typeof message !== 'string') return '';
+  let text = message.trim().replace(/\s+/g, ' ');
+  if (!text) return '';
+  text = text.replace(/^(?:Firebase:\s*)+/i, '');
+  if (code) {
+    const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(new RegExp(`\\s*\\(${escaped}\\)\\.?$`), '').trim();
+  }
+  if (!text || /^error$/i.test(text) || text === code) return '';
+  return text;
+}
+
 export function phoneError(err, fallback) {
-  if (PHONE_ERRORS[err?.code]) return PHONE_ERRORS[err.code];
+  const code = typeof err?.code === 'string' ? err.code.trim() : '';
+  if (code && PHONE_ERRORS[code]) return PHONE_ERRORS[code];
+  const detail = humanFirebaseMessage(err?.message, code);
+  if (code && detail) return `${code}: ${detail}`;
+  if (code) return code;
   return fallback;
 }
 

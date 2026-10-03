@@ -7,6 +7,7 @@ import {
   formatUsNational,
   isCreator,
   maskPhone,
+  phoneError,
   toE164Us,
 } from './creatorSession';
 
@@ -62,6 +63,60 @@ test('US numbers default to +1 and codes mask the tail', () => {
   expect(formatUsNational('5551234567')).toBe('(555) 123-4567');
   expect(maskPhone('+15551234567')).toBe('•••4567');
   expect(codeSentCopy('+15551234567')).toBe('Code sent to •••4567.');
+});
+
+test('mapped Firebase codes keep their friendly copy', () => {
+  const fallback = 'Could not text a code.';
+  const mapped = {
+    'auth/invalid-phone-number': 'That number doesn\u2019t look right.',
+    'auth/missing-phone-number': 'Enter a phone number.',
+    'auth/too-many-requests': 'Too many tries. Wait a moment.',
+    'auth/invalid-verification-code': 'That code doesn\u2019t match.',
+    'auth/code-expired': 'That code expired. Resend it.',
+    'auth/invalid-verification-id': 'Send a new code.',
+    'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
+    'auth/quota-exceeded': 'Texting is paused. Try again later.',
+    'auth/network-request-failed': 'You\u2019re offline. Try again.',
+  };
+  Object.entries(mapped).forEach(([code, copy]) => {
+    expect(phoneError({
+      code,
+      message: `Firebase: A longer server explanation. (${code}).`,
+    }, fallback)).toBe(copy);
+  });
+});
+
+test('an unmapped Firebase code surfaces the code and human message', () => {
+  const err = {
+    code: 'auth/operation-not-allowed',
+    message: 'Firebase: The given sign-in provider is disabled for this Firebase project. (auth/operation-not-allowed).',
+  };
+  const send = phoneError(err, 'Could not text a code.');
+  const verify = phoneError(err, 'Could not verify that code.');
+  const expected = 'auth/operation-not-allowed: The given sign-in provider is disabled for this Firebase project.';
+  expect(send).toBe(expected);
+  expect(verify).toBe(expected);
+  expect(send).not.toBe('Could not text a code.');
+});
+
+test('an unmapped code with only the generic Firebase error still shows the code', () => {
+  expect(phoneError({
+    code: 'auth/app-not-authorized',
+    message: 'Firebase: Error (auth/app-not-authorized).',
+  }, 'Could not text a code.')).toBe('auth/app-not-authorized');
+  const unavailable = new Error('Phone sign-in is unavailable.');
+  unavailable.code = 'auth/unavailable';
+  expect(phoneError(unavailable, 'Could not text a code.')).toBe(
+    'auth/unavailable: Phone sign-in is unavailable.',
+  );
+});
+
+test('a failure without a Firebase code keeps the catch-all', () => {
+  expect(phoneError(new Error('socket hang up'), 'Could not text a code.')).toBe('Could not text a code.');
+  expect(phoneError(null, 'Could not verify that code.')).toBe('Could not verify that code.');
+  expect(phoneError({ message: 'Firebase: Error (auth/internal-error).' }, 'Could not text a code.')).toBe(
+    'Could not text a code.',
+  );
 });
 
 test('settle requires the phone creator who owns the bet', () => {
