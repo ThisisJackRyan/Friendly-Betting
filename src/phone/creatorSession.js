@@ -41,6 +41,7 @@ const PHONE_ERRORS = {
   'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
   'auth/quota-exceeded': 'Texting is paused. Try again later.',
   'auth/network-request-failed': 'You\u2019re offline. Try again.',
+  'auth/billing-not-enabled': 'Texting isn\u2019t set up yet.',
 };
 
 export const SEND_CODE_ERROR = 'Couldn\u2019t send a code. Try again.';
@@ -81,7 +82,11 @@ export function codeSentCopy(e164) {
 
 export function phoneError(err, fallback) {
   const code = typeof err?.code === 'string' ? err.code.trim() : '';
-  if (code && PHONE_ERRORS[code]) return { message: PHONE_ERRORS[code], code: '' };
+  if (code && PHONE_ERRORS[code]) {
+    // Billing is a project setup miss, so the raw code stays under the sentence.
+    const showCode = code === 'auth/billing-not-enabled';
+    return { message: PHONE_ERRORS[code], code: showCode ? code : '' };
+  }
   return { message: fallback, code };
 }
 
