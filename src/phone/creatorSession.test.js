@@ -1,5 +1,6 @@
 import {
   adjacentCreateStep,
+  AUTH_COPY,
   canSettleBet,
   codeSentCopy,
   createStepOrder,
@@ -55,6 +56,20 @@ test('create slide order inserts phone and code unless a phone session exists', 
   expect(adjacentCreateStep(CREATE_STEP.code, anonUser, 1)).toBe(CREATE_STEP.share);
   expect(adjacentCreateStep(CREATE_STEP.share, phoneUser, -1)).toBe(CREATE_STEP.stake);
   expect(adjacentCreateStep(CREATE_STEP.code, phoneUser, 1)).toBe(CREATE_STEP.share);
+});
+
+test('the phone sample is an ordinary example, and a typed test number still parses', () => {
+  expect(AUTH_COPY.phonePlaceholder).toBe('(555) 555-0100');
+  const sample = [
+    AUTH_COPY.phonePlaceholder,
+    AUTH_COPY.textLine,
+    AUTH_COPY.bettorLine,
+    AUTH_COPY.send,
+  ].join('\n');
+  expect(sample).not.toContain('555-555-5555');
+  expect(sample).not.toContain('5555555555');
+  expect(toE164Us('5555555555')).toBe('+15555555555');
+  expect(formatUsNational('5555555555')).toBe('(555) 555-5555');
 });
 
 test('US numbers default to +1 and codes mask the tail', () => {

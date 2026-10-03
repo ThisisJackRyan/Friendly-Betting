@@ -55,6 +55,8 @@ jest.mock('./creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
   signOutCreator: jest.fn(),
+  mountPhoneCheck: jest.fn(() => Promise.resolve()),
+  releasePhoneCheck: jest.fn(),
 }));
 
 jest.mock('./identity', () => ({
@@ -131,6 +133,8 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
   expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
+  expect(screen.getByLabelText(/phone/i)).toHaveAttribute('placeholder', '(555) 555-0100');
+  expect(document.querySelector('[data-step="phone"] .person-check .recaptcha-slot')).not.toBeNull();
   expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();

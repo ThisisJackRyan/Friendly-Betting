@@ -22,7 +22,7 @@ function unavailable() {
   return err;
 }
 
-export function resetPhoneAuthForTests() {
+export function releasePhoneCheck() {
   if (verifier) {
     try {
       verifier.clear();
@@ -34,7 +34,11 @@ export function resetPhoneAuthForTests() {
   verifierNode = null;
 }
 
-function invisibleVerifier(container) {
+export function resetPhoneAuthForTests() {
+  releasePhoneCheck();
+}
+
+function phoneVerifier(container) {
   if (verifier && verifierNode === container) return verifier;
   if (verifier) {
     try {
@@ -43,21 +47,24 @@ function invisibleVerifier(container) {
       // Replace a verifier bound to a previous container.
     }
   }
-  verifier = new RecaptchaVerifier(auth, container, { size: 'invisible' });
+  // A fresh params object every time. Firebase writes the site key onto it.
+  verifier = new RecaptchaVerifier(auth, container, { size: 'normal', theme: 'light' });
   verifierNode = container;
   return verifier;
 }
 
+export function mountPhoneCheck(container) {
+  if (!auth || !container) return Promise.resolve();
+  return phoneVerifier(container).render();
+}
+
 export async function sendPhoneCode(e164, container) {
   if (!auth || !container) throw unavailable();
-  const appVerifier = invisibleVerifier(container);
-  try {
-    const provider = new PhoneAuthProvider(auth);
-    return await provider.verifyPhoneNumber(e164, appVerifier);
-  } catch (err) {
-    resetPhoneAuthForTests();
-    throw err;
-  }
+  const appVerifier = phoneVerifier(container);
+  const provider = new PhoneAuthProvider(auth);
+  // Leave the widget mounted if this throws. Clearing it removes the challenge
+  // a person still needs to finish.
+  return provider.verifyPhoneNumber(e164, appVerifier);
 }
 
 async function signInWithPhone(credential) {

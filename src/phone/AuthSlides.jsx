@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { FiChevronLeft } from 'react-icons/fi';
-import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
+import { mountPhoneCheck, releasePhoneCheck, sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { SLIDE_MS } from './createMotion';
 import {
   AUTH_COPY,
@@ -106,6 +106,10 @@ export function useCreatorPhone() {
     verify(completed);
   };
 
+  useEffect(() => () => {
+    releasePhoneCheck();
+  }, []);
+
   return {
     containerRef,
     digitsRaw,
@@ -136,11 +140,29 @@ export function PhoneAlert({ error, code }) {
   );
 }
 
-export function RecaptchaSlot({ containerRef }) {
-  return <div ref={containerRef} className="recaptcha-slot" />;
+export function PersonCheck({ containerRef }) {
+  const slotRef = useRef(null);
+
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return undefined;
+    containerRef.current = slot;
+    Promise.resolve(mountPhoneCheck(slot)).catch(() => {
+      // Send still tries. A failed check uses the same human sentence.
+    });
+    return () => {
+      if (containerRef.current === slot) containerRef.current = null;
+    };
+  }, [containerRef]);
+
+  return (
+    <div className="person-check">
+      <div ref={slotRef} className="recaptcha-slot" />
+    </div>
+  );
 }
 
-export function PhoneBody({ formatted, onNational, busy }) {
+export function PhoneBody({ formatted, onNational, busy, check }) {
   return (
     <>
       <label className="field" htmlFor="creator-phone">
@@ -153,7 +175,7 @@ export function PhoneBody({ formatted, onNational, busy }) {
             inputMode="tel"
             autoComplete="tel-national"
             name="phone"
-            placeholder="(555) 555-5555"
+            placeholder={AUTH_COPY.phonePlaceholder}
             value={formatted}
             disabled={busy === 'send'}
             onChange={(event) => onNational(event.target.value)}
@@ -162,6 +184,7 @@ export function PhoneBody({ formatted, onNational, busy }) {
       </label>
       <p className="field-hint">{AUTH_COPY.textLine}</p>
       <p className="field-hint">{AUTH_COPY.bettorLine}</p>
+      {check || null}
     </>
   );
 }
@@ -173,6 +196,7 @@ export function CodeBody({
   onResend,
   onChangeNumber,
   busy,
+  check,
 }) {
   const refs = useRef([]);
 
@@ -231,6 +255,7 @@ export function CodeBody({
         ))}
       </div>
       <p className="field-hint">{codeSentCopy(e164)}</p>
+      {check || null}
       <p className="otp-links">
         <button type="button" disabled={Boolean(busy)} onClick={onResend}>
           {busy === 'send' ? AUTH_COPY.sending : AUTH_COPY.resend}
@@ -385,6 +410,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
             onResend={onResend}
             onChangeNumber={() => go(1)}
             busy={phone.busy}
+            check={step === 2 ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
           <PhoneAlert error={phone.error} code={phone.errorCode} />
         </AuthChrome>
@@ -402,6 +428,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
           formatted={phone.formatted}
           onNational={phone.onNational}
           busy={phone.busy}
+          check={step === 1 ? <PersonCheck containerRef={phone.containerRef} /> : null}
         />
         <PhoneAlert error={phone.error} code={phone.errorCode} />
       </AuthChrome>
@@ -410,7 +437,6 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
 
   const flow = (
     <div className="creator-auth create-flow">
-      <RecaptchaSlot containerRef={phone.containerRef} />
       <div className="create-viewport">
         {leaving != null && (
           <div

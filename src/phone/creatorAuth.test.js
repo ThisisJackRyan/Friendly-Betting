@@ -4,6 +4,7 @@ const mockLinkWithCredential = jest.fn();
 const mockSignInWithCredential = jest.fn();
 const mockSignOut = jest.fn();
 const mockRecaptchaClear = jest.fn();
+const mockRecaptchaRender = jest.fn(() => Promise.resolve(1));
 const mockAuthState = { currentUser: null };
 
 jest.mock('firebase/auth', () => {
@@ -13,7 +14,10 @@ jest.mock('firebase/auth', () => {
   PhoneAuthProvider.credential = (verificationId, code) => mockCredential(verificationId, code);
   return {
     PhoneAuthProvider,
-    RecaptchaVerifier: jest.fn(() => ({ clear: mockRecaptchaClear })),
+    RecaptchaVerifier: jest.fn(() => ({
+      clear: mockRecaptchaClear,
+      render: mockRecaptchaRender,
+    })),
     linkWithCredential: (...args) => mockLinkWithCredential(...args),
     signInWithCredential: (...args) => mockSignInWithCredential(...args),
     signOut: (...args) => mockSignOut(...args),
@@ -25,7 +29,14 @@ jest.mock('../Config/firebase-config', () => ({
 }));
 
 const { RecaptchaVerifier } = require('firebase/auth');
-const { resetPhoneAuthForTests, sendPhoneCode, signOutCreator, verifyPhoneCode } = require('./creatorAuth');
+const {
+  mountPhoneCheck,
+  releasePhoneCheck,
+  resetPhoneAuthForTests,
+  sendPhoneCode,
+  signOutCreator,
+  verifyPhoneCode,
+} = require('./creatorAuth');
 
 beforeEach(() => {
   mockVerifyPhoneNumber.mockReset();
@@ -34,21 +45,51 @@ beforeEach(() => {
   mockSignInWithCredential.mockReset();
   mockSignOut.mockReset();
   mockRecaptchaClear.mockReset();
+  mockRecaptchaRender.mockClear();
   RecaptchaVerifier.mockClear();
   mockAuthState.currentUser = null;
   resetPhoneAuthForTests();
+  mockRecaptchaClear.mockClear();
 });
 
-test('send uses an invisible reCAPTCHA and returns a verification id', async () => {
+test('send renders a visible person check and returns a verification id', async () => {
   const container = document.createElement('div');
   mockVerifyPhoneNumber.mockResolvedValue('vid-1');
+  await expect(mountPhoneCheck(container)).resolves.toBe(1);
   await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-1');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
   expect(RecaptchaVerifier).toHaveBeenCalledWith(
     mockAuthState,
     container,
-    { size: 'invisible' },
+    { size: 'normal', theme: 'light' },
   );
+  expect(RecaptchaVerifier.mock.calls[0][2].size).not.toBe('invisible');
+  expect(mockRecaptchaRender).toHaveBeenCalledTimes(1);
   expect(mockVerifyPhoneNumber).toHaveBeenCalledWith('+15551234567', expect.any(Object));
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+});
+
+test('a failed person check keeps the verifier so the challenge can stay', async () => {
+  const container = document.createElement('div');
+  const err = new Error('The reCAPTCHA response token provided is either invalid, expired, already used.');
+  err.code = 'auth/captcha-check-failed';
+  mockVerifyPhoneNumber.mockRejectedValueOnce(err);
+
+  await expect(sendPhoneCode('+15551234567', container)).rejects.toBe(err);
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+
+  mockVerifyPhoneNumber.mockResolvedValueOnce('vid-2');
+  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-2');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+});
+
+test('leaving the phone flow is what clears the widget', async () => {
+  const container = document.createElement('div');
+  await mountPhoneCheck(container);
+  releasePhoneCheck();
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
 });
 
 test('an anonymous creator is upgraded with linkWithCredential', async () => {

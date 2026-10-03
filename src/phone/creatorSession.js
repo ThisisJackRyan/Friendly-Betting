@@ -21,6 +21,7 @@ const CREATE_ORDER = [
 export const AUTH_COPY = {
   phoneTitle: 'Phone',
   codeTitle: 'Code',
+  phonePlaceholder: '(555) 555-0100',
   textLine: 'We\u2019ll text a code.',
   bettorLine: 'Friends still vote with one tap \u2014 no account.',
   send: 'Send code',
