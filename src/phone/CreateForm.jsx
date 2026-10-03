@@ -7,6 +7,7 @@ import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
 import {
   CodeBody,
+  PhoneAlert,
   PhoneBody,
   RecaptchaSlot,
   SendButton,
@@ -531,8 +532,8 @@ const CreateForm = () => {
             onNational={phone.onNational}
             busy={phone.busy}
           />
-          {phone.error && stepNumber === step ? (
-            <p className="form-error" role="alert">{phone.error}</p>
+          {stepNumber === step ? (
+            <PhoneAlert error={phone.error} code={phone.errorCode} />
           ) : null}
         </>
       );
@@ -552,8 +553,8 @@ const CreateForm = () => {
             onChangeNumber={() => go(CREATE_STEP.phone)}
             busy={phone.busy}
           />
-          {phone.error && stepNumber === step ? (
-            <p className="form-error" role="alert">{phone.error}</p>
+          {stepNumber === step ? (
+            <PhoneAlert error={phone.error} code={phone.errorCode} />
           ) : null}
         </>
       );

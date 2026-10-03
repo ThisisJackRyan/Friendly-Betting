@@ -12,7 +12,9 @@ import {
   formatUsNational,
   nationalDigits,
   phoneError,
+  SEND_CODE_ERROR,
   toE164Us,
+  VERIFY_CODE_ERROR,
 } from './creatorSession';
 
 export function useCreatorPhone() {
@@ -24,8 +26,20 @@ export function useCreatorPhone() {
   const [verificationId, setVerificationId] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [busy, setBusy] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setErrorState] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [verifiedUser, setVerifiedUser] = useState(null);
+
+  const setError = (message) => {
+    setErrorState(message);
+    setErrorCode('');
+  };
+
+  const showPhoneError = (err, fallback) => {
+    const next = phoneError(err, fallback);
+    setErrorState(next.message);
+    setErrorCode(next.code);
+  };
 
   const onNational = (value) => {
     setError('');
@@ -48,7 +62,7 @@ export function useCreatorPhone() {
       attempted.current = '';
       return true;
     } catch (err) {
-      setError(phoneError(err, 'Could not text a code.'));
+      showPhoneError(err, SEND_CODE_ERROR);
       return false;
     } finally {
       setBusy(null);
@@ -76,7 +90,7 @@ export function useCreatorPhone() {
       return nextUser;
     } catch (err) {
       attempted.current = '';
-      setError(phoneError(err, 'Could not verify that code.'));
+      showPhoneError(err, VERIFY_CODE_ERROR);
       return null;
     } finally {
       verifying.current = false;
@@ -100,6 +114,7 @@ export function useCreatorPhone() {
     otp,
     busy,
     error,
+    errorCode,
     setError,
     onNational,
     onOtp,
@@ -109,6 +124,16 @@ export function useCreatorPhone() {
     readyCode: otp.every(Boolean),
     verifiedUser,
   };
+}
+
+export function PhoneAlert({ error, code }) {
+  if (!error) return null;
+  return (
+    <>
+      <p className="form-error" role="alert">{error}</p>
+      {code ? <p className="muted phone-error-code">{code}</p> : null}
+    </>
+  );
 }
 
 export function RecaptchaSlot({ containerRef }) {
@@ -361,7 +386,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
             onChangeNumber={() => go(1)}
             busy={phone.busy}
           />
-          {phone.error ? <p className="form-error" role="alert">{phone.error}</p> : null}
+          <PhoneAlert error={phone.error} code={phone.errorCode} />
         </AuthChrome>
       );
     }
@@ -378,7 +403,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
           onNational={phone.onNational}
           busy={phone.busy}
         />
-        {phone.error ? <p className="form-error" role="alert">{phone.error}</p> : null}
+        <PhoneAlert error={phone.error} code={phone.errorCode} />
       </AuthChrome>
     );
   };

@@ -152,6 +152,30 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(subscribeMyBets).toHaveBeenCalledWith('anon-1', expect.any(Function));
 });
 
+test('an unmapped send on the phone gate shows the human line and raw code', async () => {
+  const err = new Error(
+    'Firebase: The given sign-in provider is disabled for this Firebase project. (auth/operation-not-allowed).',
+  );
+  err.code = 'auth/operation-not-allowed';
+  sendPhoneCode.mockRejectedValue(err);
+  render(
+    <div className="phone">
+      <MyBets />
+    </div>,
+  );
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Couldn\u2019t send a code. Try again.');
+  expect(alert).not.toHaveTextContent('Firebase');
+  expect(alert).not.toHaveTextContent('auth/operation-not-allowed');
+  const code = screen.getByText('auth/operation-not-allowed');
+  expect(code).toHaveClass('muted');
+  expect(code.textContent).toBe('auth/operation-not-allowed');
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+});
+
 test('log out drops the creator session and the phone gate returns', async () => {
   mockIdentity.user = {
     uid: 'creator-1',

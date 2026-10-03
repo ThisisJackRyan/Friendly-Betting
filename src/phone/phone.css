@@ -664,6 +664,10 @@ body {
   margin-top: 8px;
 }
 
+.phone p.phone-error-code {
+  margin-top: 4px;
+}
+
 .phone .field-hint {
   margin: 0 0 16px;
   font-size: 14px;

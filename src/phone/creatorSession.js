@@ -43,6 +43,9 @@ const PHONE_ERRORS = {
   'auth/network-request-failed': 'You\u2019re offline. Try again.',
 };
 
+export const SEND_CODE_ERROR = 'Couldn\u2019t send a code. Try again.';
+export const VERIFY_CODE_ERROR = 'Couldn\u2019t verify that code. Try again.';
+
 export function isCreator(user) {
   if (!user || user.isLocal) return false;
   return (user.providerData || []).some((provider) => provider?.providerId === PHONE_PROVIDER);
@@ -76,26 +79,10 @@ export function codeSentCopy(e164) {
   return `Code sent to ${maskPhone(e164)}.`;
 }
 
-function humanFirebaseMessage(message, code) {
-  if (typeof message !== 'string') return '';
-  let text = message.trim().replace(/\s+/g, ' ');
-  if (!text) return '';
-  text = text.replace(/^(?:Firebase:\s*)+/i, '');
-  if (code) {
-    const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    text = text.replace(new RegExp(`\\s*\\(${escaped}\\)\\.?$`), '').trim();
-  }
-  if (!text || /^error$/i.test(text) || text === code) return '';
-  return text;
-}
-
 export function phoneError(err, fallback) {
   const code = typeof err?.code === 'string' ? err.code.trim() : '';
-  if (code && PHONE_ERRORS[code]) return PHONE_ERRORS[code];
-  const detail = humanFirebaseMessage(err?.message, code);
-  if (code && detail) return `${code}: ${detail}`;
-  if (code) return code;
-  return fallback;
+  if (code && PHONE_ERRORS[code]) return { message: PHONE_ERRORS[code], code: '' };
+  return { message: fallback, code };
 }
 
 export function createStepOrder(user) {
