@@ -61,9 +61,10 @@ test('send renders a visible person check and returns a verification id', async 
   expect(RecaptchaVerifier).toHaveBeenCalledWith(
     mockAuthState,
     container,
-    { size: 'normal', theme: 'light' },
+    expect.objectContaining({ size: 'normal', theme: 'light' }),
   );
   expect(RecaptchaVerifier.mock.calls[0][2].size).not.toBe('invisible');
+  expect(typeof RecaptchaVerifier.mock.calls[0][2].callback).toBe('function');
   expect(mockRecaptchaRender).toHaveBeenCalledTimes(1);
   expect(mockVerifyPhoneNumber).toHaveBeenCalledWith('+15551234567', expect.any(Object));
   expect(mockRecaptchaClear).not.toHaveBeenCalled();
@@ -83,6 +84,52 @@ test('a failed person check keeps the verifier so the challenge can stay', async
   await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-2');
   expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
   expect(mockRecaptchaClear).not.toHaveBeenCalled();
+});
+
+test('a solved check is sent as that token without clearing the widget', async () => {
+  const container = document.createElement('div');
+  const area = document.createElement('textarea');
+  area.name = 'g-recaptcha-response';
+  area.value = 'solved-token';
+  container.appendChild(area);
+  mockVerifyPhoneNumber.mockResolvedValue('vid-solved');
+
+  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-solved');
+
+  expect(RecaptchaVerifier).not.toHaveBeenCalled();
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  const passed = mockVerifyPhoneNumber.mock.calls[0][1];
+  await expect(passed.verify()).resolves.toBe('solved-token');
+  expect(passed.type).toBe('recaptcha');
+  passed._reset();
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  expect(area.value).toBe('solved-token');
+  expect(container.querySelector('textarea')).toBe(area);
+});
+
+test('a failed solved check does not clear the widget or replace the verifier', async () => {
+  const container = document.createElement('div');
+  await mountPhoneCheck(container);
+  const params = RecaptchaVerifier.mock.calls[0][2];
+  params.callback('solved-token');
+  const err = new Error('captcha');
+  err.code = 'auth/captcha-check-failed';
+  mockVerifyPhoneNumber.mockRejectedValueOnce(err);
+
+  await expect(sendPhoneCode('+15551234567', container)).rejects.toBe(err);
+
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  const passed = mockVerifyPhoneNumber.mock.calls[0][1];
+  await expect(passed.verify()).resolves.toBe('solved-token');
+  passed._reset();
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+
+  mockVerifyPhoneNumber.mockResolvedValueOnce('vid-2');
+  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-2');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  await expect(mockVerifyPhoneNumber.mock.calls[1][1].verify()).resolves.toBe('solved-token');
 });
 
 test('leaving the phone flow is what clears the widget', async () => {

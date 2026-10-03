@@ -20,6 +20,7 @@ import {
 export function useCreatorPhone() {
   const containerRef = useRef(null);
   const verifying = useRef(false);
+  const sending = useRef(false);
   const attempted = useRef('');
   const [digitsRaw, setDigitsRaw] = useState('');
   const [e164, setE164] = useState('');
@@ -47,15 +48,18 @@ export function useCreatorPhone() {
   };
 
   const send = async () => {
+    if (sending.current) return false;
     const next = toE164Us(digitsRaw);
     if (!next) {
       setError('Enter a US phone number.');
       return false;
     }
+    const container = containerRef.current;
+    sending.current = true;
     setBusy('send');
     setError('');
     try {
-      const id = await sendPhoneCode(next, containerRef.current);
+      const id = await sendPhoneCode(next, container);
       setVerificationId(id);
       setE164(next);
       setOtp(['', '', '', '', '', '']);
@@ -65,6 +69,7 @@ export function useCreatorPhone() {
       showPhoneError(err, SEND_CODE_ERROR);
       return false;
     } finally {
+      sending.current = false;
       setBusy(null);
     }
   };
@@ -106,8 +111,15 @@ export function useCreatorPhone() {
     verify(completed);
   };
 
-  useEffect(() => () => {
-    releasePhoneCheck();
+  useEffect(() => {
+    const stopSubmit = (event) => {
+      event.preventDefault();
+    };
+    document.addEventListener('submit', stopSubmit, true);
+    return () => {
+      document.removeEventListener('submit', stopSubmit, true);
+      releasePhoneCheck();
+    };
   }, []);
 
   return {
@@ -140,26 +152,45 @@ export function PhoneAlert({ error, code }) {
   );
 }
 
+let phoneSlot = null;
+let phonePark = null;
+
+function phoneSlotNode() {
+  if (!phoneSlot) {
+    phoneSlot = document.createElement('div');
+    phoneSlot.className = 'recaptcha-slot';
+  }
+  return phoneSlot;
+}
+
+function parkPhoneSlot(slot) {
+  if (!phonePark) {
+    phonePark = document.createElement('div');
+    phonePark.hidden = true;
+  }
+  if (!phonePark.isConnected && document.body) document.body.appendChild(phonePark);
+  phonePark.appendChild(slot);
+}
+
 export function PersonCheck({ containerRef }) {
-  const slotRef = useRef(null);
+  const hostRef = useRef(null);
 
   useEffect(() => {
-    const slot = slotRef.current;
-    if (!slot) return undefined;
+    const host = hostRef.current;
+    if (!host) return undefined;
+    const slot = phoneSlotNode();
+    host.appendChild(slot);
     containerRef.current = slot;
     Promise.resolve(mountPhoneCheck(slot)).catch(() => {
       // Send still tries. A failed check uses the same human sentence.
     });
     return () => {
-      if (containerRef.current === slot) containerRef.current = null;
+      // Keep the solved iframe alive. Removing it reloads the page on iPhone.
+      if (slot.isConnected) parkPhoneSlot(slot);
     };
   }, [containerRef]);
 
-  return (
-    <div className="person-check">
-      <div ref={slotRef} className="recaptcha-slot" />
-    </div>
-  );
+  return <div ref={hostRef} className="person-check" />;
 }
 
 export function PhoneBody({ formatted, onNational, busy, check }) {
@@ -178,6 +209,9 @@ export function PhoneBody({ formatted, onNational, busy, check }) {
             placeholder={AUTH_COPY.phonePlaceholder}
             value={formatted}
             disabled={busy === 'send'}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.preventDefault();
+            }}
             onChange={(event) => onNational(event.target.value)}
           />
         </span>
@@ -276,7 +310,14 @@ export function SendButton({ busy, ready, onSend }) {
       className="cta press"
       disabled={busy === 'send'}
       aria-disabled={!ready && busy !== 'send' ? true : undefined}
-      onClick={onSend}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onSend();
+      }}
     >
       {busy === 'send' ? AUTH_COPY.sending : AUTH_COPY.send}
     </button>
