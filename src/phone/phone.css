@@ -483,12 +483,23 @@ body {
   color: var(--muted);
 }
 
+.person-check {
+  position: relative;
+  z-index: 1;
+  margin: 2px 0 16px;
+  overflow: visible;
+}
+
 .recaptcha-slot {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
+  position: relative;
+  width: 304px;
+  max-width: 100%;
+  min-height: 78px;
+  overflow: visible;
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+  line-height: 0;
 }
 
 .creator-auth {

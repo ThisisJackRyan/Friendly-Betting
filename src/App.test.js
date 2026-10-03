@@ -38,6 +38,8 @@ jest.mock('./phone/creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
   signOutCreator: jest.fn(),
+  mountPhoneCheck: jest.fn(() => Promise.resolve()),
+  releasePhoneCheck: jest.fn(),
 }));
 
 jest.mock('./phone/identity', () => ({

@@ -43,6 +43,8 @@ jest.mock('./api', () => ({
 jest.mock('./creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
+  mountPhoneCheck: jest.fn(() => Promise.resolve()),
+  releasePhoneCheck: jest.fn(),
 }));
 
 const phoneCreator = {

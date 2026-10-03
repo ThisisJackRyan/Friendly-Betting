@@ -7,9 +7,9 @@ import { FiChevronLeft, FiX } from 'react-icons/fi';
 import { saveBet } from './api';
 import {
   CodeBody,
+  PersonCheck,
   PhoneAlert,
   PhoneBody,
-  RecaptchaSlot,
   SendButton,
   VerifyButton,
   useCreatorPhone,
@@ -531,6 +531,9 @@ const CreateForm = () => {
             formatted={phone.formatted}
             onNational={phone.onNational}
             busy={phone.busy}
+            check={stepNumber === step ? (
+              <PersonCheck containerRef={phone.containerRef} />
+            ) : null}
           />
           {stepNumber === step ? (
             <PhoneAlert error={phone.error} code={phone.errorCode} />
@@ -552,6 +555,9 @@ const CreateForm = () => {
             onResend={() => phone.send()}
             onChangeNumber={() => go(CREATE_STEP.phone)}
             busy={phone.busy}
+            check={stepNumber === step ? (
+              <PersonCheck containerRef={phone.containerRef} />
+            ) : null}
           />
           {stepNumber === step ? (
             <PhoneAlert error={phone.error} code={phone.errorCode} />
@@ -633,7 +639,6 @@ const CreateForm = () => {
 
   return (
     <div className={exitHome ? 'phone create-flow is-exiting' : 'phone create-flow'}>
-      <RecaptchaSlot containerRef={phone.containerRef} />
       <div className="create-viewport">
         {leaving != null && (
           <div

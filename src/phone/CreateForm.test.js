@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
@@ -28,6 +30,8 @@ jest.mock('./api', () => ({
 jest.mock('./creatorAuth', () => ({
   sendPhoneCode: jest.fn(),
   verifyPhoneCode: jest.fn(),
+  mountPhoneCheck: jest.fn(() => Promise.resolve()),
+  releasePhoneCheck: jest.fn(),
 }));
 
 jest.mock('./identity', () => ({
@@ -361,6 +365,12 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
   expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
   expect(screen.getByText('+1')).toBeInTheDocument();
+  expect(screen.getByLabelText(/phone/i)).toHaveAttribute('placeholder', AUTH_COPY.phonePlaceholder);
+  const phonePane = document.querySelector('.create-pane[data-step="4"]');
+  const slot = phonePane.querySelector('.scroll .person-check .recaptcha-slot');
+  expect(slot).not.toBeNull();
+  expect(document.querySelector('.create-flow > .recaptcha-slot')).toBeNull();
+  expect(phonePane.textContent).not.toContain('555-555-5555');
   expect(screen.queryByRole('heading', { name: 'Text friends' })).not.toBeInTheDocument();
   expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
 
@@ -379,6 +389,9 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(screen.getByRole('button', { name: 'Resend' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
+  const codePane = document.querySelector('.create-pane[data-step="5"]:not(.is-leaving)');
+  expect(codePane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
+  expect(document.querySelector('.create-pane.is-leaving .person-check')).toBeNull();
 
   '123456'.split('').forEach((digit, index) => {
     fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
@@ -504,6 +517,42 @@ test('an unmapped verify failure shows the verify line and the raw auth code', a
   expect(code).toHaveClass('muted');
   expect(code.textContent).toBe('auth/missing-client-identifier');
   expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
+});
+
+test('a failed person check stays on the phone step with the check still there', async () => {
+  const err = new Error(
+    'Firebase: The reCAPTCHA response token provided is either invalid, expired, already used or the domain associated with it does not match. (auth/captcha-check-failed).',
+  );
+  err.code = 'auth/captcha-check-failed';
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  const phone = screen.getByLabelText(/phone/i);
+  expect(phone).toHaveAttribute('placeholder', '(555) 555-0100');
+  expect(phone.getAttribute('placeholder')).not.toContain('555-555-5555');
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Couldn\u2019t confirm you\u2019re a person. Try again.');
+  expect(alert).not.toHaveTextContent('reCAPTCHA');
+  expect(alert).not.toHaveTextContent('Firebase');
+  expect(screen.queryByText('auth/captcha-check-failed')).not.toBeInTheDocument();
+  const pane = document.querySelector('.create-pane[data-step="4"]');
+  expect(pane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
+test('the person check slot is in the phone step and is not clipped shut', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const start = css.indexOf('.recaptcha-slot {');
+  const block = css.slice(start, css.indexOf('}', start));
+  expect(start).toBeGreaterThan(-1);
+  expect(block).not.toContain('clip');
+  expect(block).not.toContain('1px');
+  expect(block).not.toContain('hidden');
+  expect(css).toContain('.person-check');
+  expect(css).toContain('overflow: visible');
 });
 
 test('an unknown create route leaves the walkthrough', () => {
