@@ -87,6 +87,22 @@ test('mapped Firebase codes keep their friendly copy and hide the code', () => {
   });
 });
 
+test('billing-not-enabled keeps its sentence and the muted raw code', () => {
+  const message = 'Firebase: Billing account not configured. (auth/billing-not-enabled).';
+  const expected = {
+    message: 'Texting isn\u2019t set up yet.',
+    code: 'auth/billing-not-enabled',
+  };
+  expect(phoneError({
+    code: 'auth/billing-not-enabled',
+    message,
+  }, SEND_CODE_ERROR)).toEqual(expected);
+  expect(phoneError({
+    code: '  auth/billing-not-enabled  ',
+    message,
+  }, VERIFY_CODE_ERROR)).toEqual(expected);
+});
+
 test('an unmapped send failure uses the short line and the raw code', () => {
   expect(SEND_CODE_ERROR).toBe('Couldn\u2019t send a code. Try again.');
   const err = {

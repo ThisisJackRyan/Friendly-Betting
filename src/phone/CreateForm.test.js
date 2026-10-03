@@ -441,6 +441,29 @@ test('an unmapped send failure shows a human line and the raw auth code', async 
   expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
 });
 
+test('a billing-not-enabled send shows the setup sentence and only that code', async () => {
+  const err = new Error('Firebase: Billing account not configured. (auth/billing-not-enabled).');
+  err.code = 'auth/billing-not-enabled';
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveClass('form-error');
+  expect(alert.textContent).toBe('Texting isn\u2019t set up yet.');
+  expect(alert).not.toHaveTextContent('auth/billing-not-enabled');
+  expect(alert).not.toHaveTextContent('Firebase');
+  expect(alert).not.toHaveTextContent('Billing account');
+  const codes = document.querySelectorAll('.phone-error-code');
+  expect(codes).toHaveLength(1);
+  expect(codes[0]).toHaveClass('muted');
+  expect(codes[0]).not.toHaveClass('form-error');
+  expect(codes[0].textContent).toBe('auth/billing-not-enabled');
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
 test('a network send failure still says you are offline', async () => {
   const err = new Error('Firebase: Error (auth/network-request-failed).');
   err.code = 'auth/network-request-failed';
