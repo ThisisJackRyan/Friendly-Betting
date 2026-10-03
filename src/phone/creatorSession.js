@@ -43,6 +43,9 @@ const PHONE_ERRORS = {
   'auth/network-request-failed': 'You\u2019re offline. Try again.',
 };
 
+export const SEND_CODE_ERROR = 'Couldn\u2019t send a code. Try again.';
+export const VERIFY_CODE_ERROR = 'Couldn\u2019t verify that code. Try again.';
+
 export function isCreator(user) {
   if (!user || user.isLocal) return false;
   return (user.providerData || []).some((provider) => provider?.providerId === PHONE_PROVIDER);
@@ -77,8 +80,9 @@ export function codeSentCopy(e164) {
 }
 
 export function phoneError(err, fallback) {
-  if (PHONE_ERRORS[err?.code]) return PHONE_ERRORS[err.code];
-  return fallback;
+  const code = typeof err?.code === 'string' ? err.code.trim() : '';
+  if (code && PHONE_ERRORS[code]) return { message: PHONE_ERRORS[code], code: '' };
+  return { message: fallback, code };
 }
 
 export function createStepOrder(user) {

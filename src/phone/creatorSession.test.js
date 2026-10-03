@@ -7,7 +7,10 @@ import {
   formatUsNational,
   isCreator,
   maskPhone,
+  phoneError,
+  SEND_CODE_ERROR,
   toE164Us,
+  VERIFY_CODE_ERROR,
 } from './creatorSession';
 
 const phoneUser = {
@@ -62,6 +65,61 @@ test('US numbers default to +1 and codes mask the tail', () => {
   expect(formatUsNational('5551234567')).toBe('(555) 123-4567');
   expect(maskPhone('+15551234567')).toBe('•••4567');
   expect(codeSentCopy('+15551234567')).toBe('Code sent to •••4567.');
+});
+
+test('mapped Firebase codes keep their friendly copy and hide the code', () => {
+  const mapped = {
+    'auth/invalid-phone-number': 'That number doesn\u2019t look right.',
+    'auth/missing-phone-number': 'Enter a phone number.',
+    'auth/too-many-requests': 'Too many tries. Wait a moment.',
+    'auth/invalid-verification-code': 'That code doesn\u2019t match.',
+    'auth/code-expired': 'That code expired. Resend it.',
+    'auth/invalid-verification-id': 'Send a new code.',
+    'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
+    'auth/quota-exceeded': 'Texting is paused. Try again later.',
+    'auth/network-request-failed': 'You\u2019re offline. Try again.',
+  };
+  Object.entries(mapped).forEach(([code, copy]) => {
+    expect(phoneError({
+      code,
+      message: `Firebase: A longer server explanation. (${code}).`,
+    }, SEND_CODE_ERROR)).toEqual({ message: copy, code: '' });
+  });
+});
+
+test('an unmapped send failure uses the short line and the raw code', () => {
+  expect(SEND_CODE_ERROR).toBe('Couldn\u2019t send a code. Try again.');
+  const err = {
+    code: 'auth/operation-not-allowed',
+    message: 'Firebase: The given sign-in provider is disabled for this Firebase project. (auth/operation-not-allowed).',
+  };
+  expect(phoneError(err, SEND_CODE_ERROR)).toEqual({
+    message: 'Couldn\u2019t send a code. Try again.',
+    code: 'auth/operation-not-allowed',
+  });
+});
+
+test('an unmapped verify failure uses the verify line and the raw code', () => {
+  expect(VERIFY_CODE_ERROR).toBe('Couldn\u2019t verify that code. Try again.');
+  const err = {
+    code: 'auth/missing-client-identifier',
+    message: 'Firebase: Error (auth/missing-client-identifier).',
+  };
+  expect(phoneError(err, VERIFY_CODE_ERROR)).toEqual({
+    message: 'Couldn\u2019t verify that code. Try again.',
+    code: 'auth/missing-client-identifier',
+  });
+});
+
+test('a failure without a Firebase code keeps the human line and omits a code', () => {
+  expect(phoneError(new Error('socket hang up'), SEND_CODE_ERROR)).toEqual({
+    message: SEND_CODE_ERROR,
+    code: '',
+  });
+  expect(phoneError(null, VERIFY_CODE_ERROR)).toEqual({
+    message: VERIFY_CODE_ERROR,
+    code: '',
+  });
 });
 
 test('settle requires the phone creator who owns the bet', () => {

@@ -402,6 +402,87 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   }));
 });
 
+const anonCreator = {
+  uid: 'anon-1',
+  isAnonymous: true,
+  providerData: [{ providerId: 'anonymous' }],
+};
+
+async function reachPhone() {
+  mockIdentity.user = anonCreator;
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+}
+
+test('an unmapped send failure shows a human line and the raw auth code', async () => {
+  const err = new Error(
+    'Firebase: The given sign-in provider is disabled for this Firebase project. (auth/operation-not-allowed).',
+  );
+  err.code = 'auth/operation-not-allowed';
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveClass('form-error');
+  expect(alert).toHaveTextContent('Couldn\u2019t send a code. Try again.');
+  expect(alert).not.toHaveTextContent('auth/operation-not-allowed');
+  expect(alert).not.toHaveTextContent('Firebase');
+  expect(alert).not.toHaveTextContent('sign-in provider');
+  const code = screen.getByText('auth/operation-not-allowed');
+  expect(code).toHaveClass('muted');
+  expect(code).toHaveClass('phone-error-code');
+  expect(code).not.toHaveClass('form-error');
+  expect(code.textContent).toBe('auth/operation-not-allowed');
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
+test('a network send failure still says you are offline', async () => {
+  const err = new Error('Firebase: Error (auth/network-request-failed).');
+  err.code = 'auth/network-request-failed';
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('You\u2019re offline. Try again.');
+  expect(alert).not.toHaveTextContent('auth/network-request-failed');
+  expect(screen.queryByText('auth/network-request-failed')).not.toBeInTheDocument();
+  expect(document.querySelector('.phone-error-code')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+});
+
+test('an unmapped verify failure shows the verify line and the raw auth code', async () => {
+  sendPhoneCode.mockResolvedValue('vid-1');
+  const err = new Error('Firebase: Error (auth/missing-client-identifier).');
+  err.code = 'auth/missing-client-identifier';
+  verifyPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+
+  '123456'.split('').forEach((digit, index) => {
+    fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
+      target: { value: digit },
+    });
+  });
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Couldn\u2019t verify that code. Try again.');
+  expect(alert).not.toHaveTextContent('auth/missing-client-identifier');
+  expect(alert).not.toHaveTextContent('Firebase');
+  const code = screen.getByText('auth/missing-client-identifier');
+  expect(code).toHaveClass('muted');
+  expect(code.textContent).toBe('auth/missing-client-identifier');
+  expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
+});
+
 test('an unknown create route leaves the walkthrough', () => {
   navigation.pathname = '/new/nope';
   navigation.params = { type: 'nope' };
