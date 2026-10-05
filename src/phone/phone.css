@@ -91,7 +91,7 @@ body {
 }
 
 .screen-push .scroll,
-.form-fill .scroll {
+.form-fill > .scroll {
   padding-top: 8px;
 }
 
@@ -1162,6 +1162,9 @@ button:focus-visible {
   border-bottom: 1px solid var(--line);
   background: var(--page);
 }
+.home-preview-header {
+  display: none;
+}
 .header-location {
   font-size: 13px;
   font-weight: 700;
@@ -1799,7 +1802,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .creator-auth {
   background: var(--raised);
 }
-.create-flow .scroll,
+.create-flow .scroll:not(.landing-body),
 .screen-push .scroll {
   padding: 28px;
 }
@@ -2637,7 +2640,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
     background: white;
     box-shadow: var(--shadow-panel);
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll {
     padding: 30px 36px;
   }
@@ -2838,10 +2841,13 @@ html[data-arrive='home'] .landing-body.screen-fade {
     width: 29px;
     height: 29px;
   }
-  .shell-creating .app-header,
-  .shell-stack:not(.shell-landing) .app-header,
+  .shell-creating > .app-main > .app-header,
+  .shell-stack:not(.shell-landing) > .app-main > .app-header,
   .shell-stack:not(.shell-landing) .app-nav {
     display: none;
+  }
+  .home-preview-header {
+    display: flex;
   }
   .landing-body {
     gap: 28px;
@@ -3028,7 +3034,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .nav-row {
     padding-top: calc(6px + env(safe-area-inset-top));
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll {
     padding: 24px;
   }
@@ -3189,7 +3195,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .starter-card h3 {
     font-size: 14px;
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll,
   .vote-screen {
     padding: 20px 16px;
