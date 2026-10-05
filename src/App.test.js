@@ -66,12 +66,17 @@ function renderHome() {
   );
 }
 
-test('opens on a landing page whose only action starts a bet', () => {
+test('opens the clubhouse with a primary creation action and shortcuts for each bet type', () => {
   renderHome();
-  expect(document.querySelector('.landing-mark')).toHaveTextContent('Friendly');
-  expect(screen.getByRole('heading', { name: 'Bet with friends by text' })).toBeInTheDocument();
-  expect(screen.getByText('Text a link. Friends tap once. No app.')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /A little rivalry/ })).toBeInTheDocument();
+  expect(screen.getByText('Friends pick in one tap. No app needed.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+  expect(screen.getByRole('link', { name: /Pick a side/ })).toHaveAttribute('href', '/new/money-line');
+  expect(screen.getByRole('link', { name: /Call the number/ })).toHaveAttribute('href', '/new/over-under');
+  expect(screen.getByRole('link', { name: /Make it your own/ })).toHaveAttribute('href', '/new/prop');
+  expect(screen.getByText('Example bet')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
   expect(document.querySelector('.landing-cta')).toHaveClass('cta');
@@ -137,7 +142,7 @@ test('Start a bet slides forward into Pick a type', async () => {
   expect(entering).toHaveClass('slide-forward');
   expect(leaving).toHaveClass('slide-forward');
   expect(entering).toHaveTextContent('Pick a type');
-  expect(leaving.querySelector('.landing-title')).toHaveTextContent('Bet with friends by text');
+  expect(leaving.querySelector('.landing-title')).toHaveTextContent('A little rivalry.');
   expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   expect(navigation.push).not.toHaveBeenCalled();
 

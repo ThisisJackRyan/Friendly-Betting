@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { FiLink, FiSlash } from 'react-icons/fi';
+import { FiCheckCircle, FiLink, FiSlash } from 'react-icons/fi';
+import { BetFacts, Brand } from './ProductUI';
 import { castVote, hydrateBet, subscribeBet } from './api';
 import { rememberName, savedName, useIdentity } from './identity';
 import {
@@ -11,6 +12,8 @@ import {
   friendlyError,
   optionVoteLabel,
   questionOf,
+  statusLabel,
+  typeLabelOf,
   voteFor,
   votingOpen,
 } from './model';
@@ -52,11 +55,13 @@ const VoteScreen = () => {
         setBet(next);
         return;
       }
-      hydrateBet(next).then((full) => {
-        if (!cancelled) setBet(full);
-      }).catch(() => {
-        if (!cancelled) setBet(next);
-      });
+      hydrateBet(next)
+        .then((full) => {
+          if (!cancelled) setBet(full);
+        })
+        .catch(() => {
+          if (!cancelled) setBet(next);
+        });
     });
     return () => {
       cancelled = true;
@@ -93,41 +98,78 @@ const VoteScreen = () => {
   };
 
   return (
-    <div className="phone focus-column">
+    <main className="phone focus-column">
+      <header className="vote-header">
+        <Link href="/" aria-label="Friendly home">
+          <Brand />
+        </Link>
+        <span>BETTER WITH FRIENDS</span>
+      </header>
       <div className="scroll screen-fade vote-screen">
         {!reveal && <FriendlyLoader />}
         {reveal && bet === null && (
           <div className="empty">
             <FiLink className="empty-glyph" size={18} aria-hidden="true" />
             <p className="empty-title">This bet isn&apos;t here</p>
-            <Link className="secondary press" href="/">Home</Link>
+            <p className="empty-copy">
+              Check the link with your friend, or start a new friendly rivalry.
+            </p>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <Link className="secondary press" href="/">
+              Home
+            </Link>
           </div>
         )}
         {reveal && bet && (
           <>
-            <p className="inviter">{bet.createdByName || 'A friend'}</p>
+            <div className="bet-card-top">
+              <span className="chip">{typeLabelOf(bet)}</span>
+              <span className={`status ${statusLabel(bet).toLowerCase()}`}>{statusLabel(bet)}</span>
+            </div>
+            <div className="invite-line">
+              <span className="invite-avatar" aria-hidden="true">
+                {(bet.createdByName || 'F').charAt(0).toUpperCase()}
+              </span>
+              <p>
+                <span className="inviter">{bet.createdByName || 'A friend'}</span>
+                <span className="invite-caption">has a friendly wager for you</span>
+              </p>
+            </div>
             <h1 className="question-xl">{questionOf(bet)}</h1>
             <div className="vote-meta">
               {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
-              {bet.stake ? <p className="stake-line">{bet.stake}</p> : null}
             </div>
+            <BetFacts bet={bet} />
             <hr className="meta-rule" />
 
             {showVoted && (
               <div className="voted-in">
                 <p className="youre-on">
+                  <FiCheckCircle size={22} aria-hidden="true" />
                   {"You're on "}
                   <strong>{optionVoteLabel(bet, selected)}</strong>
                 </p>
                 <Bars bet={bet} highlightId={selectedId} />
-                <Link className="text-link" href={`/t/${bet.id || code}`}>Tally</Link>
+                <Link className="text-link" href={`/t/${bet.id || code}`}>
+                  Tally
+                </Link>
               </div>
             )}
 
             {!showVoted && open && (
               <>
+                <div className="pick-heading">
+                  <h2>What’s your call?</h2>
+                  <p>Pick a side. Make it official.</p>
+                </div>
                 <label className="field" htmlFor="voter-name">
-                  <span className="field-label">Your name <span className="optional">optional</span></span>
+                  <span className="field-label">
+                    Your name <span className="optional">optional</span>
+                  </span>
                   <input
                     id="voter-name"
                     value={name}
@@ -136,7 +178,11 @@ const VoteScreen = () => {
                     onChange={(event) => setName(event.target.value)}
                   />
                 </label>
-                <div className={(bet.options || []).length === 2 ? 'choices choices-centered' : 'choices'}>
+                <div
+                  className={
+                    (bet.options || []).length === 2 ? 'choices choices-centered' : 'choices'
+                  }
+                >
                   {(bet.options || []).map((option) => (
                     <button
                       key={option.id}
@@ -150,6 +196,7 @@ const VoteScreen = () => {
                   ))}
                 </div>
                 {!user && <p className="muted">Connecting…</p>}
+                <p className="form-footnote">One pick. No account needed.</p>
               </>
             )}
 
@@ -160,14 +207,21 @@ const VoteScreen = () => {
                   Voting is closed
                 </p>
                 <Bars bet={bet} />
-                <Link className="text-link" href={`/t/${bet.id || code}`}>Tally</Link>
+                <Link className="text-link" href={`/t/${bet.id || code}`}>
+                  Tally
+                </Link>
               </div>
             )}
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
           </>
         )}
       </div>
-    </div>
+      <footer className="vote-footer">A little rivalry. A lot of good times.</footer>
+    </main>
   );
 };
 

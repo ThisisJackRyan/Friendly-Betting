@@ -191,13 +191,14 @@ test('stake step is optional and the recap shows only filled stake and closes', 
   expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
   expect(screen.getByText('Ready to text')).toBeInTheDocument();
   expect(screen.getByText('Who is late')).toBeInTheDocument();
-  expect(screen.getByText('Yes / No')).toBeInTheDocument();
+  expect(screen.getByText('Yes')).toBeInTheDocument();
+  expect(screen.getByText('No')).toBeInTheDocument();
   expect(screen.getByText(/^closes /i)).toBeInTheDocument();
   expect(screen.queryByText('Pizza')).not.toBeInTheDocument();
   expect(saveBet).not.toHaveBeenCalled();
 });
 
-test('Text friends saves once and keeps the vote link without a second button', async () => {
+test('Text friends saves once and provides vote and live tally links', async () => {
   let finishSave;
   saveBet.mockImplementation(() => new Promise((resolve) => {
     finishSave = resolve;
@@ -212,6 +213,7 @@ test('Text friends saves once and keeps the vote link without a second button', 
   finishSave('abc123');
 
   expect(await screen.findByRole('link', { name: /\/b\/abc123/ })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'View live tally' })).toHaveAttribute('href', '/t/abc123');
   expect(screen.getByText('Copied — paste into a text.')).toBeInTheDocument();
   expect(screen.getAllByRole('button', { name: /text friends/i })).toHaveLength(1);
   expect(saveBet).toHaveBeenCalledTimes(1);
@@ -226,13 +228,26 @@ test('Text friends saves once and keeps the vote link without a second button', 
   );
 });
 
+test('suggested stakes remain editable and appear in the recap', async () => {
+  renderForm('/new/money-line');
+  await goToStake('Will Alex break 90?');
+  expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Coffee', exact: true }));
+  expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Coffee');
+  await userEvent.type(screen.getByLabelText(/^stake$/i), ' for the crew');
+  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
+  expect(screen.getByText('Coffee for the crew')).toBeInTheDocument();
+});
+
 test('over-under still shares the same short vote text', async () => {
   renderForm('/new/over-under');
   await userEvent.type(screen.getByLabelText(/question/i), 'Rolls');
   await userEvent.type(screen.getByLabelText(/line/i), '13.5');
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByText('Over 13.5 / Under 13.5')).toBeInTheDocument();
+  expect(screen.getByText('Over 13.5')).toBeInTheDocument();
+  expect(screen.getByText('Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
     'Rolls?\n1. Over 13.5\n2. Under 13.5\nVote here: http://localhost/b/abc123',

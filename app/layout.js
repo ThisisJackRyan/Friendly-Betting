@@ -1,10 +1,9 @@
 import '../src/App.css';
-import '../src/base.css';
 import '../src/phone/phone.css';
 
 export const metadata = {
   title: 'Friendly Bets',
-  description: 'Friendly bets with friends. Text a link, vote once, settle it.',
+  description: 'A little rivalry. A lot of good times. Make a friendly bet, text your friends, and settle the score.',
   applicationName: 'Friendly',
   manifest: '/manifest.json',
   icons: {
@@ -28,7 +27,7 @@ export const viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#f4f7f5',
+  themeColor: '#f6f7f2',
 };
 
 export default function RootLayout({ children }) {
@@ -38,7 +37,7 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
