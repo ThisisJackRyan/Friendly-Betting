@@ -1129,13 +1129,19 @@ button:focus-visible {
   overflow: hidden;
 }
 .app-main,
-.main-content {
+.main-content,
+.route-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   min-width: 0;
 }
+.main-content {
+  position: relative;
+  overflow: hidden;
+}
+
 .main-content:focus {
   outline: none;
 }
@@ -2621,8 +2627,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
     font-size: 8px;
     text-align: center;
   }
-  .app-shell .main-content > .create-flow,
-  .app-shell .main-content > .tally-screen {
+  .app-shell .route-content > .create-flow,
+  .app-shell .route-content > .tally-screen {
     max-width: 720px;
     width: calc(100% - 72px);
     margin: 32px auto;
@@ -2643,10 +2649,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 16px;
   }
-  .main-content > .phone > .scroll {
+  .route-content > .phone > .scroll {
     padding: 36px;
   }
-  .main-content > .phone > .landing-body {
+  .route-content > .phone > .landing-body {
     padding: 36px;
   }
   .creator-auth {
@@ -2683,8 +2689,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
     padding-left: 24px;
     padding-right: 24px;
   }
-  .main-content > .phone > .landing-body,
-  .main-content > .phone > .scroll {
+  .route-content > .phone > .landing-body,
+  .route-content > .phone > .scroll {
     padding: 44px 48px;
   }
   .app-header {
@@ -2729,8 +2735,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
     width: 29px;
     height: 29px;
   }
-  .main-content > .phone > .landing-body,
-  .main-content > .phone > .scroll {
+  .route-content > .phone > .landing-body,
+  .route-content > .phone > .scroll {
     padding: 28px;
   }
   .header-note,
@@ -2832,6 +2838,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
     width: 29px;
     height: 29px;
   }
+  .shell-creating .app-header,
   .shell-stack:not(.shell-landing) .app-header,
   .shell-stack:not(.shell-landing) .app-nav {
     display: none;
@@ -3208,8 +3215,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .nav-note {
     display: none;
   }
-  .app-shell .main-content > .create-flow,
-  .app-shell .main-content > .tally-screen {
+  .app-shell .route-content > .create-flow,
+  .app-shell .route-content > .tally-screen {
     margin-top: 18px;
     margin-bottom: 18px;
   }

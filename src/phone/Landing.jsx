@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   FiArrowRight,
   FiArrowUpRight,
@@ -15,15 +14,12 @@ import {
   FiTrendingUp,
 } from 'react-icons/fi';
 import { ExampleBet } from './ProductUI';
-import CreatePick from './CreatePick';
 import { useCreateChrome } from './createChrome';
-import { clearHomeArrival, homeArrivalPending, SLIDE_MS } from './createMotion';
+import { clearHomeArrival, homeArrivalPending } from './createMotion';
 
 const Landing = ({ quiet = false }) => {
-  const router = useRouter();
   const bodyRef = useRef(null);
-  const { setPinPhoneTabs } = useCreateChrome();
-  const [exitCreate, setExitCreate] = useState(false);
+  const { pinPhoneTabs, setPinPhoneTabs } = useCreateChrome();
 
   useEffect(() => {
     if (quiet || !homeArrivalPending()) return undefined;
@@ -32,32 +28,19 @@ const Landing = ({ quiet = false }) => {
     return () => window.clearTimeout(id);
   }, [quiet]);
 
-  useLayoutEffect(() => {
-    if (quiet || exitCreate) return undefined;
-    setPinPhoneTabs(false);
-    return undefined;
-  }, [quiet, exitCreate, setPinPhoneTabs]);
-
-  useEffect(() => {
-    if (!exitCreate) return undefined;
-    const id = window.setTimeout(() => router.push('/new'), SLIDE_MS);
-    return () => window.clearTimeout(id);
-  }, [exitCreate, router]);
-
   const onStart = (event) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
       return;
     }
     event.preventDefault();
-    if (quiet || exitCreate) return;
+    if (quiet || pinPhoneTabs) return;
     setPinPhoneTabs(true);
-    setExitCreate(true);
   };
 
   const copy = (
     <div
       ref={bodyRef}
-      className={quiet || exitCreate ? 'scroll landing-body' : 'scroll landing-body screen-fade'}
+      className={quiet || pinPhoneTabs ? 'scroll landing-body' : 'scroll landing-body screen-fade'}
     >
       <div className="home-heading">
         <div>
@@ -189,28 +172,6 @@ const Landing = ({ quiet = false }) => {
       </footer>
     </div>
   );
-
-  if (!quiet && exitCreate) {
-    return (
-      <div className="phone create-flow is-exiting">
-        <div className="create-viewport">
-          <div className="create-pane is-leaving slide-forward" aria-hidden="true" inert>
-            <div className="phone landing">{copy}</div>
-          </div>
-          <div
-            className="create-pane form-fill is-entering slide-forward create-step-pick"
-            data-step="1"
-          >
-            <CreatePick
-              onBack={() => {}}
-              onHomeClick={(event) => event.preventDefault()}
-              onPick={() => {}}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return <div className="phone landing">{copy}</div>;
 };
