@@ -2820,19 +2820,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
     display: block;
   }
   .header-location,
-  .header-note {
-    display: none;
-  }
+  .header-note,
   .header-action {
-    margin-left: auto;
-    background: #edf1e7;
-    color: var(--ink);
-    min-height: 36px;
-    font-size: 11px;
-    gap: 8px;
-  }
-  .header-action:hover {
-    background: var(--wash);
+    display: none;
   }
   .header-brand .brand {
     font-size: 24px;
