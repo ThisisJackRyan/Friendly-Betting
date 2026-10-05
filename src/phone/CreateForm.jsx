@@ -3,7 +3,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { FiChevronLeft, FiX } from 'react-icons/fi';
+import {
+  FiCheckCircle,
+  FiChevronLeft,
+  FiFlag,
+  FiMessageCircle,
+  FiShield,
+  FiX,
+} from 'react-icons/fi';
+import { FlowProgress, PageIntro } from './ProductUI';
 import { saveBet } from './api';
 import {
   CodeBody,
@@ -16,12 +24,7 @@ import {
 } from './AuthSlides';
 import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
-import {
-  AUTH_COPY,
-  CREATE_STEP,
-  adjacentCreateStep,
-  isCreator,
-} from './creatorSession';
+import { AUTH_COPY, CREATE_STEP, adjacentCreateStep, isCreator } from './creatorSession';
 import { creatorName, useIdentity } from './identity';
 import {
   buildDraft,
@@ -80,14 +83,17 @@ function Recap({ fields }) {
     <>
       <p className="recap-eyebrow">Ready to text</p>
       <div className="recap-card">
+        <span className="chip">{fields.typeLabel}</span>
         <p className="recap-question">{fields.question}</p>
         {choices.length > 0 && (
-          <p className="recap-choices">{choices.join(' / ')}</p>
+          <div className="recap-choices">
+            {choices.map((choice, index) => (
+              <span key={index}>{choice}</span>
+            ))}
+          </div>
         )}
         {fields.stake ? <p className="stake-line">{fields.stake}</p> : null}
-        {fields.closesAt ? (
-          <p className="closes">Closes {formatCloses(fields.closesAt)}</p>
-        ) : null}
+        {fields.closesAt ? <p className="closes">Closes {formatCloses(fields.closesAt)}</p> : null}
       </div>
     </>
   );
@@ -216,13 +222,7 @@ const CreateForm = () => {
   };
 
   const onHomeClick = (event) => {
-    if (
-      event.metaKey
-      || event.ctrlKey
-      || event.shiftKey
-      || event.altKey
-      || event.button !== 0
-    ) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
       return;
     }
     event.preventDefault();
@@ -261,9 +261,9 @@ const CreateForm = () => {
 
   const removeProp = (index) => {
     setError('');
-    setPropOptions((current) => (
-      current.length <= 2 ? current : current.filter((_, i) => i !== index)
-    ));
+    setPropOptions((current) =>
+      current.length <= 2 ? current : current.filter((_, i) => i !== index),
+    );
   };
 
   const onDetailsNext = () => {
@@ -337,6 +337,7 @@ const CreateForm = () => {
           onBack={() => onBack(1)}
           onHomeClick={onHomeClick}
           onPick={pickType}
+          user={user}
           error={error && stepNumber === step ? error : ''}
         />
       );
@@ -345,8 +346,13 @@ const CreateForm = () => {
     if (stepNumber === 2 && meta) {
       body = (
         <>
+          <PageIntro eyebrow={meta.label} title="Put it on the record.">
+            Ask the question. Give your friends something to pick.
+          </PageIntro>
           <label className="field" htmlFor="question">
-            <span className="field-label">Question <span className="req">*</span></span>
+            <span className="field-label">
+              Question <span className="req">*</span>
+            </span>
             <textarea
               id="question"
               rows={3}
@@ -390,7 +396,9 @@ const CreateForm = () => {
           {type === 'over-under' && (
             <>
               <label className="field" htmlFor="line">
-                <span className="field-label">Line <span className="req">*</span></span>
+                <span className="field-label">
+                  Line <span className="req">*</span>
+                </span>
                 <input
                   id="line"
                   inputMode="decimal"
@@ -478,7 +486,26 @@ const CreateForm = () => {
     if (stepNumber === 3) {
       body = (
         <>
+          <PageIntro icon={FiFlag} title="What’s on the line?">
+            A coffee, dinner, or a well-earned “I told you so.” You decide.
+          </PageIntro>
           <p className="field-hint">{COPY.stakeHint}</p>
+          <div className="stake-suggestions" aria-label="Suggested stakes">
+            {['Bragging rights', 'Coffee', 'Dinner', '$5'].map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                className={stake === suggestion ? 'selected' : ''}
+                aria-pressed={stake === suggestion}
+                onClick={() => {
+                  setStake(suggestion);
+                  setError('');
+                }}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
           <div className="field-pair">
             <label className="field" htmlFor="stake">
               <span className="field-label">Stake</span>
@@ -493,7 +520,9 @@ const CreateForm = () => {
               />
             </label>
             <label className="field" htmlFor="closes">
-              <span className="field-label">Closes <span className="optional">optional</span></span>
+              <span className="field-label">
+                Closes <span className="optional">optional</span>
+              </span>
               <input
                 id="closes"
                 type="datetime-local"
@@ -527,27 +556,27 @@ const CreateForm = () => {
     if (stepNumber === CREATE_STEP.phone) {
       body = (
         <>
+          <PageIntro icon={FiShield} title="Your bets, in your corner.">
+            Verify your number so you can find your bets and settle the score.
+          </PageIntro>
           <PhoneBody
             formatted={phone.formatted}
             onNational={phone.onNational}
             busy={phone.busy}
-            check={stepNumber === step ? (
-              <PersonCheck containerRef={phone.containerRef} />
-            ) : null}
+            check={stepNumber === step ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
-          {stepNumber === step ? (
-            <PhoneAlert error={phone.error} code={phone.errorCode} />
-          ) : null}
+          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>
       );
-      cta = (
-        <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSendCode} />
-      );
+      cta = <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSendCode} />;
     }
 
     if (stepNumber === CREATE_STEP.code) {
       body = (
         <>
+          <PageIntro icon={FiMessageCircle} title="Check your texts.">
+            Enter the six-digit code to make it official.
+          </PageIntro>
           <CodeBody
             e164={phone.e164}
             otp={phone.otp}
@@ -555,45 +584,45 @@ const CreateForm = () => {
             onResend={() => phone.send()}
             onChangeNumber={() => go(CREATE_STEP.phone)}
             busy={phone.busy}
-            check={stepNumber === step ? (
-              <PersonCheck containerRef={phone.containerRef} />
-            ) : null}
+            check={stepNumber === step ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
-          {stepNumber === step ? (
-            <PhoneAlert error={phone.error} code={phone.errorCode} />
-          ) : null}
+          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>
       );
       cta = (
-        <VerifyButton
-          busy={phone.busy}
-          ready={phone.readyCode}
-          onVerify={() => phone.verify()}
-        />
+        <VerifyButton busy={phone.busy} ready={phone.readyCode} onVerify={() => phone.verify()} />
       );
     }
 
     if (stepNumber === CREATE_STEP.share) {
       body = (
         <>
+          <PageIntro
+            icon={FiCheckCircle}
+            title={code ? 'The bet is on.' : 'Let the group chat decide.'}
+          >
+            {code
+              ? 'Your bet is saved. Share it again or follow the picks as they come in.'
+              : 'Looking good. Text your friends and see who’s in.'}
+          </PageIntro>
           {draft.ok && <Recap fields={draft.fields} />}
-          {message && shareState === 'manual' && (
-            <p className="manual-message">{message}</p>
+          {code && (
+            <Link className="secondary press recap-tally" href={`/t/${code}`}>
+              View live tally
+            </Link>
           )}
+          {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
         </>
       );
       cta = (
         <>
           {code && (
-            <Link className="vote-link" href={`/b/${code}`}>{voteUrl(code)}</Link>
+            <Link className="vote-link" href={`/b/${code}`}>
+              {voteUrl(code)}
+            </Link>
           )}
           {shareState && <p className="share-note">{SHARE_NOTE[shareState]}</p>}
-          <button
-            className="cta press"
-            type="button"
-            disabled={saving}
-            onClick={onTextFriends}
-          >
+          <button className="cta press" type="button" disabled={saving} onClick={onTextFriends}>
             {saving ? COPY.sending : COPY.textFriends}
           </button>
         </>
@@ -617,9 +646,12 @@ const CreateForm = () => {
           </Link>
         </div>
         <div className="scroll">
+          <FlowProgress step={stepNumber} user={user} />
           {body}
           {error && stepNumber === step ? (
-            <p className="form-error" role="alert">{error}</p>
+            <p className="form-error" role="alert">
+              {error}
+            </p>
           ) : null}
         </div>
         {cta ? <div className="cta-bar">{cta}</div> : null}
@@ -656,11 +688,7 @@ const CreateForm = () => {
             <Landing quiet />
           </div>
         ) : (
-          <div
-            key={step}
-            className={paneClass(step, true)}
-            data-step={step}
-          >
+          <div key={step} className={paneClass(step, true)} data-step={step}>
             {renderStep(step)}
           </div>
         )}

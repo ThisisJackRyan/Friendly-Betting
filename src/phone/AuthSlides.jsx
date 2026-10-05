@@ -146,7 +146,9 @@ export function PhoneAlert({ error, code }) {
   if (!error) return null;
   return (
     <>
-      <p className="form-error" role="alert">{error}</p>
+      <p className="form-error" role="alert">
+        {error}
+      </p>
       {code ? <p className="muted phone-error-code">{code}</p> : null}
     </>
   );
@@ -223,15 +225,7 @@ export function PhoneBody({ formatted, onNational, busy, check }) {
   );
 }
 
-export function CodeBody({
-  e164,
-  otp,
-  onOtp,
-  onResend,
-  onChangeNumber,
-  busy,
-  check,
-}) {
+export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, check }) {
   const refs = useRef([]);
 
   const write = (index, raw) => {
@@ -243,9 +237,12 @@ export function CodeBody({
       return;
     }
     const next = otp.slice();
-    chars.slice(0, 6 - index).split('').forEach((char, offset) => {
-      next[index + offset] = char;
-    });
+    chars
+      .slice(0, 6 - index)
+      .split('')
+      .forEach((char, offset) => {
+        next[index + offset] = char;
+      });
     const completed = next.every(Boolean) ? next.join('') : '';
     onOtp(next, completed);
     if (!completed) {
@@ -294,7 +291,9 @@ export function CodeBody({
         <button type="button" disabled={Boolean(busy)} onClick={onResend}>
           {busy === 'send' ? AUTH_COPY.sending : AUTH_COPY.resend}
         </button>
-        <span className="otp-dot" aria-hidden="true">·</span>
+        <span className="otp-dot" aria-hidden="true">
+          ·
+        </span>
         <button type="button" disabled={Boolean(busy)} onClick={onChangeNumber}>
           {AUTH_COPY.change}
         </button>
@@ -353,9 +352,24 @@ function AuthChrome({ title, onBack, children, cta }) {
           <FiChevronLeft size={28} />
         </button>
         <h1 className="nav-title">{title}</h1>
-        <Link href="/" className="nav-home wordmark">Friendly</Link>
+        <Link href="/" className="nav-home wordmark">
+          Friendly
+        </Link>
       </div>
       <div className="scroll">
+        <div className="page-intro auth-intro">
+          <p className="eyebrow">YOUR FRIENDLY CLUBHOUSE</p>
+          <h2>
+            {title === AUTH_COPY.phoneTitle
+              ? 'Welcome to your side of the bet.'
+              : 'You’re one text away.'}
+          </h2>
+          <p className="intro-copy">
+            {title === AUTH_COPY.phoneTitle
+              ? 'Sign in with your phone to see your bets, follow the picks, and settle the score.'
+              : 'Enter the six-digit code we sent to your phone.'}
+          </p>
+        </div>
         {children}
       </div>
       {cta ? <div className="cta-bar">{cta}</div> : null}
@@ -436,13 +450,13 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
         <AuthChrome
           title={AUTH_COPY.codeTitle}
           onBack={() => onBack(2)}
-          cta={(
+          cta={
             <VerifyButton
               busy={phone.busy}
               ready={phone.readyCode}
               onVerify={() => phoneRef.current.verify()}
             />
-          )}
+          }
         >
           <CodeBody
             e164={phone.e164}
@@ -461,9 +475,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
       <AuthChrome
         title={AUTH_COPY.phoneTitle}
         onBack={() => onBack(1)}
-        cta={(
-          <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />
-        )}
+        cta={<SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />}
       >
         <PhoneBody
           formatted={phone.formatted}

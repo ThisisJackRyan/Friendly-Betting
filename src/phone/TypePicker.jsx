@@ -2,13 +2,19 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiBarChart2, FiGrid, FiTrendingUp } from 'react-icons/fi';
+import { FiArrowUpRight, FiBarChart2, FiGrid, FiTrendingUp } from 'react-icons/fi';
 import { TYPE_META, TYPE_ORDER } from './model';
 
 const TYPE_ICONS = {
   'money-line': FiTrendingUp,
   'over-under': FiBarChart2,
   prop: FiGrid,
+};
+
+const TYPE_EXAMPLES = {
+  'money-line': '“Who wins tonight?”',
+  'over-under': '“Over or under 90?”',
+  prop: '“Who shows up last?”',
 };
 
 const TypePicker = ({ onPick }) => {
@@ -37,7 +43,7 @@ const TypePicker = ({ onPick }) => {
             <button
               key={id}
               type="button"
-              className="type-card press"
+              className={`type-card press type-${id}`}
               onClick={() => {
                 if (onPick) onPick(id);
                 else router.push(`/new/${id}`);
@@ -49,7 +55,9 @@ const TypePicker = ({ onPick }) => {
               <span className="type-card-copy">
                 <span className="type-card-title">{meta.label}</span>
                 <span className="type-card-hint">{meta.hint}</span>
+                <span className="type-card-example">{TYPE_EXAMPLES[id]}</span>
               </span>
+              <FiArrowUpRight className="type-card-arrow" size={20} aria-hidden="true" />
             </button>
           );
         })}

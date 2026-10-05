@@ -13,6 +13,8 @@ import { navigation } from 'next/navigation';
 jest.mock('next/navigation');
 jest.mock('next/link');
 
+const originalMatchMedia = window.matchMedia;
+
 beforeEach(() => {
   delete document.documentElement.dataset.arrive;
   navigation.pathname = '/';
@@ -20,6 +22,10 @@ beforeEach(() => {
   navigation.push.mockReset();
   navigation.replace.mockReset();
   navigation.back.mockReset();
+});
+
+afterEach(() => {
+  window.matchMedia = originalMatchMedia;
 });
 
 jest.mock('./phone/api', () => ({
@@ -66,12 +72,26 @@ function renderHome() {
   );
 }
 
-test('opens on a landing page whose only action starts a bet', () => {
+test('opens the clubhouse with a primary creation action and shortcuts for each bet type', () => {
   renderHome();
-  expect(document.querySelector('.landing-mark')).toHaveTextContent('Friendly');
-  expect(screen.getByRole('heading', { name: 'Bet with friends by text' })).toBeInTheDocument();
-  expect(screen.getByText('Text a link. Friends tap once. No app.')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /A little rivalry/ })).toBeInTheDocument();
+  expect(screen.getByText('Friends pick in one tap. No app needed.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+  expect(screen.getByRole('link', { name: /Pick a side/ })).toHaveAttribute(
+    'href',
+    '/new/money-line',
+  );
+  expect(screen.getByRole('link', { name: /Call the number/ })).toHaveAttribute(
+    'href',
+    '/new/over-under',
+  );
+  expect(screen.getByRole('link', { name: /Make it your own/ })).toHaveAttribute(
+    'href',
+    '/new/prop',
+  );
+  expect(screen.getByText('Example bet')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
   expect(document.querySelector('.landing-cta')).toHaveClass('cta');
@@ -137,7 +157,7 @@ test('Start a bet slides forward into Pick a type', async () => {
   expect(entering).toHaveClass('slide-forward');
   expect(leaving).toHaveClass('slide-forward');
   expect(entering).toHaveTextContent('Pick a type');
-  expect(leaving.querySelector('.landing-title')).toHaveTextContent('Bet with friends by text');
+  expect(leaving.querySelector('.landing-title')).toHaveTextContent('A little rivalry.');
   expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   expect(navigation.push).not.toHaveBeenCalled();
 
@@ -154,9 +174,101 @@ test('a modified Start a bet click keeps the browser link', () => {
       </AppShell>
     </CreateChromeProvider>,
   );
+  let preventedByApp;
+  document.addEventListener(
+    'click',
+    (event) => {
+      preventedByApp = event.defaultPrevented;
+      event.preventDefault(); // JSDOM cannot perform the browser's native navigation.
+    },
+    { once: true },
+  );
   fireEvent.click(screen.getByRole('link', { name: 'Start a bet' }), { metaKey: true });
+  expect(preventedByApp).toBe(false);
   expect(navigation.push).not.toHaveBeenCalled();
   expect(document.querySelector('.create-pane')).not.toBeInTheDocument();
+});
+
+test.each(['/', '/bets'])(
+  'mobile Create slides from %s without unmounting the outgoing page',
+  async (pathname) => {
+    window.matchMedia = jest.fn(() => ({ matches: true }));
+    navigation.pathname = pathname;
+    render(
+      <CreateChromeProvider>
+        <AppShell>
+          <p>Current page content</p>
+        </AppShell>
+      </CreateChromeProvider>,
+    );
+    const current = screen.getByText('Current page content');
+    const create = within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+      name: 'Create',
+    });
+    await userEvent.click(create);
+    expect(document.querySelector('.app-shell')).toHaveClass('shell-creating');
+    expect(document.querySelector('.create-pane.is-leaving')).toContainElement(current);
+    expect(document.querySelector('.create-pane.is-leaving')).toHaveAttribute('inert');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveTextContent('Pick a type');
+    expect(create).toHaveAttribute('aria-current', 'page');
+    expect(navigation.push).not.toHaveBeenCalled();
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/new'));
+    expect(navigation.push).toHaveBeenCalledTimes(1);
+  },
+);
+
+test.each([{ mobile: false }, { mobile: true, metaKey: true }])(
+  'Create preserves a normal link for %j',
+  ({ mobile, metaKey }) => {
+    window.matchMedia = jest.fn(() => ({ matches: mobile }));
+    render(
+      <CreateChromeProvider>
+        <AppShell>
+          <Landing />
+        </AppShell>
+      </CreateChromeProvider>,
+    );
+    const create = within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', {
+      name: 'Create',
+    });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey });
+    let preventedByApp;
+    document.addEventListener(
+      'click',
+      (click) => {
+        preventedByApp = click.defaultPrevented;
+        click.preventDefault(); // JSDOM cannot perform the browser's native navigation.
+      },
+      { once: true },
+    );
+    act(() => create.dispatchEvent(event));
+    expect(preventedByApp).toBe(false);
+    expect(document.querySelector('.create-pane.is-entering')).not.toBeInTheDocument();
+  },
+);
+
+test('choosing another tab cancels a pending mobile Create transition', () => {
+  jest.useFakeTimers();
+  try {
+    window.matchMedia = jest.fn(() => ({ matches: true }));
+    render(
+      <CreateChromeProvider>
+        <AppShell>
+          <Landing />
+        </AppShell>
+      </CreateChromeProvider>,
+    );
+    const nav = within(screen.getByRole('navigation', { name: 'Primary' }));
+    fireEvent.click(nav.getByRole('link', { name: 'Create' }));
+    document.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    fireEvent.click(nav.getByRole('link', { name: 'My bets' }));
+    act(() => jest.advanceTimersByTime(500));
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(document.querySelector('.create-pane.is-entering')).not.toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test('reduced motion fades create slides instead of translating them', () => {

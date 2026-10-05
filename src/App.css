@@ -1,216 +1,33 @@
-@tailwind base; 
+@tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
 
-
-:root{
-  --midnight-green: #114b5fff;
-  --cardinal: #ba3b46ff;
-  --cadet-gray: #95a3a4ff;
-  --dark-purple: #170a1cff;
-  --alabaster: #e2e8ddff;
-  --dark-spring-green: #007a45ff;
-  --spring-green: #9DC9A4;
-  --spring-green-light:#ddece0;
-  --blue-gray:#6B818C;
-
-  --gradient-top: linear-gradient(0deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-right: linear-gradient(90deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-bottom: linear-gradient(180deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-left: linear-gradient(270deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-top-right: linear-gradient(45deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-bottom-right: linear-gradient(135deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-top-left: linear-gradient(225deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-bottom-left: linear-gradient(315deg, #114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-  --gradient-radial: radial-gradient(#114b5fff, #ba3b46ff, #95a3a4ff, #170a1cff, #e2e8ddff);
-}
-
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-input[type=number]{
-  -moz-appearance: textfield;
-}
-
-
-
-body{
-  font-family: 'Roboto', sans-serif;
-  font-size: 1.25em;
-  min-height: 100vh;
-  width: 100vw;
-  background: white;
-  background-image: radial-gradient(lightgray 1px, transparent 0);
-  background-size: 40px 40px;
-  color:black;
+body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
 }
 
-
-
-
-/* == transition fade bringing element down == */
-.fadeDown-enter {
-  opacity: 0;
-  transform: translateY(-15%);
+button,
+input,
+textarea {
+  font: inherit;
 }
-
-.fadeDown-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 300ms, transform 300ms;
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
 }
-
-.fadeDown-enter-done {
-  opacity: 1;
-  transform: translateY(0);
+button:not(:disabled),
+a {
+  cursor: pointer;
 }
-
-.fadeDown-exit {
-  opacity: 1;
-  transform: translateY(0);
+button:disabled {
+  cursor: not-allowed;
 }
-
-.fadeDown-exit-active {
-  opacity: 0;
-  transform: translateY(-15%); 
-  transition: opacity 300ms, transform 300ms;
+input[type='number'] {
+  -moz-appearance: textfield;
 }
-
-.fadeDown-exit-done {
-  opacity: 0;
-  transform: translateY(-15%);
-
-}
-
-
-/* == transition fade bringing element down == */
-.fadeUp-enter {
-  opacity: 0;
-  transform: translateY(100%);
-}
-
-.fadeUp-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 300ms, transform 300ms;
-}
-
-.fadeUp-enter-done {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.fadeUp-exit {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.fadeUp-exit-active {
-  opacity: 0;
-  transform: translateY(100%);
-  transition: opacity 300ms, transform 300ms;
-}
-
-.fadeUp-exit-done {
-  opacity: 0;
-  transform: translateY(100%);
-
-}
-
-
-/* == fade in transition == */
-.fadeIn-enter {
-  opacity: 0;
-}
-
-.fadeIn-enter-active {
-  opacity: 1;
-  transition: opacity 300ms;
-}
-
-.fadeIn-enter-done {
-  opacity: 1;
-}
-
-.fadeIn-exit {
-  opacity: 1;
-}
-
-.fadeIn-exit-active {
-  opacity: 0;
-  transition: opacity 300ms;
-}
-
-.fadeIn-exit-done {
-  opacity: 0;
-}
-
-
-
-.fadeInImmediately-enter {
-  opacity: 0;
-}
-
-.fadeInImmediately-enter-active {
-  opacity: 1;
-  transition: opacity 300ms;
-}
-
-.fadeInImmediately-enter-done {
-  opacity: 1;
-}
-
-.fadeInImmediately-exit {
-  opacity: 1;
-}
-
-.fadeInImmediately-exit {
-  opacity: 1;
-}
-
-.fadeInImmediately-exit-active {
-  opacity: 0;
-  transition: opacity 0ms;
-}
-
-.fadeInImmediately-exit-done {
-  opacity: 0;
-}
-
-
-
-
-
-/* == transition for view bet button == */
-.betLink {
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0px 0px 0px 0px rgba(0,0,0,0.25);
-  transition: box-shadow 300ms;
-}
-
-.betLink::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 100%;
-  background-color: var(--spring-green-light);
-  transition: left 300ms;
-  z-index: 1;
-}
-
-.betLink:hover::before {
-  left: 0;
-}
-
-.betLink:hover{
-  box-shadow: 0px 4px 4px 2px rgba(0,0,0,0.25);
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { FiChevronLeft } from 'react-icons/fi';
+import Link from 'next/link';
+import { FiAward, FiChevronLeft, FiShare2 } from 'react-icons/fi';
+import { BetFacts } from './ProductUI';
 import { hydrateBet, settleBet, subscribeBet } from './api';
 import CreatorAuthFlow from './AuthSlides';
 import { canSettleBet } from './creatorSession';
@@ -31,9 +33,7 @@ const SHARE_NOTE = {
   manual: 'Copy the message below.',
 };
 
-function SettleSlide({
-  bet, user, saving, error, onBack, onPick,
-}) {
+function SettleSlide({ bet, user, saving, error, onBack, onPick }) {
   const allowed = canSettleBet(user, bet);
   return (
     <>
@@ -60,9 +60,15 @@ function SettleSlide({
             ))}
           </div>
         ) : (
-          <p className="form-error" role="alert">Only the creator can settle this bet.</p>
+          <p className="form-error" role="alert">
+            Only the creator can settle this bet.
+          </p>
         )}
-        {error && <p className="form-error" role="alert">{error}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </>
   );
@@ -106,11 +112,13 @@ const TallyScreen = () => {
         setBet(next);
         return;
       }
-      hydrateBet(next).then((full) => {
-        if (!cancelled) setBet(full);
-      }).catch(() => {
-        if (!cancelled) setBet(next);
-      });
+      hydrateBet(next)
+        .then((full) => {
+          if (!cancelled) setBet(full);
+        })
+        .catch(() => {
+          if (!cancelled) setBet(next);
+        });
     });
     return () => {
       cancelled = true;
@@ -162,7 +170,7 @@ const TallyScreen = () => {
   const shareNote = SHARE_NOTE[shareState];
 
   return (
-    <div className="phone screen-push">
+    <div className="phone screen-push tally-screen">
       <div className="nav-row">
         <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.back()}>
           <FiChevronLeft size={28} />
@@ -171,7 +179,20 @@ const TallyScreen = () => {
       </div>
       <div className="scroll">
         {!reveal && <FriendlyLoader />}
-        {reveal && bet === null && <p className="muted">This bet is gone.</p>}
+        {reveal && bet === null && (
+          <div className="empty">
+            <p className="empty-title">This bet is gone.</p>
+            <p className="empty-copy">Check the link or head back to your bets.</p>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <Link className="secondary press" href="/bets">
+              My bets
+            </Link>
+          </div>
+        )}
         {reveal && bet && (
           <>
             <div className="bet-card-top">
@@ -181,22 +202,30 @@ const TallyScreen = () => {
             <h2 className="question-xl">{questionOf(bet)}</h2>
             <div className="vote-meta">
               {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
-              {won ? <p className="settled-line">Settled on {won}</p> : null}
+              {won ? (
+                <p className="settled-line">
+                  <FiAward aria-hidden="true" />
+                  Settled on {won}
+                </p>
+              ) : null}
             </div>
+            <BetFacts bet={bet} />
             <hr className="meta-rule" />
+            <div className="results-heading">
+              <h2>The group’s picks</h2>
+              <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
+            </div>
             <Bars bet={bet} highlightId={bet.winnerId} waiting />
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="tally-share">
-              {message && shareState === 'manual' && (
-                <p className="manual-message">{message}</p>
-              )}
+              {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
-              <button
-                type="button"
-                className="cta press"
-                disabled={sharing}
-                onClick={onShare}
-              >
+              <button type="button" className="cta press" disabled={sharing} onClick={onShare}>
+                <FiShare2 size={18} aria-hidden="true" />
                 Share
               </button>
             </div>

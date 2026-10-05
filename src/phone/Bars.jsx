@@ -18,7 +18,9 @@ const Bars = ({ bet, highlightId, waiting = false }) => {
           <div key={row.id} className={mine ? 'bar-row mine' : 'bar-row'}>
             <div className="bar-label">
               <span>{label}</span>
-              <span className="bar-count">{row.count}</span>
+              <span className="bar-count">
+                {row.count} <span className="bar-percent">· {pct}%</span>
+              </span>
             </div>
             <div className="bar-track" aria-hidden="true">
               <div className="bar-fill" style={{ width: `${pct}%` }} />
