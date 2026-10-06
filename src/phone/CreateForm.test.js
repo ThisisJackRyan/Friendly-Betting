@@ -209,7 +209,7 @@ test('Text friends saves once and provides vote and live tally links', async () 
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
 
-  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Getting it ready…' })).toBeDisabled();
   finishSave('abc123');
 
   expect(await screen.findByRole('link', { name: /\/b\/abc123/ })).toBeInTheDocument();
@@ -224,7 +224,7 @@ test('Text friends saves once and provides vote and live tally links', async () 
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Who is late?\n1. Yes\n2. No\na coffee\nVote here: http://localhost/b/abc123',
+    'FRIENDLY · You in?\nWho is late?\n1. Yes\n2. No\nAt stake: a coffee\nMake your call: http://localhost/b/abc123',
   );
 });
 
@@ -250,7 +250,7 @@ test('over-under still shares the same short vote text', async () => {
   expect(screen.getByText('Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Rolls?\n1. Over 13.5\n2. Under 13.5\nVote here: http://localhost/b/abc123',
+    'FRIENDLY · You in?\nRolls?\n1. Over 13.5\n2. Under 13.5\nMake your call: http://localhost/b/abc123',
   );
 });
 

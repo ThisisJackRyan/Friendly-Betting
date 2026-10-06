@@ -1,5 +1,6 @@
 import '../src/App.css';
 import '../src/phone/phone.css';
+import ResultNotifications from '../src/phone/ResultNotifications';
 
 export const metadata = {
   title: 'Friendly Bets',
@@ -43,6 +44,7 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <div className="app-frame">{children}</div>
+        <ResultNotifications />
       </body>
     </html>
   );

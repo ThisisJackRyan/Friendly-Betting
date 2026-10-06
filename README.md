@@ -19,6 +19,27 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Core loop: Create → Text friends → open the `/b/[code]` link → vote → Tally → Close & settle.
 
+## Settlement and results
+
+Creators pick the winning side, review the result, then tap **Settle & notify**. The close and result snapshot are saved in one Firestore transaction, including all winning participants, the stake, and recipient IDs. Repeating the same close keeps the original result; a different winner or a late edit is rejected by the app. Firebase security rules remain the authority for database access; this repository does not manage or deploy those rules.
+
+Participants get **in-app** results: “You called it.” for winners, “This one’s settled.” for everyone else. A Results inbox appears after a successful pick, with an unread ping when the creator settles. Reopening Friendly in the same browser also picks up results settled while away. Read receipts survive reloads and sync between tabs. No participant phone number or extra sign-in is required. This release does not send automatic SMS or background push notifications. Browser storage and the participant identity must still be available; clearing them or using another device loses inbox continuity. Returning to an old bet link registers an existing participant for future results.
+
+Both the invite and tally links show the final result, winning names, winning side, and stake. **Share the result** opens the native share sheet, Messages, clipboard, or a copyable text fallback. Money is not collected or paid out. Stakes are displayed as entered; `$5` is not multiplied into a pot, and multiple winners are not assigned invented payout amounts. Only an explicit stake such as `$20 pot` is described as a pot. Noncash and blank stakes work too (blank means bragging rights).
+
+Voice: short, playful, a little competitive. “Make your call.” “Text the crew.” “Bragging rights, secured.” Keep the losing side welcome; no automatic roasts.
+
+### Crew check before release
+
+1. Create a bet with an explicit `$20 pot`, invite a few friends, and have at least two choose the winning side. Keep one participant on a different page in Friendly; close another participant’s browser.
+2. As the creator, preview the winner and settle. Check the winning names and stake, a winner ping, and the softer message for a losing pick. The participant who was away should see their unread result on reopening the same browser.
+3. Dismiss a ping, reload, and open Results. The result should still be there without a new unread ping. Open the invite link and share the final result back to the group chat.
+4. Repeat with pizza, an empty stake, nobody on the winning side, and an expired pick deadline. Expiry alone must not announce a winner. Try a second close and a late pick; neither should change the final result.
+
+Automated checks: `npm test -- --runInBand` and `npm run build`. The tests use mocked Firebase transactions/subscriptions, so the crew check still needs to confirm the deployed Firebase rules permit the settlement field and participant reads.
+
+Next, after this loop works with real friends: one nudge for non-voters, “run it back,” then a Founder badge and number when the paywall arrives. Automatic loser roasts, public leaderboards, and ad placement stay on hold.
+
 ## Deploy on Vercel
 
 GitHub Pages and Create React App are no longer used. Production is a Next.js App Router app on Vercel.

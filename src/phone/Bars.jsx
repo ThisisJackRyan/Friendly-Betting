@@ -28,7 +28,7 @@ const Bars = ({ bet, highlightId, waiting = false }) => {
           </div>
         );
       })}
-      {waiting && total === 0 && <p className="bars-wait">Waiting on votes.</p>}
+      {waiting && total === 0 && <p className="bars-wait">First pick gets the conversation going.</p>}
     </div>
   );
 };

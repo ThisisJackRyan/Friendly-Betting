@@ -158,6 +158,7 @@ test('settle requires the phone creator who owns the bet', () => {
   expect(canSettleBet(phoneUser, open)).toBe(true);
   expect(canSettleBet({ ...phoneUser, uid: 'someone-else' }, open)).toBe(false);
   expect(canSettleBet(anonUser, { ...open, createdByID: 'anon-1' })).toBe(false);
-  expect(canSettleBet(phoneUser, { ...open, status: 'closed' })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, status: 'closed', winnerId: 'a' })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, status: 'closed', winnerId: null })).toBe(true);
   expect(canSettleBet(null, open)).toBe(false);
 });

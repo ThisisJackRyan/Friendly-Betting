@@ -74,7 +74,7 @@ test('filters real bets by status, including expired bets, and preserves tally l
   expect(screen.getByText('Total points tonight?')).toBeInTheDocument();
   expect(screen.queryByText('Will Alex break 90?')).not.toBeInTheDocument();
   await userEvent.click(within(filters).getByRole('button', { name: 'Settled 1' }));
-  expect(screen.getByText('Winner: No')).toBeInTheDocument();
+  expect(screen.getByText('No takes it')).toBeInTheDocument();
 });
 
 test('searches questions, stakes, and types and can recover from no results', async () => {

@@ -305,6 +305,8 @@ test('the owning phone can settle after the code slide', async () => {
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(settleBet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
 });
 
@@ -361,6 +363,8 @@ test('close and settle stays on an open bet after the creator logs out', async (
   expect(await screen.findByRole('heading', { name: 'Settle' })).toBeInTheDocument();
   expect(screen.getByText('Who won?')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(settleBet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
 });
 

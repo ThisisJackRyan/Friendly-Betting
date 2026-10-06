@@ -23,7 +23,7 @@ export const AUTH_COPY = {
   codeTitle: 'Code',
   phonePlaceholder: '(555) 555-0100',
   textLine: 'We\u2019ll text a code.',
-  bettorLine: 'Friends still vote with one tap \u2014 no account.',
+  bettorLine: 'Friends pick a side with one tap \u2014 no account.',
   send: 'Send code',
   sending: 'Sending\u2026',
   verify: 'Verify',
@@ -121,6 +121,6 @@ export function adjacentCreateStep(current, user, direction) {
 
 export function canSettleBet(user, bet) {
   if (!isCreator(user) || !bet) return false;
-  if (bet.status === 'closed') return false;
+  if (bet.status === 'closed' && bet.winnerId) return false;
   return Boolean(user.uid && user.uid === bet.createdByID);
 }

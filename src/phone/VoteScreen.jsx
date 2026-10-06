@@ -19,6 +19,10 @@ import {
 } from './model';
 import Bars from './Bars';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
+import { rememberBet } from './notificationStore';
+import { settlementOf } from './settlement';
+import ResultCard from './ResultCard';
+import ResultShare from './ResultShare';
 
 const VoteScreen = () => {
   const params = useParams();
@@ -32,7 +36,7 @@ const VoteScreen = () => {
   const minElapsed = useMinHold(code);
 
   useEffect(() => {
-    document.title = 'Vote · Friendly';
+    document.title = 'Make your call · Friendly';
     setName(savedName());
   }, []);
 
@@ -40,6 +44,7 @@ const VoteScreen = () => {
     let cancelled = false;
     setBet(undefined);
     setError('');
+    setPendingId(null);
     const unsubscribe = subscribeBet(code, (next, err) => {
       if (cancelled) return;
       if (err) {
@@ -75,6 +80,15 @@ const VoteScreen = () => {
   const open = bet ? votingOpen(bet) : false;
   const showVoted = Boolean(selected);
   const reveal = minElapsed && bet !== undefined;
+  const result = settlementOf(bet);
+
+  useEffect(() => {
+    if (existing) rememberBet(user.uid, code);
+  }, [existing, user?.uid, code]);
+
+  useEffect(() => {
+    if (result) document.title = 'The final word · Friendly';
+  }, [result]);
 
   const choose = async (optionId) => {
     if (!bet || !user || !open || saving) return;
@@ -91,7 +105,7 @@ const VoteScreen = () => {
       });
     } catch (err) {
       setPendingId(null);
-      setError(friendlyError(err, 'Could not place your vote.'));
+      setError(friendlyError(err, 'Your pick didn’t stick. Give it another go.'));
     } finally {
       setSaving(false);
     }
@@ -136,17 +150,26 @@ const VoteScreen = () => {
               </span>
               <p>
                 <span className="inviter">{bet.createdByName || 'A friend'}</span>
-                <span className="invite-caption">has a friendly wager for you</span>
+                <span className="invite-caption">{result ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
               </p>
             </div>
             <h1 className="question-xl">{questionOf(bet)}</h1>
             <div className="vote-meta">
-              {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
+              {bet.closesAt && open ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
 
-            {showVoted && (
+            {result && (
+              <>
+                <ResultCard bet={bet} voterId={user?.uid} />
+                <ResultShare bet={bet} code={code} />
+                <div className="results-heading"><h2>The group’s picks</h2><span>Final tally</span></div>
+                <Bars bet={bet} highlightId={bet.winnerId} />
+              </>
+            )}
+
+            {showVoted && !result && (
               <div className="voted-in">
                 <p className="youre-on">
                   <FiCheckCircle size={22} aria-hidden="true" />
@@ -155,8 +178,9 @@ const VoteScreen = () => {
                 </p>
                 <Bars bet={bet} highlightId={selectedId} />
                 <Link className="text-link" href={`/t/${bet.id || code}`}>
-                  Tally
+                  See the picks
                 </Link>
+                <p className="form-footnote">Your result lands here when your friend settles. Come back on this browser.</p>
               </div>
             )}
 
@@ -200,15 +224,15 @@ const VoteScreen = () => {
               </>
             )}
 
-            {!showVoted && !open && (
+            {!showVoted && !open && !result && (
               <div className="voted-in">
                 <p className="youre-on">
                   <FiSlash className="state-icon" size={16} aria-hidden="true" />
-                  Voting is closed
+                  Picks are closed. The final call is coming.
                 </p>
                 <Bars bet={bet} />
                 <Link className="text-link" href={`/t/${bet.id || code}`}>
-                  Tally
+                  See the picks
                 </Link>
               </div>
             )}
