@@ -39,6 +39,7 @@ import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
+import AppHeader from './AppHeader';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -683,7 +684,8 @@ const CreateForm = () => {
           </div>
         )}
         {exitHome ? (
-          <div className="create-pane form-fill is-entering slide-back" data-step="home">
+          <div className="create-pane form-fill is-entering slide-back" data-step="home" inert>
+            <AppHeader className="home-preview-header" />
             <Landing quiet />
           </div>
         ) : (
