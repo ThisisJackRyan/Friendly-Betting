@@ -198,20 +198,50 @@ export async function settleBet(code, winnerId) {
 // credentials the route answers 503 and no numbers can have been saved
 // through it, so the bet doc alone is deleted here (the rules allow only the
 // creator). Any other failure throws and nothing is deleted client-side.
+// Errors from a dropped network (the fetch itself failed, or the browser
+// reports offline) carry code 'offline' so the screen can say so.
+function isOffline() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function offlineError(cause) {
+  const err = new Error('You are offline.');
+  err.code = 'offline';
+  err.cause = cause;
+  return err;
+}
+
 export async function deleteBet(code) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
-  const token = await user.getIdToken();
-  const res = await fetch(apiUrl(`/api/bets/${encodeURIComponent(code)}`), {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let token;
+  try {
+    token = await user.getIdToken();
+  } catch (cause) {
+    if (cause?.code === 'auth/network-request-failed' || isOffline()) throw offlineError(cause);
+    throw cause;
+  }
+  let res;
+  try {
+    res = await fetch(apiUrl(`/api/bets/${encodeURIComponent(code)}`), {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (cause) {
+    throw offlineError(cause);
+  }
   if (res.ok) return;
   const body = await res.json().catch(() => ({}));
   if (res.status === 503 && body?.error === 'not-configured') {
-    await deleteDoc(doc(db, 'bets', code));
+    try {
+      await deleteDoc(doc(db, 'bets', code));
+    } catch (cause) {
+      if (isOffline()) throw offlineError(cause);
+      throw cause;
+    }
     return;
   }
+  if (isOffline()) throw offlineError();
   const err = new Error('Could not delete this bet.');
   err.code = body?.error || 'delete-failed';
   throw err;

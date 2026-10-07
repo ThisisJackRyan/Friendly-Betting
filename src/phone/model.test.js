@@ -1,4 +1,4 @@
-import { buildDraft, formatSms, statusLabel, tallyCounts } from './model';
+import { buildDraft, formatSms, hasVote, statusLabel, tallyCounts, withOptimisticVote } from './model';
 
 test('formats a multiline text and drops an empty stake', () => {
   expect(formatSms({
@@ -83,4 +83,45 @@ test('counts votes and marks settled bets closed', () => {
   };
   expect(tallyCounts(bet).map((row) => row.count)).toEqual([2, 0]);
   expect(statusLabel({ ...bet, status: 'closed', winnerId: 'a' })).toBe('Settled');
+});
+
+describe('withOptimisticVote', () => {
+  const bet = {
+    schemaVersion: 2,
+    options: [{ id: 'a', label: 'Yes' }, { id: 'b', label: 'No' }],
+    votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }],
+  };
+  const mine = { voterId: 'me', name: 'Sam', optionId: 'a' };
+  const counts = (value) => tallyCounts(value).map((row) => row.count);
+
+  test('adds your pick to a bet that does not have it yet', () => {
+    const shown = withOptimisticVote(bet, mine);
+    expect(counts(shown)).toEqual([1, 1]);
+    expect(bet.votes).toHaveLength(1);
+    expect(counts(withOptimisticVote({ ...bet, votes: [] }, mine))).toEqual([1, 0]);
+    expect(counts(withOptimisticVote({ ...bet, votes: undefined }, mine))).toEqual([1, 0]);
+  });
+
+  test('returns the server bet untouched once it records your pick', () => {
+    const recorded = { ...bet, votes: [...bet.votes, { ...mine, at: 1 }] };
+    expect(withOptimisticVote(recorded, mine)).toBe(recorded);
+    expect(counts(recorded)).toEqual([1, 1]);
+    expect(hasVote(recorded, mine)).toBe(true);
+  });
+
+  test('moves a changed pick instead of adding a second one', () => {
+    const before = { ...bet, votes: [...bet.votes, { voterId: 'me', name: 'Sam', optionId: 'b' }] };
+    expect(hasVote(before, mine)).toBe(false);
+    const shown = withOptimisticVote(before, mine);
+    expect(counts(shown)).toEqual([1, 1]);
+    expect(shown.votes.filter((vote) => vote.voterId === 'me')).toEqual([mine]);
+  });
+
+  test('leaves missing bets and missing votes alone', () => {
+    expect(withOptimisticVote(undefined, mine)).toBeUndefined();
+    expect(withOptimisticVote(null, mine)).toBeNull();
+    expect(withOptimisticVote(bet, null)).toBe(bet);
+    expect(withOptimisticVote(bet, { optionId: 'a' })).toBe(bet);
+    expect(hasVote(bet, null)).toBe(false);
+  });
 });

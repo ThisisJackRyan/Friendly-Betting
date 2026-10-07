@@ -7,7 +7,7 @@ import { FiArrowUpRight, FiArrowRight, FiPlus, FiSearch, FiX } from 'react-icons
 import { deleteBet, subscribeMyBets } from './api';
 import CreatorAuthFlow from './AuthSlides';
 import { signOutCreator } from './creatorAuth';
-import { canDeleteBet, isCreator } from './creatorSession';
+import { PHONE_OFFLINE_ERROR, canDeleteBet, isCreator } from './creatorSession';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
 import { resultHeadline, settlementOf } from './settlement';
@@ -16,8 +16,7 @@ import { BetFacts } from './ProductUI';
 import DeleteBetDialog from './DeleteBetDialog';
 
 const FILTERS = ['All', 'Open', 'Closed', 'Settled'];
-// Reused as-is from saveResultText (src/phone/resultTexts.js); no new copy.
-const DELETE_ERROR = 'Still connecting. Try again.';
+const DELETE_ERROR = 'Couldn\u2019t delete this bet. Try again.';
 const TOAST_MS = 4000;
 
 export function MyBetsList({ user }) {
@@ -60,8 +59,10 @@ export function MyBetsList({ user }) {
       await deleteBet(deleting);
       setDeleting(null);
       setToast('Bet deleted.');
-    } catch {
-      setDeleteError(DELETE_ERROR);
+    } catch (err) {
+      const offline = err?.code === 'offline'
+        || (typeof navigator !== 'undefined' && navigator.onLine === false);
+      setDeleteError(offline ? PHONE_OFFLINE_ERROR : DELETE_ERROR);
     } finally {
       setDeleteBusy(false);
     }

@@ -173,7 +173,14 @@ test('votes and settlements never carry a phone number', async () => {
 
 describe('deleteBet', () => {
   const respond = (status, body) => {
-    global.fetch = jest.fn(async () => ({ ok: status < 300, status, json: async () => body }));
+    global.fetch = jest.fn(async () => ({
+      ok: status < 300,
+      status,
+      json: async () => {
+        if (body === undefined) throw new SyntaxError('no json');
+        return body;
+      },
+    }));
   };
 
   beforeEach(() => {
@@ -218,6 +225,65 @@ describe('deleteBet', () => {
     });
     await expect(deleteBet('abc123')).rejects.toThrow();
     expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  describe('error tagging', () => {
+    const goOffline = () => jest.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    afterEach(() => jest.restoreAllMocks());
+
+    test('a rejected fetch is tagged offline', async () => {
+      global.fetch = jest.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      });
+      await expect(deleteBet('abc123')).rejects.toMatchObject({ code: 'offline' });
+    });
+
+    test.each([
+      [401, { error: 'unauthorized' }],
+      [403, { error: 'forbidden' }],
+      [404, { error: 'not-found' }],
+      [500, { error: 'server' }],
+      [500, undefined],
+    ])('a %i is not tagged offline', async (status, body) => {
+      respond(status, body);
+      const err = await deleteBet('abc123').catch((caught) => caught);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.code).not.toBe('offline');
+    });
+
+    test('an HTTP failure while the browser reports offline is tagged offline', async () => {
+      goOffline();
+      respond(500, { error: 'server' });
+      await expect(deleteBet('abc123')).rejects.toMatchObject({ code: 'offline' });
+    });
+
+    test('a failed fallback client delete is not tagged offline', async () => {
+      respond(503, { error: 'not-configured' });
+      deleteDoc.mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+      await expect(deleteBet('abc123')).rejects.toMatchObject({ code: 'permission-denied' });
+    });
+
+    test('a failed fallback client delete while offline is tagged offline', async () => {
+      goOffline();
+      respond(503, { error: 'not-configured' });
+      deleteDoc.mockRejectedValueOnce(new Error('unavailable'));
+      await expect(deleteBet('abc123')).rejects.toMatchObject({ code: 'offline' });
+    });
+
+    test('a token refresh that hits the network is tagged offline', async () => {
+      auth.currentUser.getIdToken = jest.fn(async () => {
+        throw Object.assign(new Error('net'), { code: 'auth/network-request-failed' });
+      });
+      respond(200, {});
+      await expect(deleteBet('abc123')).rejects.toMatchObject({ code: 'offline' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('signed out is not tagged offline', async () => {
+      auth.currentUser = null;
+      const err = await deleteBet('abc123').catch((caught) => caught);
+      expect(err.code).not.toBe('offline');
+    });
   });
 
   test('signed out never calls the route', async () => {

@@ -662,6 +662,111 @@ describe('live results after voting', () => {
   });
 });
 
+describe('your own pick counts right away', () => {
+  let feeds;
+  let settle;
+  const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
+  const push = async (bet, err, meta = { fromCache: false }) => {
+    await act(async () => {
+      live().forEach((feed) => feed.onChange(bet, err, meta));
+    });
+  };
+  const counts = () => [...document.querySelectorAll('.bar-count')].map((node) => node.textContent);
+  const widths = () => [...document.querySelectorAll('.bar-fill')].map((node) => node.style.width);
+  const mine = { voterId: 'user-1', name: 'Sam', optionId: 'a' };
+  const vote = async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Yes' }));
+  };
+
+  beforeEach(() => {
+    feeds = [];
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(openBet);
+      return feed.unsubscribe;
+    });
+    castVote.mockImplementation(() => new Promise((resolve, reject) => {
+      settle = { resolve, reject };
+    }));
+  });
+
+  afterEach(() => {
+    cleanup();
+    castVote.mockImplementation(async () => {});
+  });
+
+  test('the results view shows your pick before any snapshot has it', async () => {
+    await vote();
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    expect(widths()).toEqual(['100%', '0%']);
+    expect(screen.queryByText('0 · 0%', { selector: '.mine .bar-count' })).not.toBeInTheDocument();
+    await act(async () => settle.resolve());
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+  });
+
+  test('a snapshot with your pick is used as-is, never double counted', async () => {
+    await vote();
+    await act(async () => settle.resolve());
+    await push({ ...openBet, votes: [mine] });
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    await push({ ...openBet, votes: [mine, { voterId: 'kim', name: 'Kim', optionId: 'b' }] });
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+  });
+
+  test('another pick landing first adds to yours', async () => {
+    await vote();
+    await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }] });
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+    expect(widths()).toEqual(['50%', '50%']);
+    await act(async () => settle.resolve());
+    await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }, mine] });
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+  });
+
+  test('a failed pick drops the optimistic count and shows the usual error', async () => {
+    await vote();
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    await act(async () => settle.reject(new Error('This bet is closed.')));
+    expect(screen.getByRole('alert')).toHaveTextContent('This bet is closed.');
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(counts()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Yes' })).toBeEnabled();
+
+    // A later pick that lands still counts only once.
+    await userEvent.click(screen.getByRole('button', { name: 'No' }));
+    expect(counts()).toEqual(['0 · 0%', '1 · 100%']);
+  });
+
+  test('a failed pick with no message keeps the fallback line', async () => {
+    await vote();
+    await act(async () => settle.reject({}));
+    expect(screen.getByRole('alert')).toHaveTextContent('Your pick didn’t stick. Give it another go.');
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+  });
+
+  test('a snapshot error or offline miss keeps your pick and the last tally', async () => {
+    await vote();
+    await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }] });
+    await push(undefined, new Error('offline'));
+    await push(null, undefined, { fromCache: true });
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await act(async () => settle.resolve());
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+  });
+
+  test('a delete the server confirms still shows the not-found screen', async () => {
+    await vote();
+    await push(null);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+  });
+});
+
 test('a mistyped code shows the not-found screen with a way to start a bet', async () => {
   subscribeBet.mockImplementation((_code, onChange) => {
     onChange(null, undefined, { fromCache: false });

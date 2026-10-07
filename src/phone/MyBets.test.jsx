@@ -2,6 +2,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MyBetsList } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
+import { PHONE_OFFLINE_ERROR } from './creatorSession';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -196,15 +197,68 @@ describe('delete a bet', () => {
     expect(screen.queryByText(/undo/i)).not.toBeInTheDocument();
   });
 
-  test('a failed delete keeps the dialog open with the reused error', async () => {
-    deleteBet.mockRejectedValue(new Error('server'));
+  const GENERIC = 'Couldn\u2019t delete this bet. Try again.';
+  const offlineErr = () => Object.assign(new Error('You are offline.'), { code: 'offline' });
+
+  test.each([
+    ['a server error', () => Object.assign(new Error('Could not delete this bet.'), { code: 'server' })],
+    ['a 403', () => Object.assign(new Error('Could not delete this bet.'), { code: 'forbidden' })],
+    ['not signed in', () => new Error('Not signed in.')],
+  ])('%s shows the delete line under the buttons and keeps the dialog open', async (_label, makeErr) => {
+    deleteBet.mockRejectedValue(makeErr());
     render(<MyBetsList user={user} />);
     await openDialog();
     await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('Still connecting. Try again.');
-    expect(within(dialog).getByRole('button', { name: 'Delete bet' })).toBeEnabled();
+    const alert = within(dialog).getByRole('alert');
+    expect(alert).toHaveTextContent(GENERIC);
+    expect(alert.textContent).toBe('Couldn’t delete this bet. Try again.');
+    expect(alert).toHaveClass('form-error');
+    expect(dialog).not.toHaveTextContent('Still connecting');
+    const confirm = within(dialog).getByRole('button', { name: 'Delete bet' });
+    const keep = within(dialog).getByRole('button', { name: 'Keep it' });
+    [confirm, keep].forEach((button) => {
+      expect(button).toBeEnabled();
+      expect(button.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
     expect(screen.getByRole('status')).toHaveTextContent('');
     expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
+  });
+
+  test('a dropped network shows the offline line', async () => {
+    deleteBet.mockRejectedValue(offlineErr());
+    render(<MyBetsList user={user} />);
+    await openDialog();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('alert').textContent).toBe(PHONE_OFFLINE_ERROR);
+    expect(within(dialog).getByRole('button', { name: 'Delete bet' })).toBeEnabled();
+    expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
+  });
+
+  test('a browser that reports offline shows the offline line', async () => {
+    const onLine = jest.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      deleteBet.mockRejectedValue(new Error('Could not delete this bet.'));
+      render(<MyBetsList user={user} />);
+      await openDialog();
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(PHONE_OFFLINE_ERROR);
+    } finally {
+      onLine.mockRestore();
+    }
+  });
+
+  test('a retry after a failed delete succeeds and closes the dialog', async () => {
+    deleteBet.mockRejectedValueOnce(new Error('server')).mockResolvedValueOnce(undefined);
+    render(<MyBetsList user={user} />);
+    await openDialog();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent(GENERIC);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+    expect(deleteBet).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
   });
 });

@@ -57,11 +57,6 @@ const DeleteBetDialog = ({ busy, error, onConfirm, onCancel }) => {
       >
         <h2 id={titleId} className="dialog-title">Delete this bet?</h2>
         <p className="dialog-copy">It’s gone for everyone, including the votes and the share link.</p>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
         <div className="dialog-actions">
           <button ref={deleteRef} type="button" className="danger press" disabled={busy} onClick={onConfirm}>
             {busy ? 'Deleting…' : 'Delete bet'}
@@ -70,6 +65,11 @@ const DeleteBetDialog = ({ busy, error, onConfirm, onCancel }) => {
             Keep it
           </button>
         </div>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
