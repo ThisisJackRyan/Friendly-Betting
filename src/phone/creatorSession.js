@@ -23,7 +23,7 @@ export const AUTH_COPY = {
   codeTitle: 'Code',
   phonePlaceholder: '(555) 555-0100',
   textLine: 'We\u2019ll text a code.',
-  bettorLine: 'Friends pick a side with one tap \u2014 no account.',
+  bettorLine: 'Friends still vote with one tap \u2014 no account.',
   send: 'Send code',
   sending: 'Sending\u2026',
   verify: 'Verify',

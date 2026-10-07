@@ -8,7 +8,6 @@ import {
   FiChevronLeft,
   FiFlag,
   FiMessageCircle,
-  FiShield,
   FiX,
 } from 'react-icons/fi';
 import { FlowProgress, PageIntro } from './ProductUI';
@@ -556,9 +555,6 @@ const CreateForm = () => {
     if (stepNumber === CREATE_STEP.phone) {
       body = (
         <>
-          <PageIntro icon={FiShield} title="Your bets, in your corner.">
-            Verify your number so you can find your bets and settle the score.
-          </PageIntro>
           <PhoneBody
             formatted={phone.formatted}
             onNational={phone.onNational}
