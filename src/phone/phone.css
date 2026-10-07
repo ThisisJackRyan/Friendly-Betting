@@ -444,13 +444,9 @@ body {
 
 .recaptcha-slot {
   position: relative;
-  width: 304px;
+  width: auto;
   max-width: 100%;
-  min-height: 78px;
   overflow: visible;
-  border-radius: var(--radius-control);
-  background: var(--raised);
-  box-shadow: var(--shadow-card);
   line-height: 0;
 }
 
@@ -3158,7 +3154,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (max-width: 360px) {
-  /* The provider's checkbox is 304px wide. Keep it intact on 320px phones. */
+  /* Keep the provider's inline badge intact on 320px phones. */
   .person-check {
     margin-left: -8px;
     margin-right: -8px;

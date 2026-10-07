@@ -584,7 +584,6 @@ const CreateForm = () => {
             onResend={() => phone.send()}
             onChangeNumber={() => go(CREATE_STEP.phone)}
             busy={phone.busy}
-            check={stepNumber === step ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
           {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>

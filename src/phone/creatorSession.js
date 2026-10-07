@@ -45,6 +45,9 @@ const PHONE_ERRORS = {
   'auth/billing-not-enabled': 'Texting isn\u2019t set up yet.',
 };
 
+// Internal only: the person check was closed or timed out. Never shown.
+export const PERSON_CHECK_CANCELLED = 'auth/person-check-cancelled';
+
 export const SEND_CODE_ERROR = 'Couldn\u2019t send a code. Try again.';
 export const VERIFY_CODE_ERROR = 'Couldn\u2019t verify that code. Try again.';
 
