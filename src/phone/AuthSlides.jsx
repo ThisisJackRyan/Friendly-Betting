@@ -11,6 +11,7 @@ import {
   codeSentCopy,
   formatUsNational,
   nationalDigits,
+  PERSON_CHECK_CANCELLED,
   phoneError,
   SEND_CODE_ERROR,
   toE164Us,
@@ -66,7 +67,8 @@ export function useCreatorPhone() {
       attempted.current = '';
       return true;
     } catch (err) {
-      showPhoneError(err, SEND_CODE_ERROR);
+      // A closed check just puts the button back.
+      if (err?.code !== PERSON_CHECK_CANCELLED) showPhoneError(err, SEND_CODE_ERROR);
       return false;
     } finally {
       sending.current = false;

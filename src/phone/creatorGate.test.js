@@ -6,7 +6,7 @@ import MyBets from './MyBets';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet, subscribeMyBets } from './api';
 import { sendPhoneCode, signOutCreator, verifyPhoneCode } from './creatorAuth';
-import { AUTH_COPY } from './creatorSession';
+import { AUTH_COPY, PERSON_CHECK_CANCELLED } from './creatorSession';
 import { useIdentity } from './identity';
 import { navigation } from 'next/navigation';
 
@@ -188,6 +188,33 @@ test('an unmapped send on the phone gate shows the human line and raw code', asy
   expect(code).toHaveClass('muted');
   expect(code.textContent).toBe('auth/operation-not-allowed');
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+});
+
+test('a closed person check on the phone gate quietly puts the send button back', async () => {
+  const err = new Error('The person check was closed.');
+  err.code = PERSON_CHECK_CANCELLED;
+  sendPhoneCode.mockRejectedValue(err);
+  render(
+    <div className="phone">
+      <MyBets />
+    </div>,
+  );
+  fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const button = await screen.findByRole('button', { name: 'Send code' });
+  expect(button).toBeEnabled();
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(document.querySelector('.phone-error-code')).not.toBeInTheDocument();
+  expect(screen.queryByText(PERSON_CHECK_CANCELLED)).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+
+  await userEvent.click(button);
+  await screen.findByRole('button', { name: 'Send code' });
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('log out drops the creator session and the phone gate returns', async () => {

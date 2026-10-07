@@ -7,7 +7,7 @@ import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
 import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
-import { AUTH_COPY, codeSentCopy } from './creatorSession';
+import { AUTH_COPY, codeSentCopy, PERSON_CHECK_CANCELLED } from './creatorSession';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 
@@ -570,6 +570,29 @@ test('a failed person check stays on the phone step with the check still there',
   expect(pane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
+test('a closed person check quietly puts the send button back', async () => {
+  const err = new Error('The person check was closed.');
+  err.code = PERSON_CHECK_CANCELLED;
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const button = await screen.findByRole('button', { name: 'Send code' });
+  expect(button).toBeEnabled();
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(document.querySelector('.phone-error-code')).not.toBeInTheDocument();
+  expect(screen.queryByText(PERSON_CHECK_CANCELLED)).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+
+  await userEvent.click(button);
+  await screen.findByRole('button', { name: 'Send code' });
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('send after a check does not reload or show the person sentence', async () => {

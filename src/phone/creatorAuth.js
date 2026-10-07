@@ -6,6 +6,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth } from '../Config/firebase-config';
+import { PERSON_CHECK_CANCELLED } from './creatorSession';
 
 const ALREADY_IN_USE = new Set([
   'auth/credential-already-in-use',
@@ -17,7 +18,16 @@ let verifier = null;
 let verifierNode = null;
 let verifierSlot = null;
 let verifierBroken = false;
-let failPendingCheck = null;
+let pendingCheck = null;
+
+// How often to look for Google's challenge popup. It has no close event.
+const CHALLENGE_POLL_MS = 250;
+// A solved challenge hides just before its token arrives, so wait before calling it closed.
+const CLOSE_GRACE_MS = 1500;
+// An invisible check with no popup normally returns in a second or two.
+const NO_CHALLENGE_MS = 30000;
+// Hard cap while the popup is open, in case close detection misses. Covers multi-round challenges.
+const CHALLENGE_MAX_MS = 180000;
 
 function unavailable() {
   const err = new Error('Phone sign-in is unavailable.');
@@ -28,6 +38,12 @@ function unavailable() {
 function checkFailed() {
   const err = new Error('The person check could not finish.');
   err.code = 'auth/captcha-check-failed';
+  return err;
+}
+
+function checkCancelled() {
+  const err = new Error('The person check was closed.');
+  err.code = PERSON_CHECK_CANCELLED;
   return err;
 }
 
@@ -44,10 +60,10 @@ function disposeVerifier() {
   verifierNode = null;
   verifierSlot = null;
   verifierBroken = false;
-  failPendingCheck = null;
 }
 
 export function releasePhoneCheck() {
+  if (pendingCheck) pendingCheck.cancel(false);
   disposeVerifier();
 }
 
@@ -68,7 +84,12 @@ function phoneVerifier(slot) {
     badge: 'inline',
     'error-callback': () => {
       if (verifier !== next) return;
-      if (failPendingCheck) failPendingCheck();
+      if (pendingCheck) pendingCheck.fail();
+      else verifierBroken = true;
+    },
+    'expired-callback': () => {
+      if (verifier !== next) return;
+      if (pendingCheck) pendingCheck.cancel(true);
       else verifierBroken = true;
     },
   });
@@ -78,21 +99,102 @@ function phoneVerifier(slot) {
   return next;
 }
 
-// verify() only ever resolves. A grecaptcha error (offline, blocked) arrives
-// on error-callback instead, so race it in as a failed check.
+// Google's challenge iframe sits in a wrapper on <body> that is hidden
+// whenever the challenge is closed or solved.
+function challengeVisible() {
+  const frames = document.querySelectorAll('iframe[src*="/recaptcha/"][src*="bframe"]');
+  return Array.from(frames).some((frame) => {
+    let wrapper = frame;
+    while (wrapper.parentElement && wrapper.parentElement !== document.body) {
+      wrapper = wrapper.parentElement;
+    }
+    if (wrapper.parentElement !== document.body) return false;
+    return window.getComputedStyle(wrapper).visibility !== 'hidden';
+  });
+}
+
+// Calls onGone if the challenge is closed, never shows, or stays open too long.
+// Returns a stop function.
+function watchChallenge(onGone) {
+  let seen = false;
+  let grace = null;
+  let cap = null;
+  const idle = setTimeout(onGone, NO_CHALLENGE_MS);
+  const poll = setInterval(() => {
+    if (challengeVisible()) {
+      if (!seen) {
+        seen = true;
+        clearTimeout(idle);
+        cap = setTimeout(onGone, CHALLENGE_MAX_MS);
+      }
+      clearTimeout(grace);
+      grace = null;
+    } else if (seen && !grace) {
+      grace = setTimeout(onGone, CLOSE_GRACE_MS);
+    }
+  }, CHALLENGE_POLL_MS);
+  return () => {
+    clearInterval(poll);
+    clearTimeout(idle);
+    clearTimeout(grace);
+    clearTimeout(cap);
+  };
+}
+
+// Closes any open challenge and swaps in a fresh verifier in the same slot.
+function replaceVerifier(appVerifier, rebuild) {
+  try {
+    appVerifier._reset();
+  } catch (err) {
+    // The widget may already be gone.
+  }
+  if (verifier !== appVerifier) return;
+  const slot = verifierSlot;
+  disposeVerifier();
+  if (!rebuild) return;
+  try {
+    phoneVerifier(slot).render().catch(() => {});
+  } catch (err) {
+    // Send renders it again.
+  }
+}
+
+// verify() only ever resolves, and only on a token. A grecaptcha error
+// (offline, blocked) arrives on error-callback, so race it in as a failed
+// check. A closed or stalled challenge cancels the check instead.
 function checkedVerifier(appVerifier) {
   return {
     type: 'recaptcha',
     verify() {
       return new Promise((resolve, reject) => {
-        failPendingCheck = () => reject(checkFailed());
-        appVerifier.verify().then(resolve, reject);
-      }).finally(() => {
-        failPendingCheck = null;
+        let stopWatch = () => {};
+        let settled = false;
+        const settle = (finish) => (value) => {
+          if (settled) return;
+          settled = true;
+          stopWatch();
+          if (pendingCheck === check) pendingCheck = null;
+          finish(value);
+        };
+        const check = {
+          fail: settle(() => reject(checkFailed())),
+          cancel: settle((rebuild) => {
+            replaceVerifier(appVerifier, rebuild);
+            reject(checkCancelled());
+          }),
+        };
+        pendingCheck = check;
+        stopWatch = watchChallenge(() => check.cancel(true));
+        try {
+          appVerifier.verify().then(settle(resolve), settle(reject));
+        } catch (err) {
+          settle(reject)(err);
+        }
       });
     },
     _reset() {
-      appVerifier._reset();
+      // A cancelled verifier was already reset and cleared.
+      if (verifier === appVerifier) appVerifier._reset();
     },
   };
 }

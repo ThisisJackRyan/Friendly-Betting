@@ -48,6 +48,9 @@ const {
   signOutCreator,
   verifyPhoneCode,
 } = require('./creatorAuth');
+const { PERSON_CHECK_CANCELLED } = require('./creatorSession');
+
+const bodyNodes = [];
 
 beforeEach(() => {
   mockVerifyPhoneNumber.mockReset();
@@ -63,6 +66,12 @@ beforeEach(() => {
   mockAuthState.currentUser = null;
   resetPhoneAuthForTests();
   mockRecaptchaClear.mockClear();
+});
+
+afterEach(() => {
+  resetPhoneAuthForTests();
+  bodyNodes.splice(0).forEach((node) => node.remove());
+  jest.useRealTimers();
 });
 
 // Like Firebase: run the verifier, then reset it after the request.
@@ -148,6 +157,190 @@ test('a grecaptcha error during the check fails the send and replaces the verifi
   await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
   expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
   expect(slot.children).toHaveLength(1);
+});
+
+// Google's challenge: a bframe iframe in a wrapper on <body>.
+function showChallenge() {
+  const wrapper = document.createElement('div');
+  wrapper.style.visibility = 'visible';
+  const frame = document.createElement('iframe');
+  frame.src = 'https://www.google.com/recaptcha/api2/bframe?k=x';
+  wrapper.appendChild(frame);
+  document.body.appendChild(wrapper);
+  bodyNodes.push(wrapper);
+  return wrapper;
+}
+
+// Starts a send whose person check waits until the test gives it a token.
+async function pendingSend(slot) {
+  jest.useFakeTimers();
+  mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+  await mountPhoneCheck(slot);
+  let giveToken;
+  mockVerifiers[0].verify.mockReturnValueOnce(new Promise((resolve) => {
+    giveToken = resolve;
+  }));
+  const state = { settled: false };
+  const sent = sendPhoneCode('+15551234567', slot);
+  sent.then(
+    () => { state.settled = true; },
+    () => { state.settled = true; },
+  );
+  return { sent, state, giveToken: (token) => giveToken(token) };
+}
+
+function expectRebuilt(slot) {
+  const firstNode = RecaptchaVerifier.mock.calls[0][1];
+  expect(mockVerifiers[0]._reset).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  expect(firstNode.parentNode).toBeNull();
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+  const secondNode = RecaptchaVerifier.mock.calls[1][1];
+  expect(secondNode).not.toBe(firstNode);
+  expect(secondNode.parentNode).toBe(slot);
+  expect(slot.children).toHaveLength(1);
+  expect(mockRecaptchaRender).toHaveBeenCalledTimes(2);
+  expect(mockSendResult).not.toHaveBeenCalled();
+}
+
+test('closing the challenge cancels the check after a grace and rebuilds it', async () => {
+  const slot = document.createElement('div');
+  const { sent, state } = await pendingSend(slot);
+  const challenge = showChallenge();
+  await jest.advanceTimersByTimeAsync(250);
+  challenge.style.visibility = 'hidden';
+  await jest.advanceTimersByTimeAsync(250);
+  await jest.advanceTimersByTimeAsync(1499);
+  expect(state.settled).toBe(false);
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+
+  await jest.advanceTimersByTimeAsync(1);
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+  expectRebuilt(slot);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('a token right after the challenge hides is a normal send', async () => {
+  const slot = document.createElement('div');
+  mockSendResult.mockResolvedValueOnce('vid-1');
+  const { sent, giveToken } = await pendingSend(slot);
+  const challenge = showChallenge();
+  await jest.advanceTimersByTimeAsync(250);
+  challenge.style.visibility = 'hidden';
+  await jest.advanceTimersByTimeAsync(1000);
+  giveToken('token');
+
+  await expect(sent).resolves.toBe('vid-1');
+  await jest.advanceTimersByTimeAsync(5000);
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  expect(mockVerifiers[0]._reset).toHaveBeenCalledTimes(1);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('no challenge and no token for 30s cancels the check', async () => {
+  const slot = document.createElement('div');
+  const { sent, state } = await pendingSend(slot);
+  await jest.advanceTimersByTimeAsync(29900);
+  expect(state.settled).toBe(false);
+
+  await jest.advanceTimersByTimeAsync(100);
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+  expectRebuilt(slot);
+});
+
+test('an open challenge is only cut off after 3 minutes', async () => {
+  const slot = document.createElement('div');
+  const { sent, state } = await pendingSend(slot);
+  showChallenge();
+  await jest.advanceTimersByTimeAsync(250);
+  await jest.advanceTimersByTimeAsync(60000);
+  expect(state.settled).toBe(false);
+  await jest.advanceTimersByTimeAsync(180000 - 60001);
+  expect(state.settled).toBe(false);
+
+  await jest.advanceTimersByTimeAsync(1);
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+  expectRebuilt(slot);
+});
+
+test('an expired token during the check cancels it and rebuilds', async () => {
+  const slot = document.createElement('div');
+  const { sent } = await pendingSend(slot);
+  RecaptchaVerifier.mock.calls[0][2]['expired-callback']();
+
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+  expectRebuilt(slot);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('an expired token between sends replaces the verifier next time', async () => {
+  const slot = document.createElement('div');
+  mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+  mockSendResult.mockResolvedValueOnce('vid-1');
+  await mountPhoneCheck(slot);
+  RecaptchaVerifier.mock.calls[0][2]['expired-callback']();
+
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-1');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+  expect(mockVerifiers[0].verify).not.toHaveBeenCalled();
+  expect(mockVerifiers[1].verify).toHaveBeenCalledTimes(1);
+});
+
+test('late results from a cancelled verifier are ignored', async () => {
+  const slot = document.createElement('div');
+  const { sent, giveToken } = await pendingSend(slot);
+  const oldParams = RecaptchaVerifier.mock.calls[0][2];
+  await jest.advanceTimersByTimeAsync(30000);
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+
+  giveToken('late-token');
+  oldParams['error-callback']();
+  oldParams['expired-callback']();
+  await jest.advanceTimersByTimeAsync(5000);
+
+  expect(mockSendResult).not.toHaveBeenCalled();
+  expect(mockVerifiers[0]._reset).toHaveBeenCalledTimes(1);
+  expect(mockVerifiers[1].verify).not.toHaveBeenCalled();
+  expect(mockVerifiers[1]._reset).not.toHaveBeenCalled();
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  expect(jest.getTimerCount()).toBe(0);
+
+  // The new verifier was not marked broken, so the next send keeps it.
+  mockSendResult.mockResolvedValueOnce('vid-2');
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+});
+
+test('after a cancel the next send uses the rebuilt verifier', async () => {
+  const slot = document.createElement('div');
+  const { sent } = await pendingSend(slot);
+  RecaptchaVerifier.mock.calls[0][2]['expired-callback']();
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+
+  mockSendResult.mockResolvedValueOnce('vid-2');
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+  expect(mockVerifiers[1].verify).toHaveBeenCalledTimes(1);
+  expect(mockVerifiers[1]._reset).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  expect(slot.children).toHaveLength(1);
+});
+
+test('leaving during a check settles it and leaves no timers', async () => {
+  const slot = document.createElement('div');
+  const { sent } = await pendingSend(slot);
+  showChallenge();
+  await jest.advanceTimersByTimeAsync(250);
+  expect(jest.getTimerCount()).toBeGreaterThan(0);
+
+  releasePhoneCheck();
+  await expect(sent).rejects.toMatchObject({ code: PERSON_CHECK_CANCELLED });
+  expect(jest.getTimerCount()).toBe(0);
+  expect(mockVerifiers[0]._reset).toHaveBeenCalledTimes(1);
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(slot.children).toHaveLength(0);
 });
 
 test('leaving the phone flow is what clears the widget', async () => {
