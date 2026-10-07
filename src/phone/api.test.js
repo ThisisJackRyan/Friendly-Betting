@@ -2,6 +2,7 @@ import { runTransaction } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
 import { castVote, saveBet, settleBet } from './api';
 import { rememberBet } from './notificationStore';
+import { requestResultTexts } from './resultTexts';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
@@ -9,6 +10,7 @@ jest.mock('firebase/firestore', () => ({
   runTransaction: jest.fn(),
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
+jest.mock('./resultTexts', () => ({ requestResultTexts: jest.fn() }));
 
 let stored;
 let tx;
@@ -26,6 +28,7 @@ beforeEach(() => {
   runTransaction.mockReset();
   runTransaction.mockImplementation(async (_db, run) => run(tx));
   rememberBet.mockClear();
+  requestResultTexts.mockReset();
 });
 
 test('closing writes one atomic result with both winner and loser recipients', async () => {
@@ -109,4 +112,35 @@ test('deadline expiry blocks new picks but still lets the creator settle', async
   const result = await settleBet('abc123', 'a');
   expect(result.status).toBe('closed');
   expect(result.settlement.recipients).toHaveLength(2);
+});
+
+test('a committed settle asks the server for result texts once, after the write', async () => {
+  requestResultTexts.mockImplementation(() => {
+    expect(stored.status).toBe('closed');
+  });
+  await settleBet('abc123', 'a');
+  expect(requestResultTexts).toHaveBeenCalledTimes(1);
+  expect(requestResultTexts).toHaveBeenCalledWith('abc123');
+  // A same-winner retry re-requests; the server claims each number only once.
+  await settleBet('abc123', 'a');
+  expect(requestResultTexts).toHaveBeenCalledTimes(2);
+});
+
+test('a failed settle never asks for result texts', async () => {
+  auth.currentUser = null;
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('Only the creator');
+  auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }] };
+  runTransaction.mockRejectedValueOnce(new Error('offline'));
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('offline');
+  await settleBet('abc123', 'a');
+  await expect(settleBet('abc123', 'b')).rejects.toThrow('already settled');
+  expect(requestResultTexts).toHaveBeenCalledTimes(1);
+});
+
+test('votes and settlements never carry a phone number', async () => {
+  await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a', phone: '+12025550143' });
+  await settleBet('abc123', 'a');
+  const written = JSON.stringify(tx.update.mock.calls.map(([, patch]) => patch));
+  expect(written).not.toMatch(/phone|e164|2025550143/i);
+  expect(JSON.stringify(stored)).not.toMatch(/phone|e164|2025550143/i);
 });
