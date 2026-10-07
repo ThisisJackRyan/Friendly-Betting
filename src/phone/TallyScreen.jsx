@@ -5,7 +5,8 @@ import { useParams, useRouter } from '../platform/navigation';
 import Link from '../platform/Link';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
-import { hydrateBet, settleBet, subscribeBet } from './api';
+import { settleBet } from './api';
+import { useLiveBet } from './useLiveBet';
 import { canSettleBet } from './creatorSession';
 import { useIdentity } from './identity';
 import {
@@ -28,6 +29,8 @@ import ResultCard from './ResultCard';
 import ResultShare from './ResultShare';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
+
+const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -66,7 +69,7 @@ const TallyScreen = () => {
   const betId = params.code || params.id;
   const router = useRouter();
   const user = useIdentity();
-  const [bet, setBet] = useState(undefined);
+  const { bet, setBet, failed } = useLiveBet(betId);
   const [error, setError] = useState('');
   const [settling, setSettling] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,36 +85,7 @@ const TallyScreen = () => {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setBet(undefined);
     setError('');
-    const unsubscribe = subscribeBet(betId, (next, err) => {
-      if (cancelled) return;
-      if (err) {
-        setError('Couldn’t load the crew’s picks. Try again in a bit.');
-        setBet(null);
-        return;
-      }
-      if (!next) {
-        setBet(null);
-        return;
-      }
-      if (next.schemaVersion === 2 && Array.isArray(next.options)) {
-        setBet(next);
-        return;
-      }
-      hydrateBet(next)
-        .then((full) => {
-          if (!cancelled) setBet(full);
-        })
-        .catch(() => {
-          if (!cancelled) setBet(next);
-        });
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
   }, [betId]);
 
   const confirmSettle = async (winnerId) => {
@@ -193,9 +167,9 @@ const TallyScreen = () => {
           <div className="empty">
             <p className="empty-title">This bet is gone.</p>
             <p className="empty-copy">Check the link or head back to your bets.</p>
-            {error && (
+            {(error || failed) && (
               <p className="form-error" role="alert">
-                {error}
+                {error || LOAD_ERROR}
               </p>
             )}
             <Link className="secondary press" href="/bets">

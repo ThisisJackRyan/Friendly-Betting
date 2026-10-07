@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet } from './api';
@@ -186,4 +186,185 @@ test('the creator can still settle a bet that closed without a winner', async ()
   expect(closeButton()).toBeInTheDocument();
   await signIn(otherPhone);
   expect(closeButton()).not.toBeInTheDocument();
+});
+
+describe('live tally', () => {
+  // Every subscribeBet call becomes a feed the test can push snapshots into.
+  let feeds;
+  const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
+  const push = async (bet, err) => {
+    await act(async () => {
+      live().forEach((feed) => feed.onChange(bet, err));
+    });
+  };
+  const setVisibility = async (state) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  };
+  const counts = () => [...document.querySelectorAll('.bar-count')].map((node) => node.textContent);
+  const widths = () => [...document.querySelectorAll('.bar-fill')].map((node) => node.style.width);
+  const vote = (voterId, optionId) => ({ voterId, name: voterId, optionId });
+
+  beforeEach(() => {
+    feeds = [];
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(mockBet.current);
+      return feed.unsubscribe;
+    });
+  });
+
+  afterEach(() => {
+    // No leaks: once the screen is gone, every listener has been unsubscribed once.
+    cleanup();
+    feeds.forEach((feed) => expect(feed.unsubscribe).toHaveBeenCalledTimes(1));
+    delete document.visibilityState;
+    subscribeBet.mockImplementation((_code, onChange) => {
+      onChange(mockBet.current);
+      return () => {};
+    });
+  });
+
+  test('subscribes once and tears the listener down on unmount, leaving no listeners', async () => {
+    const added = jest.spyOn(document, 'addEventListener');
+    const removed = jest.spyOn(document, 'removeEventListener');
+    const winAdded = jest.spyOn(window, 'addEventListener');
+    const winRemoved = jest.spyOn(window, 'removeEventListener');
+    try {
+      jest.useFakeTimers();
+      const { unmount } = render(<TallyScreen />);
+      act(() => {
+        jest.advanceTimersByTime(450);
+      });
+      jest.useRealTimers();
+      expect(feeds).toHaveLength(1);
+      expect(feeds[0].code).toBe('abc123');
+      expect(live()).toHaveLength(1);
+      const onVisible = added.mock.calls.find(([type]) => type === 'visibilitychange')[1];
+      const onOnline = winAdded.mock.calls.find(([type]) => type === 'online')[1];
+
+      unmount();
+      expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+      expect(live()).toHaveLength(0);
+      expect(removed).toHaveBeenCalledWith('visibilitychange', onVisible);
+      expect(winRemoved).toHaveBeenCalledWith('online', onOnline);
+
+      // A late snapshot or visibility change after unmount does nothing.
+      feeds[0].onChange({ ...openBet, votes: [vote('x', 'a')] });
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(feeds).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+      added.mockRestore();
+      removed.mockRestore();
+      winAdded.mockRestore();
+      winRemoved.mockRestore();
+    }
+  });
+
+  test('new picks update the counts and bars without a reload', async () => {
+    await renderTally();
+    expect(counts()).toEqual(['0 · 0%', '0 · 0%']);
+    expect(widths()).toEqual(['0%', '0%']);
+
+    await push({ ...openBet, votes: [vote('v1', 'a')] });
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    expect(widths()).toEqual(['100%', '0%']);
+
+    await push({ ...openBet, votes: [vote('v1', 'a'), vote('v2', 'b'), vote('v3', 'b'), vote('v4', 'b')] });
+    expect(counts()).toEqual(['1 · 25%', '3 · 75%']);
+    expect(widths()).toEqual(['25%', '75%']);
+    expect(feeds).toHaveLength(1);
+  });
+
+  test('coming back to the tab swaps in a fresh listener, one at a time', async () => {
+    await renderTally();
+    await setVisibility('hidden');
+    expect(feeds).toHaveLength(1);
+
+    await setVisibility('visible');
+    expect(feeds).toHaveLength(2);
+    expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+    expect(live()).toEqual([feeds[1]]);
+
+    // Snapshots from the old listener are ignored; the new one drives the tally.
+    await act(async () => {
+      feeds[0].onChange({ ...openBet, votes: [vote('old', 'b')] });
+    });
+    expect(counts()).toEqual(['0 · 0%', '0 · 0%']);
+    await push({ ...openBet, votes: [vote('v1', 'a')] });
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    expect(feeds).toHaveLength(3);
+    expect(live()).toEqual([feeds[2]]);
+    feeds.slice(0, 2).forEach((feed) => expect(feed.unsubscribe).toHaveBeenCalledTimes(1));
+  });
+
+  test('a snapshot error or offline miss keeps the last tally on screen with no new error', async () => {
+    await renderTally();
+    await push({ ...openBet, votes: [vote('v1', 'a'), vote('v2', 'b')] });
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+
+    await push(undefined, Object.assign(new Error('offline'), { code: 'unavailable' }));
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet is gone.')).not.toBeInTheDocument();
+
+    await push(null);
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+    expect(screen.queryByText('This bet is gone.')).not.toBeInTheDocument();
+
+    // Back on the tab, the fresh listener picks up where it left off.
+    await setVisibility('visible');
+    await push({ ...openBet, votes: [vote('v1', 'a'), vote('v2', 'b'), vote('v3', 'b')] });
+    expect(counts()).toEqual(['1 · 33%', '2 · 67%']);
+  });
+
+  test('a failed first load still shows the existing error', async () => {
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(undefined, new Error('permission-denied'));
+      return feed.unsubscribe;
+    });
+    await renderTally();
+    expect(screen.getByText('This bet is gone.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the crew’s picks. Try again in a bit.');
+  });
+
+  test('settling elsewhere flips the tally live and removes Close & settle', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(closeButton()).toBeInTheDocument();
+    await userEvent.click(closeButton());
+    expect(screen.getByText('Who won?')).toBeInTheDocument();
+
+    const votes = [vote('v1', 'a'), vote('v2', 'b')];
+    await push({ ...openBet, votes, status: 'closed', winnerId: null });
+    expect(screen.getByText('Closed')).toBeInTheDocument();
+    expect(screen.getByText('Who won?')).toBeInTheDocument();
+
+    await push({
+      ...openBet,
+      votes,
+      status: 'closed',
+      winnerId: 'b',
+      settledAt: 1,
+      settlement: buildSettlement({ ...openBet, votes }, 'b'),
+    });
+    expect(screen.getByRole('heading', { name: 'The final word' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Settled result' })).toBeInTheDocument();
+    expect(screen.getByText('Final tally')).toBeInTheDocument();
+    expect(document.querySelector('.bar-row.mine')).toHaveTextContent('No');
+    expect(closeButton()).not.toBeInTheDocument();
+    expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+    expect(settleBet).not.toHaveBeenCalled();
+  });
 });

@@ -17,7 +17,8 @@ rules_version = '2';
 //   - createBet  -> create on bets/{code}
 //   - castVote   -> update of `votes` only
 //   - saveBet    -> creator edit of their own open bet
-//   - settleBet  -> creator close & settle
+//   - settleBet  -> creator close & settle (the only path that may set
+//                   calledOff)
 // A bet with no creator uid (createdByID) can't be closed or settled by anyone.
 //
 // The only server code using Firestore is the result-text API routes
@@ -28,9 +29,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Fields that close or settle a bet. Only the creator may change them,
-    // and only once.
+    // only through the settle write below, and only once. `calledOff` lives
+    // here because the result-text server (src/server/resultTexts.js) texts
+    // "called off" for any bet with calledOff == true; nothing else may set it.
     function resultFields() {
-      return ['status', 'winnerId', 'settledAt', 'settlement'];
+      return ['status', 'winnerId', 'settledAt', 'settlement', 'calledOff'];
     }
 
     // Fields nobody may change after create (other than through the
@@ -78,12 +81,12 @@ service cloud.firestore {
 
       // createBet: a phone-verified user creates an open, unsettled bet in
       // their own name. createdByID must be the caller, so nobody can spoof
-      // the creator.
+      // the creator. No result fields (settledAt, settlement, calledOff) yet.
       allow create: if isPhoneUser()
         && request.resource.data.createdByID == request.auth.uid
         && request.resource.data.get('status', 'open') == 'open'
         && request.resource.data.get('winnerId', null) == null
-        && !request.resource.data.keys().hasAny(['settledAt', 'settlement']);
+        && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff']);
 
       // castVote: any signed-in user (voters use anonymous auth) may change
       // the votes list on an open bet, and nothing else.
@@ -91,21 +94,26 @@ service cloud.firestore {
         && isOpen(resource.data)
         && changedKeys().hasOnly(['votes']);
 
-      // saveBet: the creator edits their own open bet. Result fields,
-      // votes and the creator stay untouched.
+      // saveBet: the creator edits their own open bet. Result fields
+      // (including calledOff), votes and the creator stay untouched.
       allow update: if isBetCreator(resource.data)
         && isOpen(resource.data)
         && !changedKeys().hasAny(resultFields().concat(lockedFields()).concat(['votes']));
 
-      // settleBet: only the creator closes & settles, only once. After a
-      // winner is set the result fields are immutable (no rule allows
-      // changing them on a settled bet).
+      // settleBet: only the creator closes & settles, only once. The write
+      // closes the bet (status 'closed') with a non-empty winnerId; it may
+      // also set calledOff, which must then be a bool. The app has no
+      // call-off action yet, so a called-off bet still names a winnerId.
+      // After a winner is set the result fields, calledOff included, are
+      // immutable (no rule allows changing them on a settled bet).
       allow update: if isBetCreator(resource.data)
         && !isSettled(resource.data)
         && changedKeys().hasOnly(resultFields())
         && request.resource.data.status == 'closed'
         && request.resource.data.winnerId is string
-        && request.resource.data.winnerId != '';
+        && request.resource.data.winnerId != ''
+        && (!changedKeys().hasAny(['calledOff'])
+          || request.resource.data.calledOff is bool);
 
       // No client deletes.
       allow delete: if false;
