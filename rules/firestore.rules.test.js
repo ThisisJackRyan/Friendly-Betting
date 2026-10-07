@@ -96,6 +96,8 @@ beforeEach(async () => {
     'bets/legacy1': legacyBet,
     'bets/legacy2': { ...legacyBet, createdByID: '' },
     'bets/settled': { ...openBet, code: 'settled', ...settleFields },
+    'bets/calledoff': { ...openBet, code: 'calledoff', calledOff: false },
+    'bets/settledoff': { ...openBet, code: 'settledoff', ...settleFields, calledOff: true },
     'MoneyLineBets/ml-1': { bet: 'Who wins', contestant1: 'A', contestant2: 'B' },
   });
 });
@@ -256,6 +258,55 @@ describe('creator edits (saveBet)', () => {
 
   test('legacy bets without a creator uid cannot be edited', async () => {
     await assertFails(creator().doc('bets/legacy1').update({ bet: 'Changed' }));
+  });
+});
+
+describe('calledOff (settle-only)', () => {
+  const nextVotes = [...openBet.votes, { voterId: 'anon-2', name: 'Lee', optionId: 'b', at: 3 }];
+
+  test('a bet cannot be created with calledOff', async () => {
+    const fresh = { ...openBet, code: 'new1', votes: [] };
+    await assertFails(creator().doc('bets/new1').set({ ...fresh, calledOff: true }));
+    await assertFails(creator().doc('bets/new1').set({ ...fresh, calledOff: false }));
+  });
+
+  test('the creator cannot set calledOff with a plain edit', async () => {
+    await assertFails(creator().doc('bets/abc123').update({ calledOff: true }));
+    await assertFails(creator().doc('bets/abc123').update({ question: 'Changed', calledOff: false }));
+  });
+
+  test('the creator cannot change an existing calledOff with a plain edit', async () => {
+    await assertFails(creator().doc('bets/calledoff').update({ calledOff: true }));
+    await assertSucceeds(creator().doc('bets/calledoff').update({ question: 'Changed' }));
+  });
+
+  test('another phone user cannot set calledOff', async () => {
+    await assertFails(otherPhone().doc('bets/abc123').update({ calledOff: true }));
+    await assertFails(otherPhone().doc('bets/abc123').update({ ...settleFields, calledOff: true }));
+  });
+
+  test('a voter cannot set calledOff, with or without votes', async () => {
+    await assertFails(anon('anon-2').doc('bets/abc123').update({ votes: nextVotes, calledOff: true }));
+    await assertFails(anon('anon-2').doc('bets/abc123').update({ calledOff: true }));
+    await assertFails(guest().doc('bets/abc123').update({ calledOff: true }));
+  });
+
+  test('the creator may include a bool calledOff in the settle write', async () => {
+    await assertSucceeds(creator().doc('bets/abc123').update({ ...settleFields, calledOff: true }));
+    await assertSucceeds(creator().doc('bets/calledoff').update({ ...settleFields, calledOff: true }));
+  });
+
+  test('the settle write still needs a winner, and calledOff must be a bool', async () => {
+    await assertFails(creator().doc('bets/abc123').update({ status: 'closed', calledOff: true }));
+    await assertFails(creator().doc('bets/abc123').update({ ...settleFields, winnerId: null, calledOff: true }));
+    await assertFails(creator().doc('bets/abc123').update({ ...settleFields, calledOff: 'yes' }));
+  });
+
+  test('calledOff is immutable once settled', async () => {
+    await assertFails(creator().doc('bets/settledoff').update({ calledOff: false }));
+    await assertFails(creator().doc('bets/settled').update({ calledOff: true }));
+    await assertFails(creator().doc('bets/settled').update({ ...settleFields, calledOff: true }));
+    await assertFails(anon().doc('bets/settledoff').update({ calledOff: false }));
   });
 });
 

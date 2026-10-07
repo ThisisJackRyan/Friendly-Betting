@@ -5,7 +5,8 @@ import Link from '../platform/Link';
 import { useParams } from '../platform/navigation';
 import { FiCheckCircle, FiLink, FiSlash } from 'react-icons/fi';
 import { BetFacts, Brand } from './ProductUI';
-import { castVote, hydrateBet, subscribeBet } from './api';
+import { castVote } from './api';
+import { useLiveBet } from './useLiveBet';
 import { rememberName, savedName, useIdentity } from './identity';
 import {
   formatCloses,
@@ -26,11 +27,13 @@ import ResultShare from './ResultShare';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
 
+const LOAD_ERROR = 'Could not open this bet.';
+
 const VoteScreen = () => {
   const params = useParams();
   const code = params?.code;
   const user = useIdentity();
-  const [bet, setBet] = useState(undefined);
+  const { bet, failed } = useLiveBet(code);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [pendingId, setPendingId] = useState(null);
@@ -43,37 +46,8 @@ const VoteScreen = () => {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setBet(undefined);
     setError('');
     setPendingId(null);
-    const unsubscribe = subscribeBet(code, (next, err) => {
-      if (cancelled) return;
-      if (err) {
-        setError('Could not open this bet.');
-        setBet(null);
-        return;
-      }
-      if (!next) {
-        setBet(null);
-        return;
-      }
-      if (next.schemaVersion === 2 && Array.isArray(next.options)) {
-        setBet(next);
-        return;
-      }
-      hydrateBet(next)
-        .then((full) => {
-          if (!cancelled) setBet(full);
-        })
-        .catch(() => {
-          if (!cancelled) setBet(next);
-        });
-    });
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
   }, [code]);
 
   const existing = voteFor(bet, user?.uid);
@@ -133,9 +107,9 @@ const VoteScreen = () => {
             <p className="empty-copy">
               Check the link with your friend, or start a new friendly rivalry.
             </p>
-            {error && (
+            {(error || failed) && (
               <p className="form-error" role="alert">
-                {error}
+                {error || LOAD_ERROR}
               </p>
             )}
             <Link className="secondary press" href="/">

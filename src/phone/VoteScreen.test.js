@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
@@ -213,6 +213,14 @@ test('reduced motion keeps the tally loader static', () => {
   expect(css).toContain('color: #007a45');
   expect(reduced).toContain('.friendly-load-bar');
   expect(reduced).toContain('animation: none');
+});
+
+test('live bar changes ease in, and hold still under reduced motion', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  expect(css).toMatch(/\.bar-fill \{[^}]*transition: width/);
+  expect(reduced).toContain('.bar-fill');
+  expect(reduced).toContain('transition: none');
 });
 
 test('vote shows the Friendly loader instead of a loading line', () => {
@@ -559,5 +567,85 @@ describe('text me who won', () => {
     expect(await screen.findByText('Who is late')).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\+1|555|0143/);
+  });
+});
+
+describe('live results after voting', () => {
+  let feeds;
+  const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
+  const push = async (bet, err) => {
+    await act(async () => {
+      live().forEach((feed) => feed.onChange(bet, err));
+    });
+  };
+  const counts = () => [...document.querySelectorAll('.bar-count')].map((node) => node.textContent);
+  const widths = () => [...document.querySelectorAll('.bar-fill')].map((node) => node.style.width);
+  const votes = [
+    { voterId: 'user-1', name: 'Jack', optionId: 'a' },
+    { voterId: 'sam', name: 'Sam', optionId: 'b' },
+  ];
+  const votedBet = { ...openBet, votes };
+
+  beforeEach(() => {
+    feeds = [];
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(votedBet);
+      return feed.unsubscribe;
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    feeds.forEach((feed) => expect(feed.unsubscribe).toHaveBeenCalledTimes(1));
+    delete document.visibilityState;
+  });
+
+  test('counts and bars follow new picks, and unmount unsubscribes', async () => {
+    const removed = jest.spyOn(document, 'removeEventListener');
+    try {
+      const { unmount } = renderAt('/b/abc123', <VoteScreen />);
+      expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+      expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+
+      await push({ ...votedBet, votes: [...votes, { voterId: 'kim', name: 'Kim', optionId: 'b' }, { voterId: 'lee', name: 'Lee', optionId: 'b' }] });
+      expect(counts()).toEqual(['1 · 25%', '3 · 75%']);
+      expect(widths()).toEqual(['25%', '75%']);
+      expect(feeds).toHaveLength(1);
+
+      unmount();
+      expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+      expect(removed).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    } finally {
+      removed.mockRestore();
+    }
+  });
+
+  test('a snapshot error keeps the last results with no new error', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    await push(undefined, new Error('offline'));
+    await push(null);
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet isn\'t here')).not.toBeInTheDocument();
+  });
+
+  test('coming back to the tab resubscribes and the settled result lands live', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(feeds).toHaveLength(2);
+    expect(live()).toEqual([feeds[1]]);
+
+    await push({ ...votedBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(votedBet, 'a') });
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('You called it.');
+    expect(screen.getByText('Final tally')).toBeInTheDocument();
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
   });
 });
