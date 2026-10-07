@@ -39,7 +39,16 @@ jest.mock('../Config/firebase-config', () => ({
   auth: mockAuthState,
 }));
 
+jest.mock('../platform/runtime', () => ({ isNativeApp: jest.fn(() => false) }));
+
+jest.mock('../platform/nativePhone', () => ({
+  cancelNativePhoneCode: jest.fn(),
+  sendNativePhoneCode: jest.fn(),
+}));
+
 const { RecaptchaVerifier } = require('firebase/auth');
+const { isNativeApp } = require('../platform/runtime');
+const { cancelNativePhoneCode, sendNativePhoneCode } = require('../platform/nativePhone');
 const {
   mountPhoneCheck,
   releasePhoneCheck,
@@ -64,6 +73,9 @@ beforeEach(() => {
   mockSendResult.mockReset();
   mockVerifiers.length = 0;
   mockAuthState.currentUser = null;
+  isNativeApp.mockReturnValue(false);
+  sendNativePhoneCode.mockReset();
+  cancelNativePhoneCode.mockClear();
   resetPhoneAuthForTests();
   mockRecaptchaClear.mockClear();
 });
@@ -84,6 +96,27 @@ async function sendLikeFirebase(e164, appVerifier) {
     appVerifier._reset();
   }
 }
+
+test('on native, send uses the native verifier and never builds a reCAPTCHA', async () => {
+  isNativeApp.mockReturnValue(true);
+  sendNativePhoneCode.mockResolvedValue('native-vid');
+  await expect(mountPhoneCheck(document.createElement('div'))).resolves.toBeUndefined();
+  await expect(sendPhoneCode('+15555550100', null)).resolves.toBe('native-vid');
+  expect(sendNativePhoneCode).toHaveBeenCalledWith('+15555550100');
+  expect(RecaptchaVerifier).not.toHaveBeenCalled();
+  expect(mockVerifyPhoneNumber).not.toHaveBeenCalled();
+  releasePhoneCheck();
+  expect(cancelNativePhoneCode).toHaveBeenCalled();
+});
+
+test('on web, send uses the reCAPTCHA path and not the native verifier', async () => {
+  mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+  mockSendResult.mockResolvedValue('web-vid');
+  const slot = document.createElement('div');
+  await expect(sendPhoneCode('+15555550100', slot)).resolves.toBe('web-vid');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(sendNativePhoneCode).not.toHaveBeenCalled();
+});
 
 test('the person check is invisible, inline, and in a child of the slot', async () => {
   const slot = document.createElement('div');

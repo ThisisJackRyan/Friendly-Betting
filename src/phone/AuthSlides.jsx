@@ -2,10 +2,11 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { FiChevronLeft } from 'react-icons/fi';
 import { mountPhoneCheck, releasePhoneCheck, sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { SLIDE_MS } from './createMotion';
+import { isNativeApp } from '../platform/runtime';
 import {
   AUTH_COPY,
   codeSentCopy,
@@ -194,6 +195,7 @@ export function PersonCheck({ containerRef }) {
   // A layout effect, so the cleanup parks the slot before React detaches the
   // step. A passive cleanup runs after, when the slot is already gone.
   useLayoutEffect(() => {
+    if (isNativeApp()) return undefined;
     const host = hostRef.current;
     if (!host) return undefined;
     const slot = phoneSlotNode();
@@ -208,7 +210,7 @@ export function PersonCheck({ containerRef }) {
     };
   }, [containerRef]);
 
-  return <div ref={hostRef} className="person-check" />;
+  return isNativeApp() ? null : <div ref={hostRef} className="person-check" />;
 }
 
 export function PhoneBody({ formatted, onNational, busy, check }) {

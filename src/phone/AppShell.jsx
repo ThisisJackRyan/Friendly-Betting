@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { usePathname, useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiHome, FiList, FiPlus, FiMessageCircle } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 import { useCreateChrome } from './createChrome';

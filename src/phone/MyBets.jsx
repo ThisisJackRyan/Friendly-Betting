@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiArrowRight, FiPlus, FiSearch, FiX } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
 import CreatorAuthFlow from './AuthSlides';

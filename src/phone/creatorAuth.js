@@ -6,6 +6,8 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth } from '../Config/firebase-config';
+import { isNativeApp } from '../platform/runtime';
+import { cancelNativePhoneCode, sendNativePhoneCode } from '../platform/nativePhone';
 import { PERSON_CHECK_CANCELLED } from './creatorSession';
 
 const ALREADY_IN_USE = new Set([
@@ -63,6 +65,7 @@ function disposeVerifier() {
 }
 
 export function releasePhoneCheck() {
+  cancelNativePhoneCode();
   if (pendingCheck) pendingCheck.cancel(false);
   disposeVerifier();
 }
@@ -159,8 +162,8 @@ function replaceVerifier(appVerifier, rebuild) {
   }
 }
 
-// verify() only ever resolves, and only on a token. A grecaptcha error
-// (offline, blocked) arrives on error-callback, so race it in as a failed
+// Past render(), verify() only ever resolves, and only on a token. A grecaptcha
+// error (offline, blocked) arrives on error-callback, so race it in as a failed
 // check. A closed or stalled challenge cancels the check instead.
 function checkedVerifier(appVerifier) {
   return {
@@ -200,12 +203,15 @@ function checkedVerifier(appVerifier) {
 }
 
 export function mountPhoneCheck(container) {
+  if (isNativeApp()) return Promise.resolve();
   if (!auth || !container) return Promise.resolve();
   return phoneVerifier(container).render();
 }
 
 export async function sendPhoneCode(e164, container) {
-  if (!auth || !container) throw unavailable();
+  if (!auth) throw unavailable();
+  if (isNativeApp()) return sendNativePhoneCode(e164);
+  if (!container) throw unavailable();
   const provider = new PhoneAuthProvider(auth);
   const appVerifier = phoneVerifier(container);
   try {

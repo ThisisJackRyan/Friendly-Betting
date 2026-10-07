@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from '../platform/navigation';
+import Link from '../platform/Link';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
 import { hydrateBet, settleBet, subscribeBet } from './api';
@@ -28,6 +28,7 @@ import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
 import ResultShare from './ResultShare';
 import { rememberBet } from './notificationStore';
+import { prefersReducedMotion } from './createMotion';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -81,7 +82,7 @@ function SettlePicker({ bet, saving, onPick, onCancel }) {
       ))}
       {preview && <>
         <ResultCard bet={preview} preview />
-        <p className="field-hint">This locks the result. Friends get an in-app update in the browser they used to pick.</p>
+        <p className="field-hint">This locks the result. Friends get the final word when they open FRIENDLY where they made their pick.</p>
         <button type="button" className="cta press" disabled={saving} onClick={() => onPick(picked)}>{saving ? 'Settling…' : 'Settle & notify'}</button>
       </>}
       <button type="button" className="text-link" disabled={saving} onClick={onCancel}>Not yet</button>
@@ -102,6 +103,8 @@ const TallyScreen = () => {
   const [shareState, setShareState] = useState('');
   const [sharing, setSharing] = useState(false);
   const [authGate, setAuthGate] = useState(false);
+  const resultRef = useRef(null);
+  const revealSettlement = useRef(false);
   const minElapsed = useMinHold(betId);
 
   useEffect(() => {
@@ -151,6 +154,7 @@ const TallyScreen = () => {
     setError('');
     try {
       const settled = await settleBet(betId, winnerId);
+      revealSettlement.current = true;
       if (settled) setBet(settled);
       setSettling(false);
       setAuthGate(false);
@@ -194,6 +198,19 @@ const TallyScreen = () => {
     if (result) document.title = 'The final word · Friendly';
   }, [result]);
 
+  useEffect(() => {
+    if (!result || settling || authGate || !revealSettlement.current) return;
+    const card = resultRef.current;
+    const scroller = card?.closest('.scroll');
+    // Scroll only this screen: scrollIntoView also moves overflow-hidden
+    // ancestors in the app shell, which can tuck the result under its header.
+    scroller?.scrollTo?.({
+      top: Math.max(0, scroller.scrollTop + card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16),
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+    revealSettlement.current = false;
+  }, [result, settling, authGate]);
+
   return (
     <div className="phone screen-push tally-screen">
       <div className="nav-row">
@@ -231,7 +248,7 @@ const TallyScreen = () => {
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
-            {result && <><ResultCard bet={bet} voterId={user?.uid} /><ResultShare bet={bet} code={betId} /></>}
+            {result && <><div ref={resultRef}><ResultCard bet={bet} voterId={user?.uid} /></div><ResultShare bet={bet} code={betId} /></>}
             <div className="results-heading">
               <h2>The group’s picks</h2>
               <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { FiChevronLeft } from 'react-icons/fi';
 import TypePicker from './TypePicker';
 import { FlowProgress, PageIntro } from './ProductUI';
