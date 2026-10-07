@@ -23,6 +23,8 @@ import { rememberBet } from './notificationStore';
 import { settlementOf } from './settlement';
 import ResultCard from './ResultCard';
 import ResultShare from './ResultShare';
+import ResultTextCard from './ResultTextCard';
+import { resultTextsEnabled } from './resultTexts';
 
 const VoteScreen = () => {
   const params = useParams();
@@ -81,6 +83,9 @@ const VoteScreen = () => {
   const showVoted = Boolean(selected);
   const reveal = minElapsed && bet !== undefined;
   const result = settlementOf(bet);
+  // Only a recorded pick on an unsettled bet, from a real (anonymous) account.
+  const offerResultText = resultTextsEnabled() && Boolean(existing) && !result
+    && bet?.status !== 'closed' && Boolean(user) && !user.isLocal;
 
   useEffect(() => {
     if (existing) rememberBet(user.uid, code);
@@ -181,6 +186,7 @@ const VoteScreen = () => {
                   See the picks
                 </Link>
                 <p className="form-footnote">Your result lands here when your friend settles. Come back on this browser.</p>
+                {offerResultText && <ResultTextCard code={code} />}
               </div>
             )}
 

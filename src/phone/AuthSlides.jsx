@@ -13,6 +13,7 @@ import {
   formatUsNational,
   nationalDigits,
   PERSON_CHECK_CANCELLED,
+  PHONE_INVALID_ERROR,
   phoneError,
   SEND_CODE_ERROR,
   toE164Us,
@@ -53,7 +54,7 @@ export function useCreatorPhone() {
     if (sending.current) return false;
     const next = toE164Us(digitsRaw);
     if (!next) {
-      setError('Enter a US phone number.');
+      setError(PHONE_INVALID_ERROR);
       return false;
     }
     const container = containerRef.current;

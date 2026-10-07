@@ -893,6 +893,27 @@ body {
   text-decoration: none;
 }
 
+.result-text-card {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-text-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.result-text-card .cta {
+  min-height: 56px;
+}
+
+.result-text-card .result-text-skip {
+  margin-top: 0;
+  color: var(--muted);
+}
+
 .empty {
   display: flex;
   flex-direction: column;
