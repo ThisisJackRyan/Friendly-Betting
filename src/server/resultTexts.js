@@ -2,10 +2,11 @@ import { createHash } from 'crypto';
 import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
 import { normalizeE164 } from '../phone/resultTexts';
 import { optionVoteLabel, questionOf } from '../phone/model';
+import { PROD_ORIGIN } from '../platform/runtime';
 
 // Numbers live outside the public bet doc, so they can never reach the tally,
 // share card, OG image, or any client read. Admin SDK only; rules deny all.
-export const DEFAULT_ORIGIN = 'https://www.friendly-bets.com';
+export const DEFAULT_ORIGIN = PROD_ORIGIN;
 const SEGMENT = 160;
 export const MAX_NUMBERS_PER_BET = 50;
 

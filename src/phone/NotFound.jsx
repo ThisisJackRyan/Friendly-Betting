@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { Brand } from './ProductUI';
 
 const NotFound = () => (

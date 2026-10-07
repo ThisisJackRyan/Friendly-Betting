@@ -99,6 +99,18 @@ test('step 1 is the type picker and back returns home', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(document.querySelector('.create-pane.is-leaving')).toHaveClass('slide-back');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+  const homePreview = document.querySelector('[data-step="home"]');
+  expect(homePreview).toHaveAttribute('inert');
+  expect(homePreview.querySelector('.home-preview-header .header-brand')).toHaveAttribute(
+    'href',
+    '/',
+  );
+  expect(homePreview.querySelector('.home-preview-header .header-action')).toHaveAttribute(
+    'href',
+    '/new',
+  );
+  expect(homePreview.querySelector('.landing')).toBeInTheDocument();
+  expect(navigation.push).not.toHaveBeenCalled();
   await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
   expect(navigation.push).not.toHaveBeenCalledWith('/bets');
   expect(saveBet).not.toHaveBeenCalled();
@@ -299,6 +311,9 @@ test('Friendly in the create nav returns home from every later step', async () =
   expect(document.querySelector('.create-pane.is-leaving')).toHaveClass('slide-back');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
   expect(document.querySelector('.create-pane.is-entering .landing')).toBeInTheDocument();
+  expect(
+    document.querySelector('.create-pane.is-entering .home-preview-header'),
+  ).toBeInTheDocument();
   expect(navigation.push).not.toHaveBeenCalled();
   await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
   expect(navigation.push).not.toHaveBeenCalledWith('/bets');

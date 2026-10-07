@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
+import { getAuth, initializeAuth, indexedDBLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { isNativeApp } from '../platform/runtime';
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -27,5 +28,7 @@ if (typeof window !== "undefined") {
     });
 }
 
-export const auth = typeof window === "undefined" ? null : getAuth(app);
+export const auth = typeof window === "undefined" ? null : isNativeApp()
+  ? initializeAuth(app, { persistence: indexedDBLocalPersistence })
+  : getAuth(app);
 export const db = getFirestore(app);

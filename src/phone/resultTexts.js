@@ -1,3 +1,5 @@
+import { isNativeApp, PROD_ORIGIN } from '../platform/runtime';
+
 // Shared by the vote card and the API route, so nothing here loads the client
 // Firebase SDK at import time.
 export function normalizeE164(input) {
@@ -22,6 +24,11 @@ export function resultTextsEnabled() {
   return process.env.NEXT_PUBLIC_RESULT_TEXTS === '1';
 }
 
+// The native app has no API of its own, so it calls the production site.
+function apiUrl(path) {
+  return `${isNativeApp() ? PROD_ORIGIN : ''}${path}`;
+}
+
 export async function saveResultText(code, phone) {
   // The voter's existing anonymous user. Never sign in or create one here.
   const { auth } = await import('../Config/firebase-config');
@@ -30,7 +37,7 @@ export async function saveResultText(code, phone) {
   const token = await user.getIdToken();
   let res;
   try {
-    res = await fetch(`/api/bets/${encodeURIComponent(code)}/result-texts`, {
+    res = await fetch(apiUrl(`/api/bets/${encodeURIComponent(code)}/result-texts`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ phone }),
@@ -53,7 +60,7 @@ export async function saveResultText(code, phone) {
 export function requestResultTexts(code) {
   if (!resultTextsEnabled()) return;
   try {
-    const sent = fetch(`/api/bets/${encodeURIComponent(code)}/result-texts/send`, { method: 'POST' });
+    const sent = fetch(apiUrl(`/api/bets/${encodeURIComponent(code)}/result-texts/send`), { method: 'POST' });
     if (sent && typeof sent.catch === 'function') sent.catch(() => {});
   } catch (err) {
     // Texts are a bonus. Settling never waits on or fails because of them.

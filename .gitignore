@@ -7,11 +7,35 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
 
 # production
 /build
 /.next
 /out
+/dist-mobile
+
+# Native build output and local Firebase/signing configuration
+/ios/App/App/public
+/ios/App/App/capacitor.config.json
+/ios/App/CapApp-SPM/.build
+/ios/App/CapApp-SPM/Package.resolved
+/ios/App/CapApp-SPM/CapacitorFirebaseAuthentication
+/ios/App/CapApp-SPM/symlinks/
+**/xcuserdata/
+/android/.gradle
+/android/.idea
+/android/local.properties
+/android/**/build
+/android/app/src/main/assets/public
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+/android/capacitor-cordova-android-plugins
+/android/app/google-services.json
+/ios/App/App/GoogleService-Info.plist
+*.jks
+*.keystore
 
 # misc
 .DS_Store

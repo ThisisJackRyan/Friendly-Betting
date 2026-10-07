@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { usePathname, useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiHome, FiList, FiPlus, FiMessageCircle } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 import { useCreateChrome } from './createChrome';
 import { SLIDE_MS } from './createMotion';
 import CreatePick from './CreatePick';
+import AppHeader from './AppHeader';
 
 const AppShell = ({ children }) => {
   const pathname = usePathname() || '/';
@@ -47,37 +48,20 @@ const AppShell = ({ children }) => {
         Skip to content
       </a>
       <div className="app-main">
-        <header className="app-header">
-          <Link
-            href="/"
-            className="header-brand"
-            aria-label="Friendly home"
-            onClick={cancelCreateEntry}
-          >
-            <Brand />
-          </Link>
-          <span className="header-location">
-            {createActive
+        <AppHeader
+          location={
+            createActive
               ? 'Create a bet'
               : betsActive
                 ? 'My bets'
                 : pathname.startsWith('/t/') || pathname.startsWith('/Bet/')
                   ? 'Your bet'
-                  : 'The clubhouse'}
-          </span>
-          <span className="header-note">
-            <span className="live-dot" />
-            Good friends. Friendly bets.
-          </span>
-          <Link
-            className="header-action"
-            href={createActive ? '/bets' : '/new'}
-            onClick={createActive ? cancelCreateEntry : onCreateClick}
-          >
-            {createActive ? 'My bets' : 'New bet'}
-            {createActive ? <FiList aria-hidden="true" /> : <FiPlus aria-hidden="true" />}
-          </Link>
-        </header>
+                  : 'The clubhouse'
+          }
+          createActive={createActive}
+          onHomeClick={cancelCreateEntry}
+          onActionClick={createActive ? cancelCreateEntry : onCreateClick}
+        />
         <main id="main-content" className="main-content" tabIndex={-1}>
           <div
             className={

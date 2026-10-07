@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { FiAward, FiBell, FiX } from 'react-icons/fi';
 import { subscribeBet } from './api';
 import { useIdentity } from './identity';

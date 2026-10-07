@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import Link from '../platform/Link';
+import { useParams } from '../platform/navigation';
 import { FiCheckCircle, FiLink, FiSlash } from 'react-icons/fi';
 import { BetFacts, Brand } from './ProductUI';
 import { castVote, hydrateBet, subscribeBet } from './api';

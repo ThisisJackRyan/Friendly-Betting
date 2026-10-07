@@ -1,7 +1,12 @@
 import { auth } from '../Config/firebase-config';
+import { isNativeApp, PROD_ORIGIN } from '../platform/runtime';
 import { normalizeE164, requestResultTexts, resultTextsEnabled, saveResultText } from './resultTexts';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
+jest.mock('../platform/runtime', () => ({
+  isNativeApp: jest.fn(() => false),
+  PROD_ORIGIN: 'https://www.friendly-bets.com',
+}));
 
 const flag = process.env.NEXT_PUBLIC_RESULT_TEXTS;
 
@@ -11,6 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  isNativeApp.mockReturnValue(false);
   if (flag === undefined) delete process.env.NEXT_PUBLIC_RESULT_TEXTS;
   else process.env.NEXT_PUBLIC_RESULT_TEXTS = flag;
   delete global.fetch;
@@ -98,4 +104,13 @@ test('the send request only fires with the flag on and swallows failures', async
   });
   expect(() => requestResultTexts('abc123')).not.toThrow();
   await Promise.resolve();
+});
+
+test('the native app calls the production API, not the bundled app origin', async () => {
+  isNativeApp.mockReturnValue(true);
+  process.env.NEXT_PUBLIC_RESULT_TEXTS = '1';
+  requestResultTexts('abc123');
+  expect(fetch).toHaveBeenCalledWith(`${PROD_ORIGIN}/api/bets/abc123/result-texts/send`, { method: 'POST' });
+  await saveResultText('abc123', '+12025550143');
+  expect(fetch).toHaveBeenLastCalledWith(`${PROD_ORIGIN}/api/bets/abc123/result-texts`, expect.anything());
 });
