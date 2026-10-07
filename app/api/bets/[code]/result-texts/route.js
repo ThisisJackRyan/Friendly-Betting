@@ -1,14 +1,22 @@
 import { adminAuth, adminDb } from '../../../../../src/server/firebaseAdmin';
 import { saveVoterNumber } from '../../../../../src/server/resultTexts';
-import { json, validCode } from '../../../../../src/server/http';
+import { json, preflight, validCode, withCors } from '../../../../../src/server/http';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const CONFLICTS = new Set(['closed', 'no-vote', 'too-many']);
 
+export function OPTIONS(request) {
+  return preflight(request);
+}
+
+export async function POST(request, context) {
+  return withCors(request, await save(request, context));
+}
+
 // Saves a voter's number for one result text. Never echoes or logs the number.
-export async function POST(request, { params }) {
+async function save(request, { params }) {
   const { code } = await params;
   if (!validCode(code)) return json({ error: 'not-found' }, 404);
   const header = request.headers.get('authorization') || '';
