@@ -12,13 +12,17 @@ rules_version = '2';
 // Tests: `npm run test:rules` (runs rules/firestore.rules.test.js against the
 // local emulator).
 //
-// The app has no server. Every write comes from the browser through
-// src/phone/api.js, so these rules are the only real enforcement:
+// Every bet write comes from the browser through src/phone/api.js, so for
+// bets these rules are the only real enforcement:
 //   - createBet  -> create on bets/{code}
 //   - castVote   -> update of `votes` only
 //   - saveBet    -> creator edit of their own open bet
 //   - settleBet  -> creator close & settle
 // A bet with no creator uid (createdByID) can't be closed or settled by anyone.
+//
+// The only server code using Firestore is the result-text API routes
+// (app/api/bets/[code]/result-texts/*). They use the Admin SDK, which
+// bypasses these rules, and never write bets/{code}.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -117,6 +121,13 @@ service cloud.firestore {
     }
     match /PropBets/{id} {
       allow get: if true;
+    }
+
+    // Voters' numbers for result texts (docs/result-texts.md). Only the Admin
+    // SDK in the result-text API routes touches them, and it bypasses rules,
+    // so no client may read or write them.
+    match /privateResultTexts/{code}/{document=**} {
+      allow read, write: if false;
     }
   }
 }

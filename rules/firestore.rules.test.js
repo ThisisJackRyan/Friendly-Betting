@@ -258,3 +258,30 @@ describe('creator edits (saveBet)', () => {
     await assertFails(creator().doc('bets/legacy1').update({ bet: 'Changed' }));
   });
 });
+
+describe('private result texts', () => {
+  const numberPath = 'privateResultTexts/abc123/numbers/hash1';
+  const number = { e164: '+15550001111', voterId: 'anon-1', optionId: 'a', createdAt: 1 };
+
+  // Signed out, anonymous voter, another phone user, and the bet's creator.
+  const contexts = () => [guest(), anon(), otherPhone(), creator()];
+
+  beforeEach(async () => {
+    await seed({ [numberPath]: number });
+  });
+
+  test('no client can read saved numbers', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc(numberPath).get());
+      await assertFails(db.collection('privateResultTexts/abc123/numbers').get());
+    }
+  });
+
+  test('no client can write saved numbers', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc('privateResultTexts/abc123/numbers/hash2').set(number));
+      await assertFails(db.doc(numberPath).update({ e164: '+15559998888' }));
+      await assertFails(db.doc(numberPath).delete());
+    }
+  });
+});
