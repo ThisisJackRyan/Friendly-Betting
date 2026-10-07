@@ -32,10 +32,10 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="friendly-betting-teal.vercel.app" android:pathPrefix="/b/" />
-                <data android:scheme="https" android:host="friendly-betting-teal.vercel.app" android:pathPrefix="/t/" />
-                <data android:scheme="https" android:host="friendly-betting-teal.vercel.app" android:pathPrefix="/Bet/" />
-                <data android:scheme="https" android:host="friendly-betting-teal.vercel.app" android:pathPrefix="/Friendly-Betting/" />
+                <data android:scheme="https" android:host="www.friendly-bets.com" android:pathPrefix="/b/" />
+                <data android:scheme="https" android:host="www.friendly-bets.com" android:pathPrefix="/t/" />
+                <data android:scheme="https" android:host="www.friendly-bets.com" android:pathPrefix="/Bet/" />
+                <data android:scheme="https" android:host="www.friendly-bets.com" android:pathPrefix="/Friendly-Betting/" />
             </intent-filter>
 
         </activity>

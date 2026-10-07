@@ -3,7 +3,7 @@ import { isNativeApp, PROD_ORIGIN } from '../platform/runtime';
 
 jest.mock('../platform/runtime', () => ({
   isNativeApp: jest.fn(() => false),
-  PROD_ORIGIN: 'https://friendly-betting-teal.vercel.app',
+  PROD_ORIGIN: 'https://www.friendly-bets.com',
 }));
 
 test('native invitations and results link to prod, never the bundled app origin', () => {
