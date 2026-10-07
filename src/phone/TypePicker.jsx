@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiBarChart2, FiGrid, FiTrendingUp } from 'react-icons/fi';
 import { TYPE_META, TYPE_ORDER } from './model';
 

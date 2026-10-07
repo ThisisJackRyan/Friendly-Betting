@@ -3,28 +3,46 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "^18.18.0 || ^19.8.0 || >=20.0.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "jest --watchAll=false"
+    "test": "jest --watchAll=false",
+    "mobile:dev": "vite --config mobile/vite.config.mjs",
+    "mobile:build": "vite build --config mobile/vite.config.mjs",
+    "mobile:sync": "npm run mobile:build && cap sync",
+    "mobile:ios": "npm run mobile:sync && cap open ios",
+    "mobile:android": "npm run mobile:sync && cap open android",
+    "mobile:assets": "node mobile/scripts/assets.mjs",
+    "test:mobile": "playwright test --config mobile/playwright.config.mjs"
   },
   "dependencies": {
-    "firebase": "^10.6.0",
+    "@capacitor-firebase/authentication": "^8.5.2",
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/share": "^8.0.3",
+    "@fontsource/manrope": "^5.3.0",
+    "firebase": "^12.19.0",
     "next": "^15.5.27",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-icons": "^5.2.0"
+    "react-icons": "^5.2.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.26.0",
+    "@capacitor/cli": "^8.5.2",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.4.20",
     "babel-jest": "^29.7.0",
     "jest": "^29.7.0",
@@ -33,6 +51,8 @@
     "postcss-import": "^16.1.0",
     "postcss-nested": "^6.0.1",
     "postcss-nesting": "^12.1.5",
-    "tailwindcss": "^3.4.1"
+    "sharp": "^0.35.5",
+    "tailwindcss": "^3.4.1",
+    "vite": "^8.3.3"
   }
 }

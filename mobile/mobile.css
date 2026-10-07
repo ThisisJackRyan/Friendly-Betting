@@ -1,0 +1,23 @@
+/* Layout, type, controls and motion all come from the shared mobile website. */
+html.native-app .app-frame {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  box-sizing: border-box;
+}
+
+/* Phone headers already account for the status bar in the shared stylesheet. */
+@media (min-width: 768px) {
+  html.native-app .app-frame { padding-top: env(safe-area-inset-top); }
+}
+
+html.native-app .not-found-state { padding-top: env(safe-area-inset-top); }
+
+html.native-app body {
+  -webkit-touch-callout: none;
+}
+
+html.native-app input,
+html.native-app textarea,
+html.native-app .manual-message {
+  -webkit-touch-callout: default;
+}

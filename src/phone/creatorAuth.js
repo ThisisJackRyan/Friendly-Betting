@@ -6,6 +6,8 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth } from '../Config/firebase-config';
+import { isNativeApp } from '../platform/runtime';
+import { cancelNativePhoneCode, sendNativePhoneCode } from '../platform/nativePhone';
 
 const ALREADY_IN_USE = new Set([
   'auth/credential-already-in-use',
@@ -30,6 +32,7 @@ function emptyNode(node) {
 }
 
 export function releasePhoneCheck() {
+  cancelNativePhoneCode();
   if (verifier) {
     try {
       verifier.clear();
@@ -103,12 +106,15 @@ function phoneVerifier(container) {
 }
 
 export function mountPhoneCheck(container) {
+  if (isNativeApp()) return Promise.resolve();
   if (!auth || !container) return Promise.resolve();
   return phoneVerifier(container).render();
 }
 
 export async function sendPhoneCode(e164, container) {
-  if (!auth || !container) throw unavailable();
+  if (!auth) throw unavailable();
+  if (isNativeApp()) return sendNativePhoneCode(e164);
+  if (!container) throw unavailable();
   const provider = new PhoneAuthProvider(auth);
   const token = readSolvedToken(container);
   if (token) {

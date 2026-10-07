@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { useParams, useRouter } from '../platform/navigation';
 import {
   FiCheckCircle,
   FiChevronLeft,
