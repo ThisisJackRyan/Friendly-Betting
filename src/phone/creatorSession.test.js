@@ -1,6 +1,7 @@
 import {
   adjacentCreateStep,
   AUTH_COPY,
+  canDeleteBet,
   canSettleBet,
   codeSentCopy,
   createStepOrder,
@@ -172,4 +173,15 @@ test('nobody can settle a legacy bet without a creator uid from the client', () 
   expect(canSettleBet({ ...phoneUser, uid: '' }, { ...legacy, createdByID: '' })).toBe(false);
   expect(canSettleBet(anonUser, legacy)).toBe(false);
   expect(canSettleBet(null, legacy)).toBe(false);
+});
+
+test('only the phone creator who owns the bet can delete it, settled or not', () => {
+  const open = { status: 'open', createdByID: 'creator-1' };
+  expect(canDeleteBet(phoneUser, open)).toBe(true);
+  expect(canDeleteBet(phoneUser, { ...open, status: 'closed', winnerId: 'a' })).toBe(true);
+  expect(canDeleteBet({ ...phoneUser, uid: 'someone-else' }, open)).toBe(false);
+  expect(canDeleteBet({ ...anonUser, uid: 'creator-1' }, open)).toBe(false);
+  expect(canDeleteBet(null, open)).toBe(false);
+  expect(canDeleteBet(phoneUser, { betID: 'ml-1', type: 'Money Line' })).toBe(false);
+  expect(canDeleteBet({ ...phoneUser, uid: '' }, { createdByID: '' })).toBe(false);
 });

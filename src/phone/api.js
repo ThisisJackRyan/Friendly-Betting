@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -12,7 +13,7 @@ import { getCollectionName } from '../Config/base';
 import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
-import { requestResultTexts } from './resultTexts';
+import { apiUrl, requestResultTexts } from './resultTexts';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -90,8 +91,10 @@ export function subscribeBet(code, onChange) {
   return onSnapshot(
     doc(db, 'bets', code),
     (snap) => {
-      if (!snap.exists()) onChange(null);
-      else onChange({ id: snap.id, ...snap.data() });
+      // fromCache tells a server-confirmed delete from an offline cache miss.
+      const meta = { fromCache: Boolean(snap.metadata?.fromCache) };
+      if (!snap.exists()) onChange(null, undefined, meta);
+      else onChange({ id: snap.id, ...snap.data() }, undefined, meta);
     },
     (err) => onChange(undefined, err),
   );
@@ -188,4 +191,28 @@ export async function settleBet(code, winnerId) {
   // Fire-and-forget: the server re-reads the bet and texts each saved number once.
   requestResultTexts(code);
   return settled;
+}
+
+// The creator deletes their bet. The server route also deletes the voters'
+// saved result-text numbers, which no client can touch. Without Admin
+// credentials the route answers 503 and no numbers can have been saved
+// through it, so the bet doc alone is deleted here (the rules allow only the
+// creator). Any other failure throws and nothing is deleted client-side.
+export async function deleteBet(code) {
+  const user = auth?.currentUser;
+  if (!user) throw new Error('Not signed in.');
+  const token = await user.getIdToken();
+  const res = await fetch(apiUrl(`/api/bets/${encodeURIComponent(code)}`), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.ok) return;
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 503 && body?.error === 'not-configured') {
+    await deleteDoc(doc(db, 'bets', code));
+    return;
+  }
+  const err = new Error('Could not delete this bet.');
+  err.code = body?.error || 'delete-failed';
+  throw err;
 }

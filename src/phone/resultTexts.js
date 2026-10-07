@@ -25,7 +25,7 @@ export function resultTextsEnabled() {
 }
 
 // The native app has no API of its own, so it calls the production site.
-function apiUrl(path) {
+export function apiUrl(path) {
   return `${isNativeApp() ? PROD_ORIGIN : ''}${path}`;
 }
 

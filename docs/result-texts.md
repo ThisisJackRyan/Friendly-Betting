@@ -16,6 +16,12 @@ number to get one SMS when the bet is settled. Off by default.
 - The side is read from the voter's recorded vote on the server, never from the request.
 - At settle, each doc is claimed by deleting it in a transaction, then texted. A number is
   texted at most once and deleted before the text goes out.
+- Deleting a bet (`DELETE /api/bets/{code}`, creator only, `src/server/deleteBet.js`)
+  deletes its numbers, the `privateResultTexts/{code}` doc and `bets/{code}` in one
+  transaction. Without `FIREBASE_SERVICE_ACCOUNT` that route returns 503 and the app
+  deletes `bets/{code}` directly (rules: creator only); no numbers can have been saved
+  then, since the save route needs the same credentials. Legacy detail docs
+  (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
 
 ## Firestore rules
 

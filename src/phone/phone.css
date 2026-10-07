@@ -3388,3 +3388,85 @@ html[data-arrive='home'] .landing-body.screen-fade {
 @media (min-width: 768px) {
   .result-notifications { right: 24px; bottom: 24px; }
 }
+
+/* My bets: delete a bet (creator only). */
+.bet-item { display: flex; flex-direction: column; min-width: 0; }
+.bet-item > .bet-card { flex: 1; }
+.bet-delete {
+  align-self: flex-end;
+  min-height: 56px;
+  min-width: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.bet-delete:hover { background: var(--hover-wash); }
+.bet-delete:focus-visible { outline: none; box-shadow: var(--focus); }
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(32, 59, 46, 0.32);
+}
+.dialog {
+  width: 100%;
+  max-width: 360px;
+  padding: 24px;
+  border-radius: var(--radius-card);
+  background: var(--raised);
+  box-shadow: 0 12px 40px #203b2e20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dialog:focus { outline: none; }
+.dialog-title { margin: 0; font-size: 20px; font-weight: 800; color: var(--ink); }
+.dialog-copy { margin: 0 0 8px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.dialog-actions { display: flex; flex-direction: column; gap: 8px; }
+.dialog-actions .danger { margin-top: 0; }
+.dialog-keep {
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.dialog-keep:hover:not(:disabled) { background: var(--hover-wash); }
+.dialog-keep:disabled { opacity: 0.55; }
+.dialog-keep:focus-visible { outline: none; box-shadow: var(--focus); }
+.toast-region {
+  position: fixed;
+  left: 50%;
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  z-index: 46;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.toast {
+  margin: 0;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 12px 40px #203b2e20;
+  white-space: nowrap;
+}
+@media (min-width: 768px) {
+  .toast-region { bottom: 24px; }
+}

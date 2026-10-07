@@ -13,18 +13,18 @@ export function json(body, status = 200) {
 }
 
 // Echoes an exact allowed origin only. No credentials: the ID token is a header, not a cookie.
-export function withCors(request, response) {
+export function withCors(request, response, methods = 'POST, OPTIONS') {
   response.headers.append('Vary', 'Origin');
   const origin = request.headers.get('origin');
   if (!ALLOWED_ORIGINS.has(origin)) return response;
   response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Methods', methods);
   response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   response.headers.set('Access-Control-Max-Age', '600');
   return response;
 }
 
 // Preflight never touches auth or the database.
-export function preflight(request) {
-  return withCors(request, new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } }));
+export function preflight(request, methods) {
+  return withCors(request, new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } }), methods);
 }

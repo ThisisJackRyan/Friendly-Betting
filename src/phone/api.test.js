@@ -1,6 +1,6 @@
-import { runTransaction } from 'firebase/firestore';
+import { deleteDoc, runTransaction } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
-import { castVote, saveBet, settleBet } from './api';
+import { castVote, deleteBet, saveBet, settleBet } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 
@@ -8,9 +8,13 @@ jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: nul
 jest.mock('firebase/firestore', () => ({
   doc: (_db, collection, id) => ({ collection, id }),
   runTransaction: jest.fn(),
+  deleteDoc: jest.fn(async () => {}),
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
-jest.mock('./resultTexts', () => ({ requestResultTexts: jest.fn() }));
+jest.mock('./resultTexts', () => ({
+  requestResultTexts: jest.fn(),
+  apiUrl: (path) => `https://www.friendly-bets.com${path}`,
+}));
 
 let stored;
 let tx;
@@ -165,4 +169,61 @@ test('votes and settlements never carry a phone number', async () => {
   const written = JSON.stringify(tx.update.mock.calls.map(([, patch]) => patch));
   expect(written).not.toMatch(/phone|e164|2025550143/i);
   expect(JSON.stringify(stored)).not.toMatch(/phone|e164|2025550143/i);
+});
+
+describe('deleteBet', () => {
+  const respond = (status, body) => {
+    global.fetch = jest.fn(async () => ({ ok: status < 300, status, json: async () => body }));
+  };
+
+  beforeEach(() => {
+    auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }], getIdToken: jest.fn(async () => 'id-token') };
+    deleteDoc.mockClear();
+  });
+
+  afterEach(() => {
+    delete global.fetch;
+  });
+
+  test('calls the delete route with the ID token, through the shared API base', async () => {
+    respond(200, { deleted: true });
+    await deleteBet('abc123');
+    expect(global.fetch).toHaveBeenCalledWith('https://www.friendly-bets.com/api/bets/abc123', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer id-token' },
+    });
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  test('without server credentials it falls back to the rules-checked client delete', async () => {
+    respond(503, { error: 'not-configured' });
+    await deleteBet('abc123');
+    expect(deleteDoc).toHaveBeenCalledWith({ collection: 'bets', id: 'abc123' });
+  });
+
+  test.each([
+    [403, { error: 'forbidden' }],
+    [401, { error: 'unauthorized' }],
+    [500, { error: 'server' }],
+    [503, {}],
+  ])('a %i fails and deletes nothing client-side', async (status, body) => {
+    respond(status, body);
+    await expect(deleteBet('abc123')).rejects.toThrow();
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  test('a network failure throws and deletes nothing', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(deleteBet('abc123')).rejects.toThrow();
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
+  test('signed out never calls the route', async () => {
+    auth.currentUser = null;
+    respond(200, {});
+    await expect(deleteBet('abc123')).rejects.toThrow();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
