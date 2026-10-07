@@ -140,8 +140,7 @@ test('anyone can share the text-friends message from the tally', async () => {
   useIdentity.mockReturnValue({ uid: 'guest' });
   renderAt('/t/abc123', <TallyScreen />);
   const share = await screen.findByRole('button', { name: 'Text the crew' });
-  const close = screen.getByRole('button', { name: /close & settle/i });
-  expect(close).toHaveClass('danger', 'press');
+  expect(screen.queryByRole('button', { name: /close & settle/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
   expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();

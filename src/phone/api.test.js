@@ -50,6 +50,28 @@ test.each([null, { uid: 'creator', providerData: [] }, { uid: 'other', providerD
   expect(tx.update).not.toHaveBeenCalled();
 });
 
+test('an anonymous session with the creator uid cannot settle', async () => {
+  auth.currentUser = { uid: 'creator', isAnonymous: true, providerData: [{ providerId: 'anonymous' }] };
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('Only the creator can settle this bet.');
+  expect(tx.update).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['no createdByID', { betID: 'ml-1', type: 'Money Line', bet: 'Who wins' }],
+  ['an empty createdByID', { betID: 'ml-1', type: 'Money Line', bet: 'Who wins', createdByID: '' }],
+])('a legacy bet with %s cannot be settled from the client', async (_label, legacy) => {
+  stored = legacy;
+  for (const actor of [
+    { uid: 'creator', providerData: [{ providerId: 'phone' }] },
+    { uid: '', providerData: [{ providerId: 'phone' }] },
+    { providerData: [{ providerId: 'phone' }] },
+  ]) {
+    auth.currentUser = actor;
+    await expect(settleBet('legacy1', 'a')).rejects.toThrow('Only the creator can settle this bet.');
+  }
+  expect(tx.update).not.toHaveBeenCalled();
+});
+
 test('invalid and missing bets cannot close or notify', async () => {
   await expect(settleBet('abc123', 'wrong')).rejects.toThrow('Pick one');
   expect(tx.update).not.toHaveBeenCalled();

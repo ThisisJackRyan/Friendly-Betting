@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
-import { isCreator } from './creatorSession';
+import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 
@@ -167,7 +167,7 @@ export async function settleBet(code, winnerId) {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('This bet is gone.');
     const bet = { ...snap.data(), id: code, code };
-    if (!isCreator(auth?.currentUser) || auth.currentUser.uid !== bet.createdByID) {
+    if (!isBetCreator(auth?.currentUser, bet)) {
       throw new Error('Only the creator can settle this bet.');
     }
     if (bet.status === 'closed' && bet.winnerId) {

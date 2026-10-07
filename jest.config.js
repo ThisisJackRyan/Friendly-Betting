@@ -1,7 +1,7 @@
 module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.js'],
-  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/mobile/e2e/'],
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/mobile/e2e/', '<rootDir>/rules/'],
   transform: {
     '^.+\\.(js|jsx)$': ['babel-jest', {
       presets: [

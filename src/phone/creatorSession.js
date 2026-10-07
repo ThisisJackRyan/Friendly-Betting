@@ -122,8 +122,14 @@ export function adjacentCreateStep(current, user, direction) {
   return order[nextIndex];
 }
 
+// A missing creator uid is no match (so undefined === undefined can't pass):
+// a bet with no creator uid can't be closed or settled by anyone.
+export function isBetCreator(user, bet) {
+  if (!isCreator(user) || !bet || !bet.createdByID) return false;
+  return user.uid === bet.createdByID;
+}
+
 export function canSettleBet(user, bet) {
-  if (!isCreator(user) || !bet) return false;
-  if (bet.status === 'closed' && bet.winnerId) return false;
-  return Boolean(user.uid && user.uid === bet.createdByID);
+  if (!isBetCreator(user, bet)) return false;
+  return !(bet.status === 'closed' && bet.winnerId);
 }
