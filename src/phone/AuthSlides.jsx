@@ -357,19 +357,13 @@ function AuthChrome({ title, onBack, children, cta }) {
         </Link>
       </div>
       <div className="scroll">
-        <div className="page-intro auth-intro">
-          <p className="eyebrow">YOUR FRIENDLY CLUBHOUSE</p>
-          <h2>
-            {title === AUTH_COPY.phoneTitle
-              ? 'Welcome to your side of the bet.'
-              : 'You’re one text away.'}
-          </h2>
-          <p className="intro-copy">
-            {title === AUTH_COPY.phoneTitle
-              ? 'Sign in with your phone to see your bets, follow the picks, and settle the score.'
-              : 'Enter the six-digit code we sent to your phone.'}
-          </p>
-        </div>
+        {title === AUTH_COPY.phoneTitle ? null : (
+          <div className="page-intro auth-intro">
+            <p className="eyebrow">YOUR FRIENDLY CLUBHOUSE</p>
+            <h2>You’re one text away.</h2>
+            <p className="intro-copy">Enter the six-digit code we sent to your phone.</p>
+          </div>
+        )}
         {children}
       </div>
       {cta ? <div className="cta-bar">{cta}</div> : null}
