@@ -21,7 +21,7 @@ Core loop: Create → Text friends → open the `/b/[code]` link → vote → Ta
 
 ## Web + iOS + Android
 
-Prod: https://friendly-betting-teal.vercel.app. The website stays on Next.js. The iOS and Android apps bundle the **same React screens, CSS, Firebase data layer and settlement logic** using Vite + Capacitor 8; there is no second UI to keep in sync and no production `server.url` wrapper. App assets and fonts ship in the binary. Bets, auth and live results still require a connection.
+Prod: https://www.friendly-bets.com. The website stays on Next.js. The iOS and Android apps bundle the **same React screens, CSS, Firebase data layer and settlement logic** using Vite + Capacitor 8; there is no second UI to keep in sync and no production `server.url` wrapper. App assets and fonts ship in the binary. Bets, auth and live results still require a connection.
 
 `src/phone` owns product behavior. `src/platform` exposes the small navigation/native boundary. Next uses its own router; Vite resolves the navigation adapters to React Router in `mobile/`. `mobile/App.jsx` mirrors the web routes. Add a new screen to both route tables while keeping its implementation in `src/phone`.
 
