@@ -12,6 +12,7 @@ import { getCollectionName } from '../Config/base';
 import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
+import { requestResultTexts } from './resultTexts';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -163,7 +164,7 @@ export async function castVote(code, vote) {
 
 export async function settleBet(code, winnerId) {
   const ref = doc(db, 'bets', code);
-  return runTransaction(db, async (tx) => {
+  const settled = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('This bet is gone.');
     const bet = { ...snap.data(), id: code, code };
@@ -184,4 +185,7 @@ export async function settleBet(code, winnerId) {
     tx.update(ref, update);
     return { ...full, ...update };
   });
+  // Fire-and-forget: the server re-reads the bet and texts each saved number once.
+  requestResultTexts(code);
+  return settled;
 }

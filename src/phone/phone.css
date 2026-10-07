@@ -91,7 +91,7 @@ body {
 }
 
 .screen-push .scroll,
-.form-fill .scroll {
+.form-fill > .scroll {
   padding-top: 8px;
 }
 
@@ -893,6 +893,27 @@ body {
   text-decoration: none;
 }
 
+.result-text-card {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-text-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.result-text-card .cta {
+  min-height: 56px;
+}
+
+.result-text-card .result-text-skip {
+  margin-top: 0;
+  color: var(--muted);
+}
+
 .empty {
   display: flex;
   flex-direction: column;
@@ -1157,6 +1178,9 @@ button:focus-visible {
   padding: 16px 36px;
   border-bottom: 1px solid var(--line);
   background: var(--page);
+}
+.home-preview-header {
+  display: none;
 }
 .header-location {
   font-size: 13px;
@@ -1795,7 +1819,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .creator-auth {
   background: var(--raised);
 }
-.create-flow .scroll,
+.create-flow .scroll:not(.landing-body),
 .screen-push .scroll {
   padding: 28px;
 }
@@ -2633,7 +2657,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
     background: white;
     box-shadow: var(--shadow-panel);
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll {
     padding: 30px 36px;
   }
@@ -2813,19 +2837,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
     display: block;
   }
   .header-location,
-  .header-note {
-    display: none;
-  }
+  .header-note,
   .header-action {
-    margin-left: auto;
-    background: #edf1e7;
-    color: var(--ink);
-    min-height: 36px;
-    font-size: 11px;
-    gap: 8px;
-  }
-  .header-action:hover {
-    background: var(--wash);
+    display: none;
   }
   .header-brand .brand {
     font-size: 24px;
@@ -2834,10 +2848,13 @@ html[data-arrive='home'] .landing-body.screen-fade {
     width: 29px;
     height: 29px;
   }
-  .shell-creating .app-header,
-  .shell-stack:not(.shell-landing) .app-header,
+  .shell-creating > .app-main > .app-header,
+  .shell-stack:not(.shell-landing) > .app-main > .app-header,
   .shell-stack:not(.shell-landing) .app-nav {
     display: none;
+  }
+  .home-preview-header {
+    display: flex;
   }
   .landing-body {
     gap: 28px;
@@ -3024,7 +3041,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .nav-row {
     padding-top: calc(6px + env(safe-area-inset-top));
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll {
     padding: 24px;
   }
@@ -3185,7 +3202,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .starter-card h3 {
     font-size: 14px;
   }
-  .create-flow .scroll,
+  .create-flow .scroll:not(.landing-body),
   .screen-push .scroll,
   .vote-screen {
     padding: 20px 16px;

@@ -9,6 +9,9 @@ import { useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 import { buildSettlement } from './settlement';
+import { saveResultText } from './resultTexts';
+import { RESULT_TEXT_COPY } from './resultTextCopy';
+import { PHONE_INVALID_ERROR, PHONE_OFFLINE_ERROR, phoneError } from './creatorSession';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -63,6 +66,11 @@ jest.mock('./identity', () => ({
   rememberName: jest.fn(),
   savedName: () => 'Sam',
   creatorName: () => 'Sam',
+}));
+
+jest.mock('./resultTexts', () => ({
+  ...jest.requireActual('./resultTexts'),
+  saveResultText: jest.fn(async () => {}),
 }));
 
 jest.mock('./share', () => ({
@@ -308,4 +316,248 @@ test('result sharing falls back to copyable final-result text', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Share the result' }));
   expect(await screen.findByText('Copy this into the group chat.')).toBeInTheDocument();
   expect(document.querySelector('.manual-message')).toHaveTextContent('Closed · Jack won the $20 pot');
+});
+
+describe('text me who won', () => {
+  const flag = process.env.NEXT_PUBLIC_RESULT_TEXTS;
+  const voter = { uid: 'anon-1', isAnonymous: true, providerData: [] };
+  const votedBet = { ...openBet, votes: [{ voterId: 'anon-1', name: 'Sam', optionId: 'a' }] };
+  let publish;
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_RESULT_TEXTS = '1';
+    localStorage.clear();
+    useIdentity.mockReturnValue(voter);
+    saveResultText.mockReset();
+    saveResultText.mockResolvedValue(undefined);
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = (bet) => act(() => onChange(bet));
+      onChange(openBet);
+      return () => {};
+    });
+  });
+
+  afterEach(() => {
+    if (flag === undefined) delete process.env.NEXT_PUBLIC_RESULT_TEXTS;
+    else process.env.NEXT_PUBLIC_RESULT_TEXTS = flag;
+  });
+
+  const card = () => screen.queryByRole('heading', { name: RESULT_TEXT_COPY.heading });
+  const field = () => screen.getByRole('textbox', { name: RESULT_TEXT_COPY.heading });
+
+  async function renderVoted() {
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = (bet) => act(() => onChange(bet));
+      onChange(votedBet);
+      return () => {};
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByRole('heading', { name: RESULT_TEXT_COPY.heading })).toBeInTheDocument();
+  }
+
+  test('appears only after the pick is recorded, and voting stays one tap', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    await screen.findByRole('button', { name: 'Yes' });
+    expect(card()).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledTimes(1);
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'Sam', optionId: 'a' });
+    expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+    // A pending click is not a recorded vote.
+    expect(card()).not.toBeInTheDocument();
+    expect(saveResultText).not.toHaveBeenCalled();
+
+    publish(votedBet);
+    expect(card()).toBeInTheDocument();
+    expect(field()).toHaveAttribute('type', 'tel');
+    expect(field()).toHaveAttribute('inputmode', 'tel');
+    expect(field()).toHaveAttribute('autocomplete', 'tel-national');
+    expect(field()).toHaveAttribute('placeholder', '(555) 555-0100');
+    expect(screen.getByText('+1')).toHaveClass('phone-cc');
+    expect(screen.getByText(RESULT_TEXT_COPY.privacy)).toHaveClass('muted');
+    const send = screen.getByRole('button', { name: 'Text me' });
+    expect(send).toHaveClass('cta', 'press');
+    expect(document.querySelectorAll('.result-text-card .cta')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'No thanks' })).not.toHaveClass('cta');
+  });
+
+  test('No thanks collapses the card for this bet and leaves the tally alone', async () => {
+    await renderVoted();
+    await userEvent.click(screen.getByRole('button', { name: 'No thanks' }));
+    expect(card()).not.toBeInTheDocument();
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
+    expect(localStorage.getItem('fb.resultText.abc123')).toBe('skipped');
+    expect(saveResultText).not.toHaveBeenCalled();
+  });
+
+  test('a skipped card stays hidden on revisit', async () => {
+    localStorage.setItem('fb.resultText.abc123', 'skipped');
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  test('Text me saves the number, shows Saving…, then the confirmation', async () => {
+    let finish;
+    saveResultText.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await renderVoted();
+    await userEvent.type(field(), '2025550143');
+    expect(field()).toHaveValue('(202) 555-0143');
+    await userEvent.click(screen.getByRole('button', { name: 'Text me' }));
+    expect(saveResultText).toHaveBeenCalledWith('abc123', '+12025550143');
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    await act(async () => finish());
+    expect(await screen.findByText('You’re set. We’ll text you who won.')).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+    expect(localStorage.getItem('fb.resultText.abc123')).toBe('saved');
+    expect(document.body.textContent).not.toMatch(/555|0143/);
+  });
+
+  test('a revisit after saving shows the confirmation, not the field', async () => {
+    localStorage.setItem('fb.resultText.abc123', 'saved');
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(RESULT_TEXT_COPY.confirmed)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: RESULT_TEXT_COPY.heading })).not.toBeInTheDocument();
+  });
+
+  const textMe = () => screen.getByRole('button', { name: 'Text me' });
+
+  async function failSave(rejection) {
+    await renderVoted();
+    await userEvent.type(field(), '2025550143');
+    saveResultText.mockRejectedValueOnce(rejection);
+    await userEvent.click(textMe());
+    return screen.findByRole('alert');
+  }
+
+  test('a save error sits right under the phone field in the sign-in error style', async () => {
+    const alert = await failSave(new Error('boom'));
+    expect(alert.tagName).toBe('P');
+    expect(alert).toHaveClass('form-error');
+    expect(alert.previousElementSibling).toBe(field().closest('label.field'));
+    expect(alert.nextElementSibling).toHaveTextContent(RESULT_TEXT_COPY.privacy);
+    expect(field()).toHaveAttribute('aria-invalid', 'true');
+    expect(field()).toHaveAttribute('aria-describedby', alert.id);
+    expect(alert.id).not.toBe('');
+  });
+
+  test('editing the field clears the error', async () => {
+    await failSave(new Error('boom'));
+    await userEvent.type(field(), '1');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(field()).not.toHaveAttribute('aria-invalid');
+    expect(field()).not.toHaveAttribute('aria-describedby');
+  });
+
+  test('bad numbers reuse the phone sign-in line', () => {
+    expect(RESULT_TEXT_COPY.invalid).toBe('Enter a US phone number.');
+    expect(RESULT_TEXT_COPY.invalid).toBe(PHONE_INVALID_ERROR);
+    const authSlides = fs.readFileSync(path.join(__dirname, 'AuthSlides.jsx'), 'utf8');
+    expect(authSlides).toContain('setError(PHONE_INVALID_ERROR)');
+    expect(authSlides).not.toContain('Enter a US phone number.');
+  });
+
+  test('an invalid number shows the invalid line without calling the server', async () => {
+    await renderVoted();
+    await userEvent.type(field(), '1025550143');
+    await userEvent.click(textMe());
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(PHONE_INVALID_ERROR);
+    expect(alert).toHaveClass('form-error');
+    expect(saveResultText).not.toHaveBeenCalled();
+  });
+
+  test('a server-rejected number shows the sign-in invalid line', async () => {
+    const alert = await failSave(Object.assign(new Error('bad'), { code: 'invalid-phone' }));
+    expect(alert.textContent).toBe(PHONE_INVALID_ERROR);
+    expect(textMe()).toBeEnabled();
+  });
+
+  test('a network failure shows the sign-in offline line', async () => {
+    expect(RESULT_TEXT_COPY.offline).toBe(PHONE_OFFLINE_ERROR);
+    expect(phoneError({ code: 'auth/network-request-failed' }).message).toBe(RESULT_TEXT_COPY.offline);
+    const alert = await failSave(Object.assign(new Error('Could not reach the server.'), { code: 'network' }));
+    expect(alert.textContent).toBe('You\u2019re offline. Try again.');
+  });
+
+  test('a browser that reports offline shows the offline line', async () => {
+    const onLine = jest.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      const alert = await failSave(Object.assign(new Error('nope'), { code: 'save-failed' }));
+      expect(alert.textContent).toBe(RESULT_TEXT_COPY.offline);
+    } finally {
+      onLine.mockRestore();
+    }
+  });
+
+  test.each([
+    ['a server failure', Object.assign(new Error('Could not save that number.'), { code: 'save-failed' })],
+    ['a missing session', new Error('Still connecting. Try again.')],
+  ])('%s shows the generic save line', async (_name, rejection) => {
+    const alert = await failSave(rejection);
+    expect(RESULT_TEXT_COPY.saveFailed).toBe('Couldn\u2019t save that number. Try again.');
+    expect(alert.textContent).toBe('Couldn\u2019t save that number. Try again.');
+    expect(textMe()).toBeEnabled();
+  });
+
+  test('a failed save leaves the recorded vote alone', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Yes' }));
+    publish(votedBet);
+    expect(castVote).toHaveBeenCalledTimes(1);
+
+    await userEvent.type(field(), '2025550143');
+    saveResultText.mockRejectedValueOnce(new Error('boom'));
+    await userEvent.click(textMe());
+    expect(await screen.findByRole('alert')).toHaveTextContent(RESULT_TEXT_COPY.saveFailed);
+
+    expect(castVote).toHaveBeenCalledTimes(1);
+    expect(settleBet).not.toHaveBeenCalled();
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
+    expect(localStorage.getItem('fb.resultText.abc123')).toBeNull();
+  });
+
+  test('No thanks still works after a failed save', async () => {
+    await failSave(new Error('boom'));
+    const skip = screen.getByRole('button', { name: 'No thanks' });
+    expect(skip).toBeEnabled();
+    await userEvent.click(skip);
+    expect(card()).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(localStorage.getItem('fb.resultText.abc123')).toBe('skipped');
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(castVote).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['the flag is off', () => { delete process.env.NEXT_PUBLIC_RESULT_TEXTS; }],
+    ['the voter is a local fallback id', () => { useIdentity.mockReturnValue({ uid: 'anon-1', isLocal: true }); }],
+  ])('is never shown when %s', async (_name, setup) => {
+    setup();
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  test('is never shown on a settled bet', async () => {
+    const settled = { ...votedBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(votedBet, 'a') };
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(settled); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByRole('region', { name: 'Settled result' })).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  test('the tally never renders a saved number', async () => {
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/t/abc123', <TallyScreen />);
+    expect(await screen.findByText('Who is late')).toBeInTheDocument();
+    expect(card()).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\+1|555|0143/);
+  });
 });
