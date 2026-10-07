@@ -1,20 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from '../platform/Link';
 import { useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiArrowRight, FiPlus, FiSearch, FiX } from 'react-icons/fi';
-import { subscribeMyBets } from './api';
+import { deleteBet, subscribeMyBets } from './api';
 import CreatorAuthFlow from './AuthSlides';
 import { signOutCreator } from './creatorAuth';
-import { isCreator } from './creatorSession';
+import { canDeleteBet, isCreator } from './creatorSession';
 import { useIdentity } from './identity';
 import { questionOf, statusLabel, typeLabelOf } from './model';
 import { resultHeadline, settlementOf } from './settlement';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
+import DeleteBetDialog from './DeleteBetDialog';
 
 const FILTERS = ['All', 'Open', 'Closed', 'Settled'];
+// Reused as-is from saveResultText (src/phone/resultTexts.js); no new copy.
+const DELETE_ERROR = 'Still connecting. Try again.';
+const TOAST_MS = 4000;
 
 export function MyBetsList({ user }) {
   const uid = isCreator(user) ? user.uid : '';
@@ -22,8 +26,46 @@ export function MyBetsList({ user }) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [toast, setToast] = useState('');
+  const deleteTrigger = useRef(null);
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = window.setTimeout(() => setToast(''), TOAST_MS);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
+  const openDelete = (bet, event) => {
+    deleteTrigger.current = event.currentTarget;
+    setDeleteError('');
+    setDeleting(bet.id);
+  };
+
+  const closeDelete = () => {
+    setDeleting(null);
+    setDeleteError('');
+    deleteTrigger.current?.focus();
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      await deleteBet(deleting);
+      setDeleting(null);
+      setToast('Bet deleted.');
+    } catch {
+      setDeleteError(DELETE_ERROR);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!uid) return undefined;
@@ -173,20 +215,34 @@ export function MyBetsList({ user }) {
                     const status = statusLabel(bet);
                     const result = settlementOf(bet);
                     return (
-                      <Link key={bet.id} className="bet-card press" href={`/t/${bet.id}`}>
-                        <span className="bet-card-top">
-                          <span className="chip">{typeLabelOf(bet)}</span>
-                          <span className={`status ${status.toLowerCase()}`}>{status}</span>
-                        </span>
-                        <h2 className="bet-card-question">{questionOf(bet) || 'Untitled bet'}</h2>
-                        <BetFacts bet={bet} />
-                        <span className="bet-card-bottom">
-                          <span>
-                            {result ? resultHeadline(result) : 'See who’s in'}
+                      <div key={bet.id} className="bet-item">
+                        <Link className="bet-card press" href={`/t/${bet.id}`}>
+                          <span className="bet-card-top">
+                            <span className="chip">{typeLabelOf(bet)}</span>
+                            <span className={`status ${status.toLowerCase()}`}>{status}</span>
                           </span>
-                          <FiArrowRight aria-hidden="true" />
-                        </span>
-                      </Link>
+                          <h2 id={`bet-q-${bet.id}`} className="bet-card-question">
+                            {questionOf(bet) || 'Untitled bet'}
+                          </h2>
+                          <BetFacts bet={bet} />
+                          <span className="bet-card-bottom">
+                            <span>
+                              {result ? resultHeadline(result) : 'See who’s in'}
+                            </span>
+                            <FiArrowRight aria-hidden="true" />
+                          </span>
+                        </Link>
+                        {canDeleteBet(user, bet) && (
+                          <button
+                            type="button"
+                            className="bet-delete press"
+                            aria-describedby={`bet-q-${bet.id}`}
+                            onClick={(event) => openDelete(bet, event)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -208,6 +264,12 @@ export function MyBetsList({ user }) {
           </button>
         </>
       )}
+      {deleting && (
+        <DeleteBetDialog busy={deleteBusy} error={deleteError} onConfirm={confirmDelete} onCancel={closeDelete} />
+      )}
+      <div className="toast-region" role="status">
+        {toast && <p className="toast">{toast}</p>}
+      </div>
     </div>
   );
 }

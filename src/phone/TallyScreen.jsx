@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from '../platform/navigation';
-import Link from '../platform/Link';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
 import { settleBet } from './api';
@@ -23,6 +22,7 @@ import {
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import Bars from './Bars';
+import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
@@ -164,18 +164,13 @@ const TallyScreen = () => {
       <div className="scroll">
         {!reveal && <FriendlyLoader />}
         {reveal && bet === null && (
-          <div className="empty">
-            <p className="empty-title">This bet is gone.</p>
-            <p className="empty-copy">Check the link or head back to your bets.</p>
+          <BetGone>
             {(error || failed) && (
               <p className="form-error" role="alert">
                 {error || LOAD_ERROR}
               </p>
             )}
-            <Link className="secondary press" href="/bets">
-              My bets
-            </Link>
-          </div>
+          </BetGone>
         )}
         {reveal && bet && (
           <>

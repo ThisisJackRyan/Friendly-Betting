@@ -70,3 +70,42 @@ test('a new code drops the old bet and listener', () => {
   expect(feeds[1].code).toBe('bbb222');
   expect(result.current.bet).toBeUndefined();
 });
+
+const v2 = (extra = {}) => ({ id: 'aaa111', schemaVersion: 2, options: [], ...extra });
+
+test('a delete the server confirms clears a loaded bet, even mid-hydrate', async () => {
+  const { result } = renderHook(() => useLiveBet('old1'));
+  act(() => feeds[0].onChange(v2()));
+  act(() => feeds[0].onChange(legacy('pending')));
+  act(() => feeds[0].onChange(null, undefined, { fromCache: false }));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(false);
+  await act(async () => pending[0].resolve());
+  expect(result.current.bet).toBeNull();
+});
+
+test('an offline cache miss or error never blanks a loaded bet', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] })));
+  act(() => feeds[0].onChange(null, undefined, { fromCache: true }));
+  act(() => feeds[0].onChange(undefined, new Error('unavailable')));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+});
+
+test('a first-load cache miss is a load failure until the server answers', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, { fromCache: true }));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(true);
+  act(() => feeds[0].onChange(null, undefined, { fromCache: false }));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(false);
+});
+
+test('a bad code is not-found on the first server snapshot', () => {
+  const { result } = renderHook(() => useLiveBet('nope99'));
+  act(() => feeds[0].onChange(null, undefined, { fromCache: false }));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(false);
+});

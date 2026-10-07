@@ -192,9 +192,10 @@ describe('live tally', () => {
   // Every subscribeBet call becomes a feed the test can push snapshots into.
   let feeds;
   const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
-  const push = async (bet, err) => {
+  // meta mirrors subscribeBet's third argument; fromCache marks an offline miss.
+  const push = async (bet, err, meta = { fromCache: false }) => {
     await act(async () => {
-      live().forEach((feed) => feed.onChange(bet, err));
+      live().forEach((feed) => feed.onChange(bet, err, meta));
     });
   };
   const setVisibility = async (state) => {
@@ -315,11 +316,12 @@ describe('live tally', () => {
     expect(screen.getByText('Who is late')).toBeInTheDocument();
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText('This bet is gone.')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
 
-    await push(null);
+    // Offline, Firestore can report the doc missing from its cache. That is not a delete.
+    await push(null, undefined, { fromCache: true });
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
-    expect(screen.queryByText('This bet is gone.')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
 
     // Back on the tab, the fresh listener picks up where it left off.
     await setVisibility('visible');
@@ -335,8 +337,51 @@ describe('live tally', () => {
       return feed.unsubscribe;
     });
     await renderTally();
-    expect(screen.getByText('This bet is gone.')).toBeInTheDocument();
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the crew’s picks. Try again in a bit.');
+  });
+
+  test('a delete the server confirms swaps the tally for the not-found screen live', async () => {
+    await renderTally();
+    await push({ ...openBet, votes: [vote('v1', 'a')] });
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+
+    await push(null);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+    expect(screen.queryByText('Who is late')).not.toBeInTheDocument();
+    expect(document.querySelector('.bar-count')).toBeNull();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a bad code shows the not-found screen on first load', async () => {
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(null, undefined, { fromCache: false });
+      return feed.unsubscribe;
+    });
+    await renderTally();
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('an offline cache miss on first load waits on the server before calling it gone', async () => {
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(null, undefined, { fromCache: true });
+      return feed.unsubscribe;
+    });
+    await renderTally();
+    // Same as any failed first load: the existing load error, no claim it was deleted.
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the crew’s picks. Try again in a bit.');
+
+    await push({ ...openBet, votes: [vote('v1', 'a')] });
+    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('settling elsewhere flips the tally live and removes Close & settle', async () => {

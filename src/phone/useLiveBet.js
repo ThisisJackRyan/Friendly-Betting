@@ -6,8 +6,11 @@ import { hydrateBet, subscribeBet } from './api';
 // Live bets/{code} for the tally and vote screens. Keeps exactly one snapshot
 // listener open, and swaps it for a fresh one when the page becomes visible
 // again or comes back online (iOS Safari can freeze listeners in background
-// tabs). Once a bet has loaded, a later snapshot error or empty snapshot keeps
-// the last good bet on screen; `failed` is only set when nothing loaded.
+// tabs). Once a bet has loaded, a later snapshot error keeps the last good bet
+// on screen; `failed` is only set when nothing loaded. A missing bet the server
+// confirms (deleted, or a bad code) sets `bet` to null at any time. A miss
+// served from the offline cache never blanks a loaded bet; before anything
+// loads it counts as a load failure until the server answers.
 export function useLiveBet(code) {
   const [bet, setBet] = useState(undefined);
   const [failed, setFailed] = useState(false);
@@ -35,11 +38,20 @@ export function useLiveBet(code) {
       const token = {};
       current = token;
       latest += 1;
-      unsubscribe = subscribeBet(code, (next, err) => {
+      unsubscribe = subscribeBet(code, (next, err, meta) => {
         if (!active || current !== token) return;
-        if (err || !next) {
+        if (err || (!next && meta?.fromCache)) {
           if (loaded) return;
-          if (err) setFailed(true);
+          setFailed(true);
+          setBet(null);
+          return;
+        }
+        if (!next) {
+          // Gone on the server: an authoritative answer, like a loaded bet.
+          // Drop any pending hydrate of the old bet.
+          latest += 1;
+          loaded = true;
+          setFailed(false);
           setBet(null);
           return;
         }

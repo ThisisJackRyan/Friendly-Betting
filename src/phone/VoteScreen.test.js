@@ -573,9 +573,10 @@ describe('text me who won', () => {
 describe('live results after voting', () => {
   let feeds;
   const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
-  const push = async (bet, err) => {
+  // meta mirrors subscribeBet's third argument; fromCache marks an offline miss.
+  const push = async (bet, err, meta = { fromCache: false }) => {
     await act(async () => {
-      live().forEach((feed) => feed.onChange(bet, err));
+      live().forEach((feed) => feed.onChange(bet, err, meta));
     });
   };
   const counts = () => [...document.querySelectorAll('.bar-count')].map((node) => node.textContent);
@@ -626,11 +627,22 @@ describe('live results after voting', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
     await push(undefined, new Error('offline'));
-    await push(null);
+    await push(null, undefined, { fromCache: true });
     expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByText('This bet isn\'t here')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
+  });
+
+  test('a delete the server confirms shows the not-found screen live', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    await push(null);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('coming back to the tab resubscribes and the settled result lands live', async () => {
@@ -648,4 +660,18 @@ describe('live results after voting', () => {
     expect(screen.getByText('Final tally')).toBeInTheDocument();
     expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
   });
+});
+
+test('a mistyped code shows the not-found screen with a way to start a bet', async () => {
+  subscribeBet.mockImplementation((_code, onChange) => {
+    onChange(null, undefined, { fromCache: false });
+    return () => {};
+  });
+  renderAt('/b/nope99', <VoteScreen />);
+  expect(await screen.findByText('This bet’s off the table.')).toBeInTheDocument();
+  expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+  const start = screen.getByRole('link', { name: 'Start a bet' });
+  expect(start).toHaveAttribute('href', '/new');
+  expect(start).toHaveClass('cta');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

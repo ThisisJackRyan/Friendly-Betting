@@ -6,6 +6,9 @@ import { POST as saveRoute } from '../../app/api/bets/[code]/result-texts/route'
 import * as saveModule from '../../app/api/bets/[code]/result-texts/route';
 import { POST as sendRoute } from '../../app/api/bets/[code]/result-texts/send/route';
 import * as sendModule from '../../app/api/bets/[code]/result-texts/send/route';
+import { DELETE as deleteRoute } from '../../app/api/bets/[code]/route';
+import * as deleteModule from '../../app/api/bets/[code]/route';
+import { fakeDb } from './testing/fakeDb';
 
 jest.mock('firebase-admin/app', () => ({}));
 jest.mock('firebase-admin/auth', () => ({}));
@@ -46,8 +49,8 @@ function save(body, { token, code = 'abc123' } = {}) {
   return saveRoute(request, { params: Promise.resolve({ code }) });
 }
 
-test('both routes run on Node and are never cached', () => {
-  [saveModule, sendModule].forEach((route) => {
+test('all routes run on Node and are never cached', () => {
+  [saveModule, sendModule, deleteModule].forEach((route) => {
     expect(route.runtime).toBe('nodejs');
     expect(route.dynamic).toBe('force-dynamic');
   });
@@ -261,6 +264,160 @@ describe('CORS for the native app', () => {
       }
       expect(adminAuth).not.toHaveBeenCalled();
       expect(adminDb).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('delete route', () => {
+  const PHONE_CLAIMS = { phone_number: '+15551234567' };
+  const NUMBERS = 'privateResultTexts/abc123/numbers';
+  let store;
+
+  beforeEach(() => {
+    verifyIdToken.mockImplementation(async (token) => {
+      if (token === 'creator') return { uid: 'creator-1', ...PHONE_CLAIMS };
+      if (token === 'other') return { uid: 'creator-9', ...PHONE_CLAIMS };
+      if (token === 'anon') return { uid: 'creator-1' };
+      throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' });
+    });
+    store = fakeDb({
+      'bets/abc123': { code: 'abc123', createdByID: 'creator-1', votes: [{ voterId: 'anon-1', optionId: 'a' }] },
+      'bets/legacy1': { betID: 'ml-1', type: 'Money Line', bet: 'Who wins' },
+      'privateResultTexts/abc123': { parent: true },
+      [`${NUMBERS}/n1`]: { e164: '+12025550143', voterId: 'anon-1', optionId: 'a' },
+      [`${NUMBERS}/n2`]: { e164: '+12025550144', voterId: 'anon-2', optionId: 'b' },
+    });
+    adminDb.mockReturnValue(store);
+  });
+
+  function remove({ token, code = 'abc123', origin } = {}) {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (origin) headers.Origin = origin;
+    return deleteRoute(new Request(`http://localhost/api/bets/${code}`, { method: 'DELETE', headers }), {
+      params: Promise.resolve({ code }),
+    });
+  }
+
+  test('a missing or invalid token is a 401 and deletes nothing', async () => {
+    for (const token of [undefined, 'forged']) {
+      const res = await remove({ token });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized' });
+    }
+    expect(store.writes).toEqual([]);
+  });
+
+  test('a non-creator, or the creator uid without a phone claim, is a 403', async () => {
+    for (const token of ['other', 'anon']) {
+      const res = await remove({ token });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: 'forbidden' });
+    }
+    expect(store.writes).toEqual([]);
+    expect(store.data('bets/abc123')).toBeTruthy();
+  });
+
+  test('a bet with no creator uid is a 403 for everyone', async () => {
+    for (const token of ['creator', 'other']) {
+      const res = await remove({ token, code: 'legacy1' });
+      expect(res.status).toBe(403);
+    }
+    expect(store.data('bets/legacy1')).toBeTruthy();
+  });
+
+  test('the creator deletes the numbers, their parent and the bet', async () => {
+    const res = await remove({ token: 'creator' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(store.paths('privateResultTexts/abc123')).toEqual([]);
+    expect(store.data('bets/abc123')).toBeUndefined();
+    // One commit; numbers and their parent are queued before the bet.
+    expect(store.writes.map(([op, path]) => `${op} ${path}`)).toEqual([
+      `delete ${NUMBERS}/n1`,
+      `delete ${NUMBERS}/n2`,
+      'delete privateResultTexts/abc123',
+      'delete bets/abc123',
+    ]);
+  });
+
+  test('running it twice succeeds; a bet that is already gone is a 200', async () => {
+    expect((await remove({ token: 'creator' })).status).toBe(200);
+    const writes = store.writes.length;
+    const res = await remove({ token: 'creator' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(store.writes.length).toBe(writes);
+  });
+
+  test('missing admin credentials are a 503, a malformed code a 404, other failures a 500', async () => {
+    adminAuth.mockImplementation(() => {
+      throw notConfigured();
+    });
+    let res = await remove({ token: 'creator' });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'not-configured' });
+
+    adminAuth.mockReturnValue({ verifyIdToken });
+    adminAuth.mockClear();
+    res = await remove({ token: 'creator', code: 'a%2Fb' });
+    expect(res.status).toBe(404);
+    expect(adminAuth).not.toHaveBeenCalled();
+
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    adminDb.mockReturnValue({ ...store, runTransaction: async () => { throw new Error('boom'); } });
+    res = await remove({ token: 'creator' });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'server' });
+    error.mockRestore();
+  });
+
+  describe('CORS', () => {
+    const ALLOWED = ['capacitor://localhost', 'https://localhost', 'https://www.friendly-bets.com'];
+    const DENIED = ['https://evil.example', 'http://localhost', 'https://friendly-bets.com', 'null', undefined];
+    const corsHeaders = (res) => [...res.headers.keys()].filter((key) => key.startsWith('access-control-'));
+
+    function options(origin) {
+      const headers = { 'Access-Control-Request-Method': 'DELETE', 'Access-Control-Request-Headers': 'authorization' };
+      if (origin) headers.Origin = origin;
+      return deleteModule.OPTIONS(new Request('http://localhost/api/bets/abc123', { method: 'OPTIONS', headers }));
+    }
+
+    function expectCors(res, origin) {
+      expect(res.headers.get('access-control-allow-origin')).toBe(origin);
+      expect(res.headers.get('vary')).toMatch(/\bOrigin\b/);
+      expect(res.headers.get('access-control-allow-methods')).toBe('DELETE, OPTIONS');
+      expect(res.headers.get('access-control-allow-headers')).toBe('Authorization, Content-Type');
+      expect(res.headers.get('access-control-max-age')).toBe('600');
+      expect(res.headers.get('access-control-allow-credentials')).toBeNull();
+    }
+
+    test.each(ALLOWED)('%s gets CORS on preflight without auth or the database', async (origin) => {
+      const res = await options(origin);
+      expect(res.status).toBe(204);
+      expectCors(res, origin);
+      expect(adminAuth).not.toHaveBeenCalled();
+      expect(adminDb).not.toHaveBeenCalled();
+    });
+
+    test.each(ALLOWED)('%s gets CORS on success and errors', async (origin) => {
+      let res = await remove({ origin });
+      expect(res.status).toBe(401);
+      expectCors(res, origin);
+      res = await remove({ origin, token: 'other' });
+      expect(res.status).toBe(403);
+      expectCors(res, origin);
+      res = await remove({ origin, token: 'creator' });
+      expect(res.status).toBe(200);
+      expectCors(res, origin);
+    });
+
+    test.each(DENIED)('%s gets no CORS headers but still varies on Origin', async (origin) => {
+      for (const res of [await options(origin), await remove({ origin }), await remove({ origin, token: 'creator' })]) {
+        expect(corsHeaders(res)).toEqual([]);
+        expect(res.headers.get('vary')).toMatch(/\bOrigin\b/);
+      }
     });
   });
 });

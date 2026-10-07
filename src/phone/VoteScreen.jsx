@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from '../platform/Link';
 import { useParams } from '../platform/navigation';
-import { FiCheckCircle, FiLink, FiSlash } from 'react-icons/fi';
+import { FiCheckCircle, FiSlash } from 'react-icons/fi';
 import { BetFacts, Brand } from './ProductUI';
 import { castVote } from './api';
 import { useLiveBet } from './useLiveBet';
@@ -19,6 +19,7 @@ import {
   votingOpen,
 } from './model';
 import Bars from './Bars';
+import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { rememberBet } from './notificationStore';
 import { settlementOf } from './settlement';
@@ -101,21 +102,13 @@ const VoteScreen = () => {
       <div className="scroll screen-fade vote-screen">
         {!reveal && <FriendlyLoader />}
         {reveal && bet === null && (
-          <div className="empty">
-            <FiLink className="empty-glyph" size={18} aria-hidden="true" />
-            <p className="empty-title">This bet isn&apos;t here</p>
-            <p className="empty-copy">
-              Check the link with your friend, or start a new friendly rivalry.
-            </p>
+          <BetGone>
             {(error || failed) && (
               <p className="form-error" role="alert">
                 {error || LOAD_ERROR}
               </p>
             )}
-            <Link className="secondary press" href="/">
-              Home
-            </Link>
-          </div>
+          </BetGone>
         )}
         {reveal && bet && (
           <>

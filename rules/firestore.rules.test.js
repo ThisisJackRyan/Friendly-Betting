@@ -191,8 +191,51 @@ describe('close & settle', () => {
     await assertFails(anon().doc('bets/settled').update({ winnerId: 'b' }));
   });
 
-  test('no client can delete a bet', async () => {
-    await assertFails(creator().doc('bets/abc123').delete());
+});
+
+describe('delete', () => {
+  test('the phone-verified creator deletes their bet, votes and all', async () => {
+    await assertSucceeds(creator().doc('bets/abc123').delete());
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      expect((await ctx.firestore().doc('bets/abc123').get()).exists).toBe(false);
+    });
+  });
+
+  test('the creator can delete a settled bet too', async () => {
+    await assertSucceeds(creator().doc('bets/settled').delete());
+  });
+
+  test('another phone user, an anonymous voter and a signed-out user cannot delete', async () => {
+    for (const db of [otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc('bets/abc123').delete());
+      await assertFails(db.doc('bets/settled').delete());
+    }
+  });
+
+  test('a matching uid without a verified phone cannot delete', async () => {
+    const sameUidAnon = testEnv.authenticatedContext('creator-1', ANON).firestore();
+    await assertFails(sameUidAnon.doc('bets/abc123').delete());
+  });
+
+  test('a bet with no creator uid cannot be deleted by anyone', async () => {
+    for (const db of [creator(), otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc('bets/legacy1').delete());
+      await assertFails(db.doc('bets/legacy2').delete());
+    }
+  });
+
+  test('a voter cannot delete the bet to wipe its votes', async () => {
+    // anon-1 has a vote on the bet; deleting it would take every vote with it.
+    await assertFails(anon('anon-1').doc('bets/abc123').delete());
+    await assertFails(otherPhone().doc('bets/abc123').delete());
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const snap = await ctx.firestore().doc('bets/abc123').get();
+      expect(snap.data().votes).toEqual(openBet.votes);
+    });
+  });
+
+  test('legacy detail docs stay client read-only, even for the creator', async () => {
+    await assertFails(creator().doc('MoneyLineBets/ml-1').delete());
   });
 });
 
@@ -333,6 +376,13 @@ describe('private result texts', () => {
       await assertFails(db.doc('privateResultTexts/abc123/numbers/hash2').set(number));
       await assertFails(db.doc(numberPath).update({ e164: '+15559998888' }));
       await assertFails(db.doc(numberPath).delete());
+      await assertFails(db.doc('privateResultTexts/abc123').delete());
     }
+  });
+
+  test('the creator still cannot touch saved numbers after deleting the bet', async () => {
+    await assertSucceeds(creator().doc('bets/abc123').delete());
+    await assertFails(creator().doc(numberPath).get());
+    await assertFails(creator().doc(numberPath).delete());
   });
 });

@@ -137,3 +137,8 @@ export function canSettleBet(user, bet) {
   if (!isBetCreator(user, bet)) return false;
   return !(bet.status === 'closed' && bet.winnerId);
 }
+
+// Same identity as settling: only the creator, and never a bet with no creator uid.
+export function canDeleteBet(user, bet) {
+  return isBetCreator(user, bet);
+}

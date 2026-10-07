@@ -19,11 +19,16 @@ rules_version = '2';
 //   - saveBet    -> creator edit of their own open bet
 //   - settleBet  -> creator close & settle (the only path that may set
 //                   calledOff)
-// A bet with no creator uid (createdByID) can't be closed or settled by anyone.
+//   - deleteBet  -> creator delete, normally through the server route below;
+//                   a client delete only when that route isn't configured
+// A bet with no creator uid (createdByID) can't be closed, settled or deleted
+// by anyone.
 //
-// The only server code using Firestore is the result-text API routes
-// (app/api/bets/[code]/result-texts/*). They use the Admin SDK, which
-// bypasses these rules, and never write bets/{code}.
+// Server code using Firestore: the result-text API routes
+// (app/api/bets/[code]/result-texts/*), which never write bets/{code}, and the
+// delete route (app/api/bets/[code]/route.js), which checks the same creator
+// rule and deletes the bet with its private result-text numbers. Both use the
+// Admin SDK, which bypasses these rules.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -115,8 +120,10 @@ service cloud.firestore {
         && (!changedKeys().hasAny(['calledOff'])
           || request.resource.data.calledOff is bool);
 
-      // No client deletes.
-      allow delete: if false;
+      // deleteBet: only the creator. Votes are embedded in the doc, so they go
+      // with it. Saved result-text numbers (privateResultTexts) are client-
+      // denied; the server route deletes them with the bet.
+      allow delete: if isBetCreator(resource.data);
     }
 
     // Detail docs written by the old CRA app; hydrateBet reads them by id.
