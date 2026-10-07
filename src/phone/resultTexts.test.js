@@ -114,3 +114,24 @@ test('the native app calls the production API, not the bundled app origin', asyn
   await saveResultText('abc123', '+12025550143');
   expect(fetch).toHaveBeenLastCalledWith(`${PROD_ORIGIN}/api/bets/abc123/result-texts`, expect.anything());
 });
+
+test('the native app saves to the www API with the bearer token and JSON content type', async () => {
+  isNativeApp.mockReturnValue(true);
+  await saveResultText('abc123', '+12025550143');
+  expect(PROD_ORIGIN).toBe('https://www.friendly-bets.com');
+  expect(fetch).toHaveBeenCalledWith('https://www.friendly-bets.com/api/bets/abc123/result-texts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token-1' },
+    body: JSON.stringify({ phone: '+12025550143' }),
+  });
+});
+
+test('the native app asks the www API to send texts with a plain POST when the flag is on', () => {
+  isNativeApp.mockReturnValue(true);
+  delete process.env.NEXT_PUBLIC_RESULT_TEXTS;
+  requestResultTexts('abc123');
+  expect(fetch).not.toHaveBeenCalled();
+  process.env.NEXT_PUBLIC_RESULT_TEXTS = '1';
+  requestResultTexts('abc123');
+  expect(fetch).toHaveBeenCalledWith('https://www.friendly-bets.com/api/bets/abc123/result-texts/send', { method: 'POST' });
+});
