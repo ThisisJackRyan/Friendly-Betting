@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { useParams, useRouter } from '../platform/navigation';
 import {
   FiCheckCircle,
   FiChevronLeft,
@@ -61,7 +61,7 @@ const COPY = {
   propSam: 'Sam',
   next: 'Next',
   textFriends: 'Text friends',
-  sending: 'Sending\u2026',
+  sending: 'Getting it ready\u2026',
 };
 
 function draftInput(state) {
@@ -585,7 +585,6 @@ const CreateForm = () => {
             onResend={() => phone.send()}
             onChangeNumber={() => go(CREATE_STEP.phone)}
             busy={phone.busy}
-            check={stepNumber === step ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
           {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>
@@ -600,7 +599,7 @@ const CreateForm = () => {
         <>
           <PageIntro
             icon={FiCheckCircle}
-            title={code ? 'The bet is on.' : 'Let the group chat decide.'}
+            title={code ? 'The bet is on.' : 'Put the group chat on the line.'}
           >
             {code
               ? 'Your bet is saved. Share it again or follow the picks as they come in.'

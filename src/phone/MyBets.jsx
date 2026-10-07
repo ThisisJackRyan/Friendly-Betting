@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import Link from '../platform/Link';
+import { useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiArrowRight, FiPlus, FiSearch, FiX } from 'react-icons/fi';
 import { subscribeMyBets } from './api';
 import CreatorAuthFlow from './AuthSlides';
 import { signOutCreator } from './creatorAuth';
 import { isCreator } from './creatorSession';
 import { useIdentity } from './identity';
-import { questionOf, statusLabel, typeLabelOf, winnerLabel } from './model';
+import { questionOf, statusLabel, typeLabelOf } from './model';
+import { resultHeadline, settlementOf } from './settlement';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
 
@@ -94,7 +95,7 @@ export function MyBetsList({ user }) {
                     Open for picks
                   </span>
                   <strong>{counts.Open}</strong>
-                  <p>The group chat is deciding</p>
+                  <p>The crew is picking sides</p>
                 </div>
                 <div>
                   <span>Settled</span>
@@ -170,6 +171,7 @@ export function MyBetsList({ user }) {
                 <div className="bet-list">
                   {visible.map((bet) => {
                     const status = statusLabel(bet);
+                    const result = settlementOf(bet);
                     return (
                       <Link key={bet.id} className="bet-card press" href={`/t/${bet.id}`}>
                         <span className="bet-card-top">
@@ -180,7 +182,7 @@ export function MyBetsList({ user }) {
                         <BetFacts bet={bet} />
                         <span className="bet-card-bottom">
                           <span>
-                            {winnerLabel(bet) ? `Winner: ${winnerLabel(bet)}` : 'View the bet'}
+                            {result ? resultHeadline(result) : 'See who’s in'}
                           </span>
                           <FiArrowRight aria-hidden="true" />
                         </span>

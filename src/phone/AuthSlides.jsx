@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { FiChevronLeft } from 'react-icons/fi';
 import { mountPhoneCheck, releasePhoneCheck, sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { SLIDE_MS } from './createMotion';
+import { isNativeApp } from '../platform/runtime';
 import {
   AUTH_COPY,
   codeSentCopy,
   formatUsNational,
   nationalDigits,
+  PERSON_CHECK_CANCELLED,
   phoneError,
   SEND_CODE_ERROR,
   toE164Us,
@@ -66,7 +68,8 @@ export function useCreatorPhone() {
       attempted.current = '';
       return true;
     } catch (err) {
-      showPhoneError(err, SEND_CODE_ERROR);
+      // A closed check just puts the button back.
+      if (err?.code !== PERSON_CHECK_CANCELLED) showPhoneError(err, SEND_CODE_ERROR);
       return false;
     } finally {
       sending.current = false;
@@ -168,7 +171,19 @@ function phoneSlotNode() {
 function parkPhoneSlot(slot) {
   if (!phonePark) {
     phonePark = document.createElement('div');
-    phonePark.hidden = true;
+    // Off screen but still rendered. Resend runs the invisible check from
+    // here, and it does not run reliably under display: none.
+    phonePark.setAttribute('aria-hidden', 'true');
+    Object.assign(phonePark.style, {
+      position: 'fixed',
+      left: '-10000px',
+      top: '0',
+      width: '1px',
+      height: '1px',
+      overflow: 'hidden',
+      opacity: '0',
+      pointerEvents: 'none',
+    });
   }
   if (!phonePark.isConnected && document.body) document.body.appendChild(phonePark);
   phonePark.appendChild(slot);
@@ -177,7 +192,10 @@ function parkPhoneSlot(slot) {
 export function PersonCheck({ containerRef }) {
   const hostRef = useRef(null);
 
-  useEffect(() => {
+  // A layout effect, so the cleanup parks the slot before React detaches the
+  // step. A passive cleanup runs after, when the slot is already gone.
+  useLayoutEffect(() => {
+    if (isNativeApp()) return undefined;
     const host = hostRef.current;
     if (!host) return undefined;
     const slot = phoneSlotNode();
@@ -192,7 +210,7 @@ export function PersonCheck({ containerRef }) {
     };
   }, [containerRef]);
 
-  return <div ref={hostRef} className="person-check" />;
+  return isNativeApp() ? null : <div ref={hostRef} className="person-check" />;
 }
 
 export function PhoneBody({ formatted, onNational, busy, check }) {
@@ -465,7 +483,6 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
             onResend={onResend}
             onChangeNumber={() => go(1)}
             busy={phone.busy}
-            check={step === 2 ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
           <PhoneAlert error={phone.error} code={phone.errorCode} />
         </AuthChrome>

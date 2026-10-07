@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { FiAward, FiChevronLeft, FiShare2 } from 'react-icons/fi';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from '../platform/navigation';
+import Link from '../platform/Link';
+import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
 import { hydrateBet, settleBet, subscribeBet } from './api';
 import CreatorAuthFlow from './AuthSlides';
@@ -18,12 +18,17 @@ import {
   questionOf,
   statusLabel,
   typeLabelOf,
-  winnerLabel,
+  votingOpen,
 } from './model';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import Bars from './Bars';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
+import { buildSettlement, settlementOf } from './settlement';
+import ResultCard from './ResultCard';
+import ResultShare from './ResultShare';
+import { rememberBet } from './notificationStore';
+import { prefersReducedMotion } from './createMotion';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -45,20 +50,7 @@ function SettleSlide({ bet, user, saving, error, onBack, onPick }) {
       </div>
       <div className="scroll">
         {allowed ? (
-          <div className="settle">
-            <p className="field-label">Who won?</p>
-            {(bet.options || []).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className="choice press"
-                disabled={saving}
-                onClick={() => onPick(option.id)}
-              >
-                {optionVoteLabel(bet, option)}
-              </button>
-            ))}
-          </div>
+          <SettlePicker bet={bet} saving={saving} onPick={onPick} onCancel={onBack} />
         ) : (
           <p className="form-error" role="alert">
             Only the creator can settle this bet.
@@ -71,6 +63,30 @@ function SettleSlide({ bet, user, saving, error, onBack, onPick }) {
         )}
       </div>
     </>
+  );
+}
+
+function SettlePicker({ bet, saving, onPick, onCancel }) {
+  const [picked, setPicked] = useState(null);
+  const preview = (bet.options || []).some((option) => option.id === picked) ? {
+    ...bet, status: 'closed', winnerId: picked, settlement: buildSettlement(bet, picked),
+  } : null;
+  return (
+    <div className="settle">
+      <p className="field-label">Who won?</p>
+      <p className="field-hint">Call the outcome. We’ll give the crew the final word.</p>
+      {(bet.options || []).map((option) => (
+        <button key={option.id} type="button" className="choice press" aria-pressed={picked === option.id} disabled={saving} onClick={() => setPicked(option.id)}>
+          {optionVoteLabel(bet, option)}
+        </button>
+      ))}
+      {preview && <>
+        <ResultCard bet={preview} preview />
+        <p className="field-hint">This locks the result. Friends get the final word when they open FRIENDLY where they made their pick.</p>
+        <button type="button" className="cta press" disabled={saving} onClick={() => onPick(picked)}>{saving ? 'Settling…' : 'Settle & notify'}</button>
+      </>}
+      <button type="button" className="text-link" disabled={saving} onClick={onCancel}>Not yet</button>
+    </div>
   );
 }
 
@@ -87,10 +103,12 @@ const TallyScreen = () => {
   const [shareState, setShareState] = useState('');
   const [sharing, setSharing] = useState(false);
   const [authGate, setAuthGate] = useState(false);
+  const resultRef = useRef(null);
+  const revealSettlement = useRef(false);
   const minElapsed = useMinHold(betId);
 
   useEffect(() => {
-    document.title = 'Tally · Friendly';
+    document.title = 'The picks · Friendly';
   }, []);
 
   useEffect(() => {
@@ -100,7 +118,7 @@ const TallyScreen = () => {
     const unsubscribe = subscribeBet(betId, (next, err) => {
       if (cancelled) return;
       if (err) {
-        setError('Could not load this tally.');
+        setError('Couldn’t load the crew’s picks. Try again in a bit.');
         setBet(null);
         return;
       }
@@ -127,6 +145,7 @@ const TallyScreen = () => {
   }, [betId]);
 
   const confirmSettle = async (winnerId, actor = user) => {
+    if (saving) return;
     if (!canSettleBet(actor, bet)) {
       setError('Only the creator can settle this bet.');
       return;
@@ -134,7 +153,9 @@ const TallyScreen = () => {
     setSaving(true);
     setError('');
     try {
-      await settleBet(betId, winnerId);
+      const settled = await settleBet(betId, winnerId);
+      revealSettlement.current = true;
+      if (settled) setBet(settled);
       setSettling(false);
       setAuthGate(false);
     } catch (err) {
@@ -165,9 +186,30 @@ const TallyScreen = () => {
 
   const canSettle = canSettleBet(user, bet);
   const betIsOpen = Boolean(bet && bet.status !== 'closed');
-  const won = bet ? winnerLabel(bet) : '';
+  const result = settlementOf(bet);
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
+
+  useEffect(() => {
+    if (bet?.votes?.some((vote) => vote.voterId === user?.uid)) rememberBet(user.uid, betId);
+  }, [bet, user?.uid, betId]);
+
+  useEffect(() => {
+    if (result) document.title = 'The final word · Friendly';
+  }, [result]);
+
+  useEffect(() => {
+    if (!result || settling || authGate || !revealSettlement.current) return;
+    const card = resultRef.current;
+    const scroller = card?.closest('.scroll');
+    // Scroll only this screen: scrollIntoView also moves overflow-hidden
+    // ancestors in the app shell, which can tuck the result under its header.
+    scroller?.scrollTo?.({
+      top: Math.max(0, scroller.scrollTop + card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16),
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+    revealSettlement.current = false;
+  }, [result, settling, authGate]);
 
   return (
     <div className="phone screen-push tally-screen">
@@ -175,7 +217,7 @@ const TallyScreen = () => {
         <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.back()}>
           <FiChevronLeft size={28} />
         </button>
-        <h1 className="nav-title">Tally</h1>
+        <h1 className="nav-title">{result ? 'The final word' : 'The picks'}</h1>
       </div>
       <div className="scroll">
         {!reveal && <FriendlyLoader />}
@@ -201,35 +243,31 @@ const TallyScreen = () => {
             </div>
             <h2 className="question-xl">{questionOf(bet)}</h2>
             <div className="vote-meta">
-              {bet.closesAt ? <p className="closes">Closes {formatCloses(bet.closesAt)}</p> : null}
-              {won ? (
-                <p className="settled-line">
-                  <FiAward aria-hidden="true" />
-                  Settled on {won}
-                </p>
-              ) : null}
+              {bet.closesAt && votingOpen(bet) ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
+              {!result && !votingOpen(bet) && <p className="closes">Picks are closed. The final call is coming.</p>}
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
+            {result && <><div ref={resultRef}><ResultCard bet={bet} voterId={user?.uid} /></div><ResultShare bet={bet} code={betId} /></>}
             <div className="results-heading">
               <h2>The group’s picks</h2>
               <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
             </div>
-            <Bars bet={bet} highlightId={bet.winnerId} waiting />
+            <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} />
             {error && (
               <p className="form-error" role="alert">
                 {error}
               </p>
             )}
-            <div className="tally-share">
+            {votingOpen(bet) && <div className="tally-share">
               {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
               <button type="button" className="cta press" disabled={sharing} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
-                Share
+                Text the crew
               </button>
-            </div>
-            {betIsOpen && !settling && !authGate && (
+            </div>}
+            {(betIsOpen || (bet.status === 'closed' && !bet.winnerId)) && !settling && !authGate && (
               <button
                 type="button"
                 className="danger press"
@@ -239,23 +277,7 @@ const TallyScreen = () => {
               </button>
             )}
             {canSettle && settling && (
-              <div className="settle">
-                <p className="field-label">Who won?</p>
-                {(bet.options || []).map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className="choice press"
-                    disabled={saving}
-                    onClick={() => confirmSettle(option.id)}
-                  >
-                    {optionVoteLabel(bet, option)}
-                  </button>
-                ))}
-                <button type="button" className="text-link" onClick={() => setSettling(false)}>
-                  Cancel
-                </button>
-              </div>
+              <SettlePicker bet={bet} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
             )}
           </>
         )}

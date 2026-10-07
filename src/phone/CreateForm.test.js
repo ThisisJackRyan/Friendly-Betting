@@ -7,7 +7,7 @@ import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
 import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
-import { AUTH_COPY, codeSentCopy } from './creatorSession';
+import { AUTH_COPY, codeSentCopy, PERSON_CHECK_CANCELLED } from './creatorSession';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 
@@ -221,7 +221,7 @@ test('Text friends saves once and provides vote and live tally links', async () 
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
 
-  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Getting it ready…' })).toBeDisabled();
   finishSave('abc123');
 
   expect(await screen.findByRole('link', { name: /\/b\/abc123/ })).toBeInTheDocument();
@@ -236,7 +236,7 @@ test('Text friends saves once and provides vote and live tally links', async () 
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Who is late?\n1. Yes\n2. No\na coffee\nVote here: http://localhost/b/abc123',
+    'FRIENDLY · You in?\nWho is late?\n1. Yes\n2. No\nAt stake: a coffee\nMake your call: http://localhost/b/abc123',
   );
 });
 
@@ -262,7 +262,7 @@ test('over-under still shares the same short vote text', async () => {
   expect(screen.getByText('Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'Rolls?\n1. Over 13.5\n2. Under 13.5\nVote here: http://localhost/b/abc123',
+    'FRIENDLY · You in?\nRolls?\n1. Over 13.5\n2. Under 13.5\nMake your call: http://localhost/b/abc123',
   );
 });
 
@@ -420,8 +420,22 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
   const codePane = document.querySelector('.create-pane[data-step="5"]:not(.is-leaving)');
-  expect(codePane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
+  expect(codePane.querySelector('.person-check')).toBeNull();
   expect(document.querySelector('.create-pane.is-leaving .person-check')).toBeNull();
+  // The one check is parked off screen, still rendered, for Resend to reuse.
+  expect(slot.isConnected).toBe(true);
+  expect(slot.closest('[hidden]')).toBeNull();
+  expect(slot.parentElement.style.display).not.toBe('none');
+  expect(slot.parentElement).toHaveAttribute('aria-hidden', 'true');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Resend' }));
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(slot);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(sendPhoneCode.mock.calls[0][1]);
+  await act(async () => {
+    finishSend();
+  });
+  expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
 
   '123456'.split('').forEach((digit, index) => {
     fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {
@@ -571,6 +585,29 @@ test('a failed person check stays on the phone step with the check still there',
   expect(pane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+});
+
+test('a closed person check quietly puts the send button back', async () => {
+  const err = new Error('The person check was closed.');
+  err.code = PERSON_CHECK_CANCELLED;
+  sendPhoneCode.mockRejectedValue(err);
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const button = await screen.findByRole('button', { name: 'Send code' });
+  expect(button).toBeEnabled();
+  expect(button).not.toHaveAttribute('aria-disabled');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(document.querySelector('.phone-error-code')).not.toBeInTheDocument();
+  expect(screen.queryByText(PERSON_CHECK_CANCELLED)).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+
+  await userEvent.click(button);
+  await screen.findByRole('button', { name: 'Send code' });
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('send after a check does not reload or show the person sentence', async () => {

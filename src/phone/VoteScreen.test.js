@@ -8,6 +8,7 @@ import { castVote, settleBet, subscribeBet } from './api';
 import { useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
+import { buildSettlement } from './settlement';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -77,7 +78,8 @@ beforeEach(() => {
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
   castVote.mockClear();
-  settleBet.mockClear();
+  settleBet.mockReset();
+  settleBet.mockResolvedValue(undefined);
 });
 
 function renderAt(path, element) {
@@ -99,7 +101,7 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
     optionId: 'a',
   });
   expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
-  expect(screen.getByRole('link', { name: 'Tally' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
   expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
@@ -108,33 +110,36 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
 });
 
 const textFriendsMessage = [
+  'FRIENDLY · You in?',
   'Who is late?',
   '1. Yes',
   '2. No',
-  'a coffee',
-  'Vote here: http://localhost/b/abc123',
+  'At stake: a coffee',
+  'Make your call: http://localhost/b/abc123',
 ].join('\n');
 
 test('the creator can close and settle from the tally', async () => {
   renderAt('/t/abc123', <TallyScreen />);
-  expect(screen.getByRole('heading', { name: 'Tally' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'The picks' })).toBeInTheDocument();
   expect(await screen.findByText('Who is late')).toBeInTheDocument();
-  const share = screen.getByRole('button', { name: 'Share' });
+  const share = screen.getByRole('button', { name: 'Text the crew' });
   const close = screen.getByRole('button', { name: /close & settle/i });
   expect(share).toHaveClass('cta', 'press');
   expect(close).toHaveClass('danger', 'press');
   expect(share.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await userEvent.click(close);
   await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(settleBet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
   expect(settleBet).toHaveBeenCalledWith('abc123', 'b');
-  expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
 });
 
 test('anyone can share the text-friends message from the tally', async () => {
   useIdentity.mockReturnValue({ uid: 'guest' });
   renderAt('/t/abc123', <TallyScreen />);
-  const share = await screen.findByRole('button', { name: 'Share' });
+  const share = await screen.findByRole('button', { name: 'Text the crew' });
   const close = screen.getByRole('button', { name: /close & settle/i });
   expect(close).toHaveClass('danger', 'press');
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
@@ -149,7 +154,7 @@ test('anyone can share the text-friends message from the tally', async () => {
 test('a manual share shows the message under the tally', async () => {
   shareMessage.mockResolvedValue('manual');
   renderAt('/t/abc123', <TallyScreen />);
-  await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Text the crew' }));
   expect(await screen.findByText('Copy the message below.')).toBeInTheDocument();
   expect(document.querySelector('.manual-message')).toHaveTextContent(textFriendsMessage, {
     normalizeWhitespace: false,
@@ -163,7 +168,7 @@ test('tally shows the Friendly loader instead of a loading line', () => {
   expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
   expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
   expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
 });
 
 test('the loader holds for at least 450ms before the tally appears', () => {
@@ -238,4 +243,70 @@ test('the loader holds for at least 450ms before the vote appears', () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+function finishedBet(winnerId = 'a') {
+  const bet = {
+    ...openBet, stake: '$20 pot',
+    votes: [
+      { voterId: 'user-1', name: 'Jack', optionId: 'a' },
+      { voterId: 'sam', name: 'Sam', optionId: 'b' },
+    ],
+  };
+  return { ...bet, status: 'closed', winnerId, settledAt: 123, settlement: buildSettlement(bet, winnerId) };
+}
+
+test('the creator previews, confirms, and gets the committed result immediately', async () => {
+  settleBet.mockResolvedValue(finishedBet('b'));
+  renderAt('/t/abc123', <TallyScreen />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Close & settle' }));
+  await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(screen.getByRole('region', { name: 'Result preview' })).toBeInTheDocument();
+  expect(settleBet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
+  expect(await screen.findByRole('heading', { name: 'Sam won the $20 pot' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Close & settle' })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
+  expect(shareMessage).toHaveBeenCalledWith(expect.stringContaining('Closed · Sam won the $20 pot'));
+  expect(shareMessage).toHaveBeenCalledWith(expect.not.stringContaining('Make your call'));
+});
+
+test('failed settlement keeps the preview available and does not claim a result', async () => {
+  settleBet.mockRejectedValue(new Error('Could not settle. Try again.'));
+  renderAt('/t/abc123', <TallyScreen />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Close & settle' }));
+  await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not settle. Try again.');
+  expect(screen.getByRole('button', { name: 'Settle & notify' })).toBeEnabled();
+  expect(screen.queryByRole('region', { name: 'Settled result' })).not.toBeInTheDocument();
+});
+
+test.each([
+  ['a', 'You called it.'],
+  ['b', 'This one’s settled. Thanks for being in.'],
+])('a participant sees the %s outcome directly on the original invite link', async (winnerId, copy) => {
+  subscribeBet.mockImplementation((_code, onChange) => { onChange(finishedBet(winnerId)); return () => {}; });
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent(copy);
+  expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Share the result' })).toBeInTheDocument();
+});
+
+test('an expired deadline is waiting for a result, never a winner notification', async () => {
+  subscribeBet.mockImplementation((_code, onChange) => { onChange({ ...openBet, closesAt: 1 }); return () => {}; });
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(await screen.findByText('Picks are closed. The final call is coming.')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Settled result' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+});
+
+test('result sharing falls back to copyable final-result text', async () => {
+  subscribeBet.mockImplementation((_code, onChange) => { onChange(finishedBet()); return () => {}; });
+  shareMessage.mockResolvedValue('manual');
+  renderAt('/b/abc123', <VoteScreen />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Share the result' }));
+  expect(await screen.findByText('Copy this into the group chat.')).toBeInTheDocument();
+  expect(document.querySelector('.manual-message')).toHaveTextContent('Closed · Jack won the $20 pot');
 });

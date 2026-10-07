@@ -5,11 +5,13 @@ import {
   onSnapshot,
   query,
   runTransaction,
-  updateDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../Config/firebase-config';
+import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
+import { isCreator } from './creatorSession';
+import { buildSettlement } from './settlement';
+import { rememberBet } from './notificationStore';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -54,7 +56,17 @@ export async function createBet(fields) {
 
 export async function saveBet(existingCode, fields) {
   if (existingCode) {
-    await updateDoc(doc(db, 'bets', existingCode), fields);
+    const ref = doc(db, 'bets', existingCode);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('This bet is gone.');
+      const bet = snap.data();
+      if (!isCreator(auth?.currentUser) || auth.currentUser.uid !== bet.createdByID) {
+        throw new Error('Only the creator can edit this bet.');
+      }
+      if (bet.status === 'closed') throw new Error('This one’s settled. Start a fresh bet.');
+      tx.update(ref, fields);
+    });
     return existingCode;
   }
   return createBet(fields);
@@ -84,7 +96,7 @@ export function subscribeBet(code, onChange) {
   );
 }
 
-export async function hydrateBet(bet) {
+export async function hydrateBet(bet, readDoc = getDoc) {
   if (!bet) return null;
   if (bet.schemaVersion === 2 && Array.isArray(bet.options)) return bet;
   if (!bet.betID || !bet.type) {
@@ -94,7 +106,7 @@ export async function hydrateBet(bet) {
   if (!collectionName) {
     return { ...bet, options: bet.options || [], votes: bet.votes || [] };
   }
-  const snap = await getDoc(doc(db, collectionName, bet.betID));
+  const snap = await readDoc(doc(db, collectionName, bet.betID));
   const extra = snap.exists() ? snap.data() : {};
   let options = [];
   if (bet.type === 'Money Line') {
@@ -131,6 +143,11 @@ export async function castVote(code, vote) {
     const data = snap.data();
     if (data.status === 'closed') throw new Error('This bet is closed.');
     if (data.closesAt && data.closesAt <= Date.now()) throw new Error('This bet is closed.');
+    if (!vote.voterId) throw new Error('Still connecting. Try your pick again.');
+    const full = await hydrateBet(data, (legacyRef) => tx.get(legacyRef));
+    if (!full.options.some((option) => option.id === vote.optionId)) {
+      throw new Error('Pick one of this bet’s sides.');
+    }
     const votes = Array.isArray(data.votes) ? data.votes : [];
     const next = votes.filter((item) => item.voterId !== vote.voterId);
     next.push({
@@ -141,12 +158,30 @@ export async function castVote(code, vote) {
     });
     tx.update(ref, { votes: next });
   });
+  rememberBet(vote.voterId, code);
 }
 
 export async function settleBet(code, winnerId) {
-  await updateDoc(doc(db, 'bets', code), {
-    status: 'closed',
-    winnerId: winnerId || null,
-    settledAt: Date.now(),
+  const ref = doc(db, 'bets', code);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('This bet is gone.');
+    const bet = { ...snap.data(), id: code, code };
+    if (!isCreator(auth?.currentUser) || auth.currentUser.uid !== bet.createdByID) {
+      throw new Error('Only the creator can settle this bet.');
+    }
+    if (bet.status === 'closed' && bet.winnerId) {
+      if (bet.winnerId === winnerId) return bet;
+      throw new Error('This one’s already settled. The result is locked.');
+    }
+    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    const update = {
+      status: 'closed',
+      winnerId,
+      settledAt: Date.now(),
+      settlement: buildSettlement(full, winnerId),
+    };
+    tx.update(ref, update);
+    return { ...full, ...update };
   });
 }

@@ -91,14 +91,14 @@ export function choiceLabels(bet) {
 }
 
 export function formatSms({ question, choices, stake, url }) {
-  const q = String(question || '').trim().replace(/\?+$/, '');
+  const q = String(question || '').trim();
   const choiceLines = (choices || [])
     .filter(Boolean)
     .map((label, index) => `${index + 1}. ${label}`);
   const stakeText = String(stake || '').trim();
-  const lines = [`${q}?`, ...choiceLines];
-  if (stakeText) lines.push(stakeText);
-  lines.push(`Vote here: ${url}`);
+  const lines = ['FRIENDLY · You in?', /[?!.,]$/.test(q) ? q : `${q}?`, ...choiceLines];
+  if (stakeText) lines.push(`At stake: ${stakeText}`);
+  lines.push(`Make your call: ${url}`);
   return lines.join('\n');
 }
 

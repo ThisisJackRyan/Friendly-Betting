@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '../platform/Link';
 import { FiList, FiPlus } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 

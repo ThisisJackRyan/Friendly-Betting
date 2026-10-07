@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname } from '../platform/navigation';
 import { useIdentity } from './identity';
 
 const TabLayout = ({ children }) => {

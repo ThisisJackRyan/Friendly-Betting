@@ -23,7 +23,7 @@ export const AUTH_COPY = {
   codeTitle: 'Code',
   phonePlaceholder: '(555) 555-0100',
   textLine: 'We\u2019ll text a code.',
-  bettorLine: 'Friends still vote with one tap \u2014 no account.',
+  bettorLine: 'Friends pick a side with one tap \u2014 no account.',
   send: 'Send code',
   sending: 'Sending\u2026',
   verify: 'Verify',
@@ -44,6 +44,9 @@ const PHONE_ERRORS = {
   'auth/network-request-failed': 'You\u2019re offline. Try again.',
   'auth/billing-not-enabled': 'Texting isn\u2019t set up yet.',
 };
+
+// Internal only: the person check was closed or timed out. Never shown.
+export const PERSON_CHECK_CANCELLED = 'auth/person-check-cancelled';
 
 export const SEND_CODE_ERROR = 'Couldn\u2019t send a code. Try again.';
 export const VERIFY_CODE_ERROR = 'Couldn\u2019t verify that code. Try again.';
@@ -121,6 +124,6 @@ export function adjacentCreateStep(current, user, direction) {
 
 export function canSettleBet(user, bet) {
   if (!isCreator(user) || !bet) return false;
-  if (bet.status === 'closed') return false;
+  if (bet.status === 'closed' && bet.winnerId) return false;
   return Boolean(user.uid && user.uid === bet.createdByID);
 }
