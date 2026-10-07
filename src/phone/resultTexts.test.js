@@ -73,6 +73,11 @@ test('a server-rejected number throws invalid-phone; other failures throw a gene
   await expect(saveResultText('abc123', '+12025550143')).rejects.toMatchObject({ code: 'save-failed' });
 });
 
+test('a request that never reaches the server is tagged as a network failure', async () => {
+  fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  await expect(saveResultText('abc123', '+12025550143')).rejects.toMatchObject({ code: 'network' });
+});
+
 test('saving never signs in when there is no current user', async () => {
   auth.currentUser = null;
   await expect(saveResultText('abc123', '+12025550143')).rejects.toThrow();

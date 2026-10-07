@@ -28,11 +28,20 @@ export async function saveResultText(code, phone) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Still connecting. Try again.');
   const token = await user.getIdToken();
-  const res = await fetch(`/api/bets/${encodeURIComponent(code)}/result-texts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ phone }),
-  });
+  let res;
+  try {
+    res = await fetch(`/api/bets/${encodeURIComponent(code)}/result-texts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ phone }),
+    });
+  } catch (cause) {
+    // fetch only rejects when the request never reached the server.
+    const err = new Error('Could not reach the server.');
+    err.code = 'network';
+    err.cause = cause;
+    throw err;
+  }
   if (res.ok) return;
   const body = await res.json().catch(() => ({}));
   const invalid = res.status === 400 && body?.error === 'invalid-phone';

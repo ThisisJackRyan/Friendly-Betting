@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { formatUsNational } from './creatorSession';
 import { RESULT_TEXT_COPY } from './resultTextCopy';
 import { normalizeE164, saveResultText } from './resultTexts';
@@ -15,6 +15,17 @@ function readChoice(code) {
   }
 }
 
+function isOffline(err) {
+  if (err?.code === 'network') return true;
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function saveError(err) {
+  if (err?.code === 'invalid-phone') return RESULT_TEXT_COPY.invalid;
+  if (isOffline(err)) return RESULT_TEXT_COPY.offline;
+  return RESULT_TEXT_COPY.saveFailed;
+}
+
 function rememberChoice(code, value) {
   try {
     localStorage.setItem(storageKey(code), value);
@@ -23,12 +34,14 @@ function rememberChoice(code, value) {
   }
 }
 
-// Optional and skippable. Voting never waits on this card.
+// Optional and skippable. Voting never waits on this card, and a failed save
+// never touches the recorded vote.
 const ResultTextCard = ({ code }) => {
   const [choice, setChoice] = useState(null);
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const errorId = useId();
 
   useEffect(() => {
     setChoice(readChoice(code));
@@ -64,7 +77,7 @@ const ResultTextCard = ({ code }) => {
       rememberChoice(code, 'saved');
       setChoice('saved');
     } catch (err) {
-      setError(err?.code === 'invalid-phone' ? RESULT_TEXT_COPY.invalid : RESULT_TEXT_COPY.saveFailed);
+      setError(saveError(err));
     } finally {
       setBusy(false);
     }
@@ -82,19 +95,24 @@ const ResultTextCard = ({ code }) => {
             autoComplete="tel-national"
             name="result-phone"
             aria-label={RESULT_TEXT_COPY.heading}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
             placeholder={RESULT_TEXT_COPY.placeholder}
             value={phone}
             disabled={busy}
-            onChange={(event) => setPhone(formatUsNational(event.target.value))}
+            onChange={(event) => {
+              setError('');
+              setPhone(formatUsNational(event.target.value));
+            }}
           />
         </span>
       </label>
-      <p className="muted result-text-privacy">{RESULT_TEXT_COPY.privacy}</p>
       {error && (
-        <p className="form-error" role="alert">
+        <p id={errorId} className="form-error" role="alert">
           {error}
         </p>
       )}
+      <p className="muted result-text-privacy">{RESULT_TEXT_COPY.privacy}</p>
       <button type="submit" className="cta press" disabled={busy}>
         {busy ? RESULT_TEXT_COPY.saving : RESULT_TEXT_COPY.button}
       </button>

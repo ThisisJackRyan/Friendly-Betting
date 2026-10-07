@@ -32,6 +32,10 @@ export const AUTH_COPY = {
   change: 'Change number',
 };
 
+// Shared with the result-text card so both phone fields speak the same way.
+export const PHONE_INVALID_ERROR = 'Enter a US phone number.';
+export const PHONE_OFFLINE_ERROR = 'You\u2019re offline. Try again.';
+
 const PHONE_ERRORS = {
   'auth/invalid-phone-number': 'That number doesn\u2019t look right.',
   'auth/missing-phone-number': 'Enter a phone number.',
@@ -41,7 +45,7 @@ const PHONE_ERRORS = {
   'auth/invalid-verification-id': 'Send a new code.',
   'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
   'auth/quota-exceeded': 'Texting is paused. Try again later.',
-  'auth/network-request-failed': 'You\u2019re offline. Try again.',
+  'auth/network-request-failed': PHONE_OFFLINE_ERROR,
   'auth/billing-not-enabled': 'Texting isn\u2019t set up yet.',
 };
 
