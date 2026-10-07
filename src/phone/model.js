@@ -139,6 +139,28 @@ export function voteFor(bet, voterId) {
   return bet.votes.find((vote) => vote.voterId === voterId) || null;
 }
 
+// True once the bet's votes record this voter on this option.
+export function hasVote(bet, vote) {
+  const recorded = voteFor(bet, vote?.voterId);
+  return Boolean(recorded) && recorded.optionId === vote.optionId;
+}
+
+// The bet as the voter should see it right after casting `vote`: their prior
+// entry (if any) replaced by the new pick. Returns the bet untouched when
+// there's no vote, no bet, or the bet already records this exact pick, so a
+// server snapshot that includes the vote is never double counted.
+export function withOptimisticVote(bet, vote) {
+  if (!bet || !vote?.voterId || !vote.optionId || hasVote(bet, vote)) return bet;
+  const votes = Array.isArray(bet.votes) ? bet.votes : [];
+  return {
+    ...bet,
+    votes: [
+      ...votes.filter((item) => item.voterId !== vote.voterId),
+      { voterId: vote.voterId, name: vote.name || '', optionId: vote.optionId },
+    ],
+  };
+}
+
 export function tallyCounts(bet) {
   const options = bet?.options || [];
   const votes = Array.isArray(bet?.votes) ? bet.votes : [];

@@ -11,12 +11,14 @@ import { rememberName, savedName, useIdentity } from './identity';
 import {
   formatCloses,
   friendlyError,
+  hasVote,
   optionVoteLabel,
   questionOf,
   statusLabel,
   typeLabelOf,
   voteFor,
   votingOpen,
+  withOptimisticVote,
 } from './model';
 import Bars from './Bars';
 import BetGone from './BetGone';
@@ -38,6 +40,8 @@ const VoteScreen = () => {
   const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [pendingId, setPendingId] = useState(null);
+  // The pick just cast, counted in the tally until a snapshot records it.
+  const [optimistic, setOptimistic] = useState(null);
   const [saving, setSaving] = useState(false);
   const minElapsed = useMinHold(code);
 
@@ -49,8 +53,15 @@ const VoteScreen = () => {
   useEffect(() => {
     setError('');
     setPendingId(null);
+    setOptimistic(null);
   }, [code]);
 
+  const recorded = hasVote(bet, optimistic);
+  useEffect(() => {
+    if (recorded) setOptimistic(null);
+  }, [recorded]);
+
+  const tally = withOptimisticVote(bet, optimistic);
   const existing = voteFor(bet, user?.uid);
   const selectedId = pendingId || existing?.optionId || null;
   const selected = (bet?.options || []).find((option) => option.id === selectedId);
@@ -77,6 +88,7 @@ const VoteScreen = () => {
     setPendingId(optionId);
     const trimmed = name.trim();
     if (trimmed) rememberName(trimmed);
+    setOptimistic({ voterId: user.uid, name: trimmed, optionId });
     try {
       await castVote(code, {
         voterId: user.uid,
@@ -85,6 +97,7 @@ const VoteScreen = () => {
       });
     } catch (err) {
       setPendingId(null);
+      setOptimistic(null);
       setError(friendlyError(err, 'Your pick didn’t stick. Give it another go.'));
     } finally {
       setSaving(false);
@@ -148,7 +161,7 @@ const VoteScreen = () => {
                   {"You're on "}
                   <strong>{optionVoteLabel(bet, selected)}</strong>
                 </p>
-                <Bars bet={bet} highlightId={selectedId} />
+                <Bars bet={tally} highlightId={selectedId} />
                 <Link className="text-link" href={`/t/${bet.id || code}`}>
                   See the picks
                 </Link>
