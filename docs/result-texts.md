@@ -19,13 +19,16 @@ number to get one SMS when the bet is settled. Off by default.
 
 ## Firestore rules
 
-Prod rules live in the Firebase console. Add this (the Admin SDK bypasses rules):
+`firestore.rules` in the repo includes this deny rule (the Admin SDK bypasses rules):
 
 ```
 match /privateResultTexts/{code}/{document=**} {
   allow read, write: if false;
 }
 ```
+
+That file is not auto-deployed. Prod rules live in the Firebase console: per the
+`firestore.rules` header, review it against the live console rules before deploying.
 
 Any catch-all `match /{document=**}` allow rule in the console would expose these numbers.
 It must not exist.

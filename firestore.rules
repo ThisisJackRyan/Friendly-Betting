@@ -1,0 +1,133 @@
+rules_version = '2';
+
+// Friendly Betting – Cloud Firestore security rules.
+//
+// NOT AUTO-DEPLOYED. Nothing in this repo or on Vercel deploys this file.
+// Before anyone runs `firebase deploy --only firestore:rules`, review it
+// line by line against the rules currently live in the Firebase console
+// (Firestore > Rules) for friendly-betting-fb47e, and merge anything the live
+// rules allow that is missing here. Deploying it blindly could break paths
+// that only the live rules know about.
+//
+// Tests: `npm run test:rules` (runs rules/firestore.rules.test.js against the
+// local emulator).
+//
+// Every bet write comes from the browser through src/phone/api.js, so for
+// bets these rules are the only real enforcement:
+//   - createBet  -> create on bets/{code}
+//   - castVote   -> update of `votes` only
+//   - saveBet    -> creator edit of their own open bet
+//   - settleBet  -> creator close & settle
+// A bet with no creator uid (createdByID) can't be closed or settled by anyone.
+//
+// The only server code using Firestore is the result-text API routes
+// (app/api/bets/[code]/result-texts/*). They use the Admin SDK, which
+// bypasses these rules, and never write bets/{code}.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Fields that close or settle a bet. Only the creator may change them,
+    // and only once.
+    function resultFields() {
+      return ['status', 'winnerId', 'settledAt', 'settlement'];
+    }
+
+    // Fields nobody may change after create (other than through the
+    // settle path for resultFields).
+    function lockedFields() {
+      return ['createdByID', 'code', 'createdAt'];
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Signed in with a verified phone number (the app's "creator" session).
+    // Anonymous voters have no phone_number claim.
+    function isPhoneUser() {
+      return request.auth != null
+        && request.auth.token.get('phone_number', null) != null;
+    }
+
+    // The signed-in phone user is the uid stored on the bet. A missing or
+    // empty createdByID is no match (auth uids are never empty), so a bet
+    // with no creator uid can't be edited, closed or settled by anyone.
+    function isBetCreator(bet) {
+      return isPhoneUser()
+        && bet.get('createdByID', '') == request.auth.uid;
+    }
+
+    // Legacy bets have no status field; treat them as open.
+    function isOpen(bet) {
+      return bet.get('status', 'open') != 'closed';
+    }
+
+    function isSettled(bet) {
+      return bet.get('status', 'open') == 'closed'
+        && bet.get('winnerId', null) != null;
+    }
+
+    match /bets/{code} {
+      // Anyone with the link can open a bet, signed in or not.
+      allow get: if true;
+
+      // Only "My bets" lists bets, and only its own (createdByID == uid).
+      allow list: if request.auth != null
+        && resource.data.createdByID == request.auth.uid;
+
+      // createBet: a phone-verified user creates an open, unsettled bet in
+      // their own name. createdByID must be the caller, so nobody can spoof
+      // the creator.
+      allow create: if isPhoneUser()
+        && request.resource.data.createdByID == request.auth.uid
+        && request.resource.data.get('status', 'open') == 'open'
+        && request.resource.data.get('winnerId', null) == null
+        && !request.resource.data.keys().hasAny(['settledAt', 'settlement']);
+
+      // castVote: any signed-in user (voters use anonymous auth) may change
+      // the votes list on an open bet, and nothing else.
+      allow update: if request.auth != null
+        && isOpen(resource.data)
+        && changedKeys().hasOnly(['votes']);
+
+      // saveBet: the creator edits their own open bet. Result fields,
+      // votes and the creator stay untouched.
+      allow update: if isBetCreator(resource.data)
+        && isOpen(resource.data)
+        && !changedKeys().hasAny(resultFields().concat(lockedFields()).concat(['votes']));
+
+      // settleBet: only the creator closes & settles, only once. After a
+      // winner is set the result fields are immutable (no rule allows
+      // changing them on a settled bet).
+      allow update: if isBetCreator(resource.data)
+        && !isSettled(resource.data)
+        && changedKeys().hasOnly(resultFields())
+        && request.resource.data.status == 'closed'
+        && request.resource.data.winnerId is string
+        && request.resource.data.winnerId != '';
+
+      // No client deletes.
+      allow delete: if false;
+    }
+
+    // Detail docs written by the old CRA app; hydrateBet reads them by id.
+    // Read-only from the client now.
+    match /MoneyLineBets/{id} {
+      allow get: if true;
+    }
+    match /OverUnderBets/{id} {
+      allow get: if true;
+    }
+    match /PropBets/{id} {
+      allow get: if true;
+    }
+
+    // Voters' numbers for result texts (docs/result-texts.md). Only the Admin
+    // SDK in the result-text API routes touches them, and it bypasses rules,
+    // so no client may read or write them.
+    match /privateResultTexts/{code}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

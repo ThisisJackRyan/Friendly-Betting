@@ -6,7 +6,6 @@ import Link from '../platform/Link';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
 import { hydrateBet, settleBet, subscribeBet } from './api';
-import CreatorAuthFlow from './AuthSlides';
 import { canSettleBet } from './creatorSession';
 import { useIdentity } from './identity';
 import {
@@ -37,34 +36,6 @@ const SHARE_NOTE = {
   aborted: 'Saved. Text when you\u2019re ready.',
   manual: 'Copy the message below.',
 };
-
-function SettleSlide({ bet, user, saving, error, onBack, onPick }) {
-  const allowed = canSettleBet(user, bet);
-  return (
-    <>
-      <div className="nav-row">
-        <button type="button" className="icon-btn" aria-label="Back" onClick={onBack}>
-          <FiChevronLeft size={28} />
-        </button>
-        <h1 className="nav-title">Settle</h1>
-      </div>
-      <div className="scroll">
-        {allowed ? (
-          <SettlePicker bet={bet} saving={saving} onPick={onPick} onCancel={onBack} />
-        ) : (
-          <p className="form-error" role="alert">
-            Only the creator can settle this bet.
-          </p>
-        )}
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-      </div>
-    </>
-  );
-}
 
 function SettlePicker({ bet, saving, onPick, onCancel }) {
   const [picked, setPicked] = useState(null);
@@ -102,7 +73,6 @@ const TallyScreen = () => {
   const [message, setMessage] = useState('');
   const [shareState, setShareState] = useState('');
   const [sharing, setSharing] = useState(false);
-  const [authGate, setAuthGate] = useState(false);
   const resultRef = useRef(null);
   const revealSettlement = useRef(false);
   const minElapsed = useMinHold(betId);
@@ -144,9 +114,9 @@ const TallyScreen = () => {
     };
   }, [betId]);
 
-  const confirmSettle = async (winnerId, actor = user) => {
+  const confirmSettle = async (winnerId) => {
     if (saving) return;
-    if (!canSettleBet(actor, bet)) {
+    if (!canSettleBet(user, bet)) {
       setError('Only the creator can settle this bet.');
       return;
     }
@@ -157,7 +127,6 @@ const TallyScreen = () => {
       revealSettlement.current = true;
       if (settled) setBet(settled);
       setSettling(false);
-      setAuthGate(false);
     } catch (err) {
       setError(friendlyError(err, 'Could not settle this bet.'));
     } finally {
@@ -185,7 +154,6 @@ const TallyScreen = () => {
   };
 
   const canSettle = canSettleBet(user, bet);
-  const betIsOpen = Boolean(bet && bet.status !== 'closed');
   const result = settlementOf(bet);
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
@@ -199,7 +167,7 @@ const TallyScreen = () => {
   }, [result]);
 
   useEffect(() => {
-    if (!result || settling || authGate || !revealSettlement.current) return;
+    if (!result || settling || !revealSettlement.current) return;
     const card = resultRef.current;
     const scroller = card?.closest('.scroll');
     // Scroll only this screen: scrollIntoView also moves overflow-hidden
@@ -209,7 +177,7 @@ const TallyScreen = () => {
       behavior: prefersReducedMotion() ? 'auto' : 'smooth',
     });
     revealSettlement.current = false;
-  }, [result, settling, authGate]);
+  }, [result, settling]);
 
   return (
     <div className="phone screen-push tally-screen">
@@ -267,12 +235,8 @@ const TallyScreen = () => {
                 Text the crew
               </button>
             </div>}
-            {(betIsOpen || (bet.status === 'closed' && !bet.winnerId)) && !settling && !authGate && (
-              <button
-                type="button"
-                className="danger press"
-                onClick={() => (canSettle ? setSettling(true) : setAuthGate(true))}
-              >
+            {canSettle && !settling && (
+              <button type="button" className="danger press" onClick={() => setSettling(true)}>
                 Close & settle
               </button>
             )}
@@ -282,21 +246,6 @@ const TallyScreen = () => {
           </>
         )}
       </div>
-      {authGate && bet && (
-        <CreatorAuthFlow
-          onCancel={() => setAuthGate(false)}
-          renderDone={(next) => (
-            <SettleSlide
-              bet={bet}
-              user={next}
-              saving={saving}
-              error={error}
-              onBack={() => setAuthGate(false)}
-              onPick={(winnerId) => confirmSettle(winnerId, next)}
-            />
-          )}
-        />
-      )}
     </div>
   );
 };

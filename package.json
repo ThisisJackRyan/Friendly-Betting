@@ -16,7 +16,8 @@
     "mobile:ios": "npm run mobile:sync && cap open ios",
     "mobile:android": "npm run mobile:sync && cap open android",
     "mobile:assets": "node mobile/scripts/assets.mjs",
-    "test:mobile": "playwright test --config mobile/playwright.config.mjs"
+    "test:mobile": "playwright test --config mobile/playwright.config.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-friendly-betting \"jest --config jest.rules.config.js --runInBand\""
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.5.2",
@@ -39,6 +40,7 @@
     "@babel/preset-env": "^7.26.0",
     "@babel/preset-react": "^7.26.0",
     "@capacitor/cli": "^8.5.2",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
