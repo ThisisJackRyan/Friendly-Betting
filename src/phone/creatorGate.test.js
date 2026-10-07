@@ -134,7 +134,8 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
   expect(screen.getByText(AUTH_COPY.bettorLine)).toBeInTheDocument();
   expect(screen.getByLabelText(/phone/i)).toHaveAttribute('placeholder', '(555) 555-0100');
-  expect(document.querySelector('[data-step="phone"] .person-check .recaptcha-slot')).not.toBeNull();
+  const slot = document.querySelector('[data-step="phone"] .person-check .recaptcha-slot');
+  expect(slot).not.toBeNull();
   expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
@@ -145,6 +146,15 @@ test('my bets without a creator session uses the phone slide, not the loader', a
   expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(document.querySelector('[data-step="code"]')).toBeInTheDocument();
+  expect(document.querySelector('.create-pane:not(.is-leaving)[data-step="code"] .person-check')).toBeNull();
+  expect(slot.isConnected).toBe(true);
+  expect(slot.closest('[hidden]')).toBeNull();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Resend' }));
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(slot);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(sendPhoneCode.mock.calls[0][1]);
+  expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
 
   '123456'.split('').forEach((digit, index) => {
     fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {

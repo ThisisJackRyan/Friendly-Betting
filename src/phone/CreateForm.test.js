@@ -405,8 +405,22 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
   const codePane = document.querySelector('.create-pane[data-step="5"]:not(.is-leaving)');
-  expect(codePane.querySelector('.person-check .recaptcha-slot')).not.toBeNull();
+  expect(codePane.querySelector('.person-check')).toBeNull();
   expect(document.querySelector('.create-pane.is-leaving .person-check')).toBeNull();
+  // The one check is parked off screen, still rendered, for Resend to reuse.
+  expect(slot.isConnected).toBe(true);
+  expect(slot.closest('[hidden]')).toBeNull();
+  expect(slot.parentElement.style.display).not.toBe('none');
+  expect(slot.parentElement).toHaveAttribute('aria-hidden', 'true');
+
+  await userEvent.click(screen.getByRole('button', { name: 'Resend' }));
+  expect(sendPhoneCode).toHaveBeenCalledTimes(2);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(slot);
+  expect(sendPhoneCode.mock.calls[1][1]).toBe(sendPhoneCode.mock.calls[0][1]);
+  await act(async () => {
+    finishSend();
+  });
+  expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
 
   '123456'.split('').forEach((digit, index) => {
     fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), {

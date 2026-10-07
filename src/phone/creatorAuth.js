@@ -15,8 +15,9 @@ const ALREADY_IN_USE = new Set([
 
 let verifier = null;
 let verifierNode = null;
-let solvedToken = '';
-let consumedToken = '';
+let verifierSlot = null;
+let verifierBroken = false;
+let failPendingCheck = null;
 
 function unavailable() {
   const err = new Error('Phone sign-in is unavailable.');
@@ -24,12 +25,13 @@ function unavailable() {
   return err;
 }
 
-function emptyNode(node) {
-  if (!node) return;
-  while (node.firstChild) node.removeChild(node.firstChild);
+function checkFailed() {
+  const err = new Error('The person check could not finish.');
+  err.code = 'auth/captcha-check-failed';
+  return err;
 }
 
-export function releasePhoneCheck() {
+function disposeVerifier() {
   if (verifier) {
     try {
       verifier.clear();
@@ -37,69 +39,62 @@ export function releasePhoneCheck() {
       // The widget may already be gone.
     }
   }
-  emptyNode(verifierNode);
+  if (verifierNode && verifierNode.parentNode) verifierNode.parentNode.removeChild(verifierNode);
   verifier = null;
   verifierNode = null;
-  solvedToken = '';
-  consumedToken = '';
+  verifierSlot = null;
+  verifierBroken = false;
+  failPendingCheck = null;
+}
+
+export function releasePhoneCheck() {
+  disposeVerifier();
 }
 
 export function resetPhoneAuthForTests() {
   releasePhoneCheck();
 }
 
-function rememberSolvedToken(token) {
-  const next = String(token || '').trim();
-  if (!next || next === consumedToken) return;
-  solvedToken = next;
+// Invisible reCAPTCHA renders straight into its container and clear() leaves
+// it there, so every verifier gets a fresh child of the slot.
+function phoneVerifier(slot) {
+  if (verifier && verifierSlot === slot && !verifierBroken) return verifier;
+  disposeVerifier();
+  const node = document.createElement('div');
+  slot.appendChild(node);
+  // A fresh params object every time. Firebase writes the site key onto it.
+  const next = new RecaptchaVerifier(auth, node, {
+    size: 'invisible',
+    badge: 'inline',
+    'error-callback': () => {
+      if (verifier !== next) return;
+      if (failPendingCheck) failPendingCheck();
+      else verifierBroken = true;
+    },
+  });
+  verifier = next;
+  verifierNode = node;
+  verifierSlot = slot;
+  return next;
 }
 
-function readSolvedToken(container) {
-  if (solvedToken && solvedToken !== consumedToken) return solvedToken;
-  if (!container || typeof container.querySelectorAll !== 'function') return '';
-  const fields = container.querySelectorAll('textarea');
-  for (let i = 0; i < fields.length; i += 1) {
-    const value = String(fields[i].value || '').trim();
-    if (value && value !== consumedToken) return value;
-  }
-  return '';
-}
-
-// Firebase calls _reset after verifyPhoneNumber returns. That reloads the
-// checkbox iframe, and iOS reloads the page with it, so the solved check is
-// gone before the code step can use it. A passed token does not need that.
-function tokenVerifier(token) {
+// verify() only ever resolves. A grecaptcha error (offline, blocked) arrives
+// on error-callback instead, so race it in as a failed check.
+function checkedVerifier(appVerifier) {
   return {
     type: 'recaptcha',
     verify() {
-      return Promise.resolve(token);
+      return new Promise((resolve, reject) => {
+        failPendingCheck = () => reject(checkFailed());
+        appVerifier.verify().then(resolve, reject);
+      }).finally(() => {
+        failPendingCheck = null;
+      });
     },
-    _reset() {},
+    _reset() {
+      appVerifier._reset();
+    },
   };
-}
-
-function phoneVerifier(container) {
-  if (verifier && verifierNode === container) return verifier;
-  if (verifier) {
-    try {
-      verifier.clear();
-    } catch (err) {
-      // Replace a verifier bound to a previous container.
-    }
-    emptyNode(verifierNode);
-  }
-  emptyNode(container);
-  // A fresh params object every time. Firebase writes the site key onto it.
-  verifier = new RecaptchaVerifier(auth, container, {
-    size: 'normal',
-    theme: 'light',
-    callback: rememberSolvedToken,
-    'expired-callback': () => {
-      solvedToken = '';
-    },
-  });
-  verifierNode = container;
-  return verifier;
 }
 
 export function mountPhoneCheck(container) {
@@ -110,24 +105,14 @@ export function mountPhoneCheck(container) {
 export async function sendPhoneCode(e164, container) {
   if (!auth || !container) throw unavailable();
   const provider = new PhoneAuthProvider(auth);
-  const token = readSolvedToken(container);
-  if (token) {
-    const verificationId = await provider.verifyPhoneNumber(e164, tokenVerifier(token));
-    consumedToken = token;
-    if (solvedToken === token) solvedToken = '';
-    return verificationId;
-  }
   const appVerifier = phoneVerifier(container);
-  if (consumedToken) {
-    try {
-      appVerifier._reset();
-    } catch (err) {
-      // The old response cannot be sent again. A new check can.
-    }
-    consumedToken = '';
-    solvedToken = '';
+  try {
+    return await provider.verifyPhoneNumber(e164, checkedVerifier(appVerifier));
+  } catch (err) {
+    // Only a failed send replaces the check. The next send renders a new one.
+    if (verifier === appVerifier) disposeVerifier();
+    throw err;
   }
-  return provider.verifyPhoneNumber(e164, appVerifier);
 }
 
 async function signInWithPhone(credential) {

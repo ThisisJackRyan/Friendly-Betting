@@ -5,6 +5,8 @@ const mockSignInWithCredential = jest.fn();
 const mockSignOut = jest.fn();
 const mockRecaptchaClear = jest.fn();
 const mockRecaptchaRender = jest.fn(() => Promise.resolve(1));
+const mockSendResult = jest.fn();
+const mockVerifiers = [];
 const mockAuthState = { currentUser: null };
 
 jest.mock('firebase/auth', () => {
@@ -14,10 +16,19 @@ jest.mock('firebase/auth', () => {
   PhoneAuthProvider.credential = (verificationId, code) => mockCredential(verificationId, code);
   return {
     PhoneAuthProvider,
-    RecaptchaVerifier: jest.fn(() => ({
-      clear: mockRecaptchaClear,
-      render: mockRecaptchaRender,
-    })),
+    RecaptchaVerifier: jest.fn((auth, container, params) => {
+      const made = {
+        type: 'recaptcha',
+        container,
+        params,
+        clear: mockRecaptchaClear,
+        render: mockRecaptchaRender,
+        verify: jest.fn(() => Promise.resolve('token')),
+        _reset: jest.fn(),
+      };
+      mockVerifiers.push(made);
+      return made;
+    }),
     linkWithCredential: (...args) => mockLinkWithCredential(...args),
     signInWithCredential: (...args) => mockSignInWithCredential(...args),
     signOut: (...args) => mockSignOut(...args),
@@ -47,96 +58,106 @@ beforeEach(() => {
   mockRecaptchaClear.mockReset();
   mockRecaptchaRender.mockClear();
   RecaptchaVerifier.mockClear();
+  mockSendResult.mockReset();
+  mockVerifiers.length = 0;
   mockAuthState.currentUser = null;
   resetPhoneAuthForTests();
   mockRecaptchaClear.mockClear();
 });
 
-test('send renders a visible person check and returns a verification id', async () => {
-  const container = document.createElement('div');
-  mockVerifyPhoneNumber.mockResolvedValue('vid-1');
-  await expect(mountPhoneCheck(container)).resolves.toBe(1);
-  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-1');
+// Like Firebase: run the verifier, then reset it after the request.
+async function sendLikeFirebase(e164, appVerifier) {
+  try {
+    await appVerifier.verify();
+    expect(appVerifier.type).toBe('recaptcha');
+    return await mockSendResult(e164);
+  } finally {
+    appVerifier._reset();
+  }
+}
+
+test('the person check is invisible, inline, and in a child of the slot', async () => {
+  const slot = document.createElement('div');
+  await expect(mountPhoneCheck(slot)).resolves.toBe(1);
   expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
-  expect(RecaptchaVerifier).toHaveBeenCalledWith(
-    mockAuthState,
-    container,
-    expect.objectContaining({ size: 'normal', theme: 'light' }),
-  );
-  expect(RecaptchaVerifier.mock.calls[0][2].size).not.toBe('invisible');
-  expect(typeof RecaptchaVerifier.mock.calls[0][2].callback).toBe('function');
+  const [authArg, node, params] = RecaptchaVerifier.mock.calls[0];
+  expect(authArg).toBe(mockAuthState);
+  expect(node).not.toBe(slot);
+  expect(node.parentNode).toBe(slot);
+  expect(params).toEqual(expect.objectContaining({ size: 'invisible', badge: 'inline' }));
+  expect(typeof params['error-callback']).toBe('function');
   expect(mockRecaptchaRender).toHaveBeenCalledTimes(1);
-  expect(mockVerifyPhoneNumber).toHaveBeenCalledWith('+15551234567', expect.any(Object));
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
 });
 
-test('a failed person check keeps the verifier so the challenge can stay', async () => {
-  const container = document.createElement('div');
-  const err = new Error('The reCAPTCHA response token provided is either invalid, expired, already used.');
-  err.code = 'auth/captcha-check-failed';
-  mockVerifyPhoneNumber.mockRejectedValueOnce(err);
+test('mount, send, and resend share one verifier', async () => {
+  const slot = document.createElement('div');
+  mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+  mockSendResult.mockResolvedValueOnce('vid-1').mockResolvedValueOnce('vid-2');
 
-  await expect(sendPhoneCode('+15551234567', container)).rejects.toBe(err);
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
-  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  await mountPhoneCheck(slot);
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-1');
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
 
-  mockVerifyPhoneNumber.mockResolvedValueOnce('vid-2');
-  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-2');
   expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
+  expect(mockVerifiers[0].verify).toHaveBeenCalledTimes(2);
+  expect(mockVerifiers[0]._reset).toHaveBeenCalledTimes(2);
   expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  expect(slot.children).toHaveLength(1);
 });
 
-test('a solved check is sent as that token without clearing the widget', async () => {
-  const container = document.createElement('div');
-  const area = document.createElement('textarea');
-  area.name = 'g-recaptcha-response';
-  area.value = 'solved-token';
-  container.appendChild(area);
-  mockVerifyPhoneNumber.mockResolvedValue('vid-solved');
+test.each(['auth/captcha-check-failed', 'auth/billing-not-enabled'])(
+  'a %s send rethrows that error and replaces the verifier next time',
+  async (code) => {
+    const slot = document.createElement('div');
+    const err = new Error(code);
+    err.code = code;
+    mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+    mockSendResult.mockRejectedValueOnce(err).mockResolvedValueOnce('vid-2');
 
-  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-solved');
+    await mountPhoneCheck(slot);
+    const firstNode = RecaptchaVerifier.mock.calls[0][1];
+    await expect(sendPhoneCode('+15551234567', slot)).rejects.toBe(err);
+    expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+    expect(firstNode.parentNode).toBeNull();
+    expect(slot.children).toHaveLength(0);
 
-  expect(RecaptchaVerifier).not.toHaveBeenCalled();
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
-  const passed = mockVerifyPhoneNumber.mock.calls[0][1];
-  await expect(passed.verify()).resolves.toBe('solved-token');
-  expect(passed.type).toBe('recaptcha');
-  passed._reset();
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
-  expect(area.value).toBe('solved-token');
-  expect(container.querySelector('textarea')).toBe(area);
-});
+    await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
+    expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+    const secondNode = RecaptchaVerifier.mock.calls[1][1];
+    expect(secondNode).not.toBe(firstNode);
+    expect(secondNode.parentNode).toBe(slot);
+    expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  },
+);
 
-test('a failed solved check does not clear the widget or replace the verifier', async () => {
-  const container = document.createElement('div');
-  await mountPhoneCheck(container);
-  const params = RecaptchaVerifier.mock.calls[0][2];
-  params.callback('solved-token');
-  const err = new Error('captcha');
-  err.code = 'auth/captcha-check-failed';
-  mockVerifyPhoneNumber.mockRejectedValueOnce(err);
+test('a grecaptcha error during the check fails the send and replaces the verifier', async () => {
+  const slot = document.createElement('div');
+  mockVerifyPhoneNumber.mockImplementation(sendLikeFirebase);
+  await mountPhoneCheck(slot);
+  mockVerifiers[0].verify.mockReturnValueOnce(new Promise(() => {}));
 
-  await expect(sendPhoneCode('+15551234567', container)).rejects.toBe(err);
+  const sent = sendPhoneCode('+15551234567', slot);
+  await Promise.resolve();
+  RecaptchaVerifier.mock.calls[0][2]['error-callback']();
 
-  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
-  const passed = mockVerifyPhoneNumber.mock.calls[0][1];
-  await expect(passed.verify()).resolves.toBe('solved-token');
-  passed._reset();
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
+  await expect(sent).rejects.toMatchObject({ code: 'auth/captcha-check-failed' });
+  expect(mockSendResult).not.toHaveBeenCalled();
+  expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
 
-  mockVerifyPhoneNumber.mockResolvedValueOnce('vid-2');
-  await expect(sendPhoneCode('+15551234567', container)).resolves.toBe('vid-2');
-  expect(RecaptchaVerifier).toHaveBeenCalledTimes(1);
-  expect(mockRecaptchaClear).not.toHaveBeenCalled();
-  await expect(mockVerifyPhoneNumber.mock.calls[1][1].verify()).resolves.toBe('solved-token');
+  mockSendResult.mockResolvedValueOnce('vid-2');
+  await expect(sendPhoneCode('+15551234567', slot)).resolves.toBe('vid-2');
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
+  expect(slot.children).toHaveLength(1);
 });
 
 test('leaving the phone flow is what clears the widget', async () => {
-  const container = document.createElement('div');
-  await mountPhoneCheck(container);
+  const slot = document.createElement('div');
+  await mountPhoneCheck(slot);
   releasePhoneCheck();
   expect(mockRecaptchaClear).toHaveBeenCalledTimes(1);
+  expect(slot.children).toHaveLength(0);
+  await mountPhoneCheck(slot);
+  expect(RecaptchaVerifier).toHaveBeenCalledTimes(2);
 });
 
 test('an anonymous creator is upgraded with linkWithCredential', async () => {
