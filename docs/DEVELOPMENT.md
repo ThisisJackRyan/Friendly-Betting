@@ -69,7 +69,7 @@ The native app has no API of its own: `apiUrl` in `src/phone/resultTexts.js` poi
 Native project IDs are `com.friendlybetting.app`. Device signing and Firebase native registration are required before release:
 
 1. Register that bundle/package ID for iOS and Android in the existing `friendly-betting-fb47e` Firebase project. Download `GoogleService-Info.plist` to `ios/App/App/` and add it to the App target in Xcode. Download `google-services.json` to `android/app/`. Both are ignored by Git. The web Firebase config is not a substitute for native app registration.
-2. For iOS phone auth, add the Firebase **Encoded App ID** URL scheme from the Firebase console, alongside `friendlybetting`, in the App target's URL Types. Enable Push Notifications and Background Modes → Remote notifications, and upload the APNs key in Firebase. The SceneDelegate forwards reCAPTCHA redirects to Firebase. See [Firebase iOS phone setup](https://firebase.google.com/docs/auth/ios/phone-auth).
+2. For iOS phone auth, the Firebase **Encoded App ID** URL scheme (`app-1-897713635691-ios-2dd268892f47ad9de14c2e`) is committed in `ios/App/App/Info.plist` alongside `friendlybetting`; change it only if the Firebase iOS app is re-registered. `AppDelegate` configures Firebase at launch. Enable Push Notifications and Background Modes → Remote notifications, and upload the APNs key in Firebase. The SceneDelegate forwards reCAPTCHA redirects to Firebase. See [Firebase iOS phone setup](https://firebase.google.com/docs/auth/ios/phone-auth).
 3. For Android phone auth, register SHA-1 and SHA-256 fingerprints for each debug/release signing certificate in Firebase. Install Android Studio's SDK required by `android/variables.gradle`. See [Firebase Android phone setup](https://firebase.google.com/docs/auth/android/phone-auth).
 4. Choose your Apple team in Xcode and Android release keystore. Keep signing credentials outside Git. Sync after dependencies or assets change. Swift Package Manager uses the authentication plugin's Lite trait to exclude optional social sign-in SDKs.
 5. To open **prod HTTPS links directly in the installed app**, publish `/.well-known/apple-app-site-association` with your actual Apple team ID + `com.friendlybetting.app`, and `/.well-known/assetlinks.json` with your actual Android release SHA-256 fingerprint. Associate `/b/*`, `/t/*`, `/Bet/*`, and `/Friendly-Betting/*`. The native declarations and URL handlers are included; domain verification needs those real account values (neither file exists in `public/` yet). Until then, HTTPS invitations work on the web, and `friendlybetting://b/CODE` exercises native routing. Unrelated hosts/paths are rejected.
@@ -79,6 +79,16 @@ Firebase JS remains the session authority on both platforms, with IndexedDB pers
 Native release check: create each bet type on a device, verify a configured test phone, invite a browser participant, cast picks from both clients, settle as the creator, check winner/loser results, reopen the app, share the result and confirm the URL uses prod. Also test OTP resend/expiry, Android back, cold/warm deep links, notches, keyboard, rotation and lost connection. Browser smoke tests cannot verify native phone auth, Messages, OS link association or signing.
 
 There is no paywall in this release. Pricing stays locked: 3 free creations, then $3/month unlimited; Founder lifetime $40 for the first 100, $80 for the next 500, then monthly only. Bettors always free. Founder perks, one non-voter nudge and rematches remain later work. (The README only says bettors are free and Founder seats are coming; it lists no prices.)
+
+### iOS phone auth on a free Personal Team
+
+A free Personal Team can't enable Push Notifications, so Firebase has no APNs token and falls back to a reCAPTCHA sheet (SFSafariViewController) before sending the SMS. For that to work:
+
+- Add `GoogleService-Info.plist` through Xcode (Add Files to "App", target **App** checked) so it lands in Copy Bundle Resources. Copying it into the folder isn't enough. Then run `npx cap sync ios`.
+- The iOS API key in the plist must not be restricted to "iOS apps" only. The reCAPTCHA page is a web flow, so an iOS-only key fails with "Requests from this iOS client application <empty> are blocked." In Google Cloud → Credentials, set the key's application restriction to None, but keep its API restrictions (including Identity Toolkit API).
+- To skip SMS and reCAPTCHA limits while testing, add Firebase test phone numbers (Authentication → Sign-in method → Phone) and use those.
+
+When **Send code** fails, the real reason is in the Xcode console: look for `[Friendly] Native phone send failed: <code> – <message>` from the app, and the plugin's `[ FirebaseAuthentication ] Error Domain=FIRAuthErrorDomain Code=…` line. `native/not-configured` means the plugin never set up Firebase (plist missing from the bundle or stale `capacitor.config.json`).
 
 ### Current close/settle and SMS map
 

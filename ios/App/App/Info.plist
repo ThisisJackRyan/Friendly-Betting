@@ -76,6 +76,14 @@
 				<string>friendlybetting</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>firebase-phone-auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-897713635691-ios-2dd268892f47ad9de14c2e</string>
+			</array>
+		</dict>
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
