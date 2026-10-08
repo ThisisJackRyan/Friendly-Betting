@@ -1,6 +1,11 @@
 // Regenerates the README screenshots in docs/screenshots.
 //
 //   npm run screenshots
+//   npm run screenshots -- live-tally.png settled.png --copy-to=/tmp/shots
+//
+// File names pick shots; --copy-to also writes each image to that directory.
+// Shots marked docs: false (many-voters.png, settled-tally.png, results-open.png)
+// only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
@@ -9,6 +14,7 @@
 // signs in, creates a bet or touches prod, and no app code knows about it.
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import sharp from 'sharp';
@@ -32,12 +38,24 @@ const OPEN_BET = {
     { voterId: 'tyler', name: 'Tyler', optionId: 'b' },
   ],
 };
+// Named friends, two picks with no name and one very long name, so the
+// voter lists under each bar show every case.
 const FULL_BET = {
   ...OPEN_BET,
   votes: [
     ...OPEN_BET.votes,
     { voterId: 'maya', name: 'Maya', optionId: 'a' },
     { voterId: 'sam', name: 'Sam', optionId: 'a' },
+    { voterId: 'anon-1', name: '', optionId: 'a' },
+    { voterId: 'anon-2', name: '', optionId: 'a' },
+    { voterId: 'bart', name: 'Bartholomew Maximilian Fitzgerald-Worthington the Third', optionId: 'b' },
+  ],
+};
+const CROWD_BET = {
+  ...FULL_BET,
+  votes: [
+    ...FULL_BET.votes,
+    ...['Kim', 'Lee', 'Ana', 'Ravi', 'Zoe', 'Omar'].map((name) => ({ voterId: name.toLowerCase(), name, optionId: 'a' })),
   ],
 };
 
@@ -101,6 +119,15 @@ async function settle(page) {
   await page.waitForTimeout(400);
 }
 
+// Scroll the screen so `selector` sits near the top, bringing the group's
+// picks and their voter lists into view.
+async function showBars(page, selector = '.results-heading') {
+  await page.locator(selector).first().evaluate((node) => {
+    const scroller = node.closest('.scroll');
+    scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+  });
+}
+
 const SHOTS = [
   {
     file: 'create-bet.png',
@@ -150,6 +177,18 @@ const SHOTS = [
     async run(page) {
       await page.goto(`/t/${CODE}`);
       await page.getByText('Updated live').waitFor();
+      await showBars(page);
+    },
+  },
+  {
+    file: 'many-voters.png',
+    docs: false,
+    user: JACK,
+    bet: CROWD_BET,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await showBars(page);
     },
   },
   {
@@ -161,21 +200,48 @@ const SHOTS = [
     async run(page) {
       await page.goto(`/b/${CODE}`);
       await page.getByText('Bragging rights, secured.').first().waitFor();
-      // The winner ping toast covers the card; it gets its own mention in the README.
-      const dismiss = page.getByRole('button', { name: 'Dismiss result notification' });
-      await dismiss.click();
-      await page.locator('.result-toast').waitFor({ state: 'detached' });
+      await showBars(page, '.result-card');
+    },
+  },
+  {
+    file: 'settled-tally.png',
+    docs: false,
+    user: MAYA,
+    name: 'Maya',
+    bet: FULL_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByText('Bragging rights, secured.').first().waitFor();
+      await showBars(page);
+    },
+  },
+  {
+    file: 'results-open.png',
+    docs: false,
+    user: MAYA,
+    name: 'Maya',
+    bet: FULL_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: /^Results/ }).click();
+      await page.getByRole('dialog', { name: 'The final word' }).waitFor();
     },
   },
 ];
 
-const only = process.argv.slice(2);
+const args = process.argv.slice(2);
+const copyTo = args.find((arg) => arg.startsWith('--copy-to='))?.slice('--copy-to='.length);
+const only = args.filter((arg) => !arg.startsWith('--'));
 const server = await startServer();
 const browser = await chromium.launch();
 let failed = false;
 try {
   await mkdir(OUT, { recursive: true });
-  for (const shot of SHOTS.filter((item) => !only.length || only.includes(item.file))) {
+  if (copyTo) await mkdir(copyTo, { recursive: true });
+  const picked = SHOTS.filter((item) => (only.length ? only.includes(item.file) : item.docs !== false || copyTo));
+  for (const shot of picked) {
     const context = await browser.newContext({
       baseURL: BASE,
       viewport: { width: 393, height: 852 },
@@ -194,7 +260,8 @@ try {
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);
     const png = await page.screenshot({ animations: 'disabled' });
     const optimized = await sharp(png).png({ palette: true, quality: 90, effort: 10, compressionLevel: 9 }).toBuffer();
-    await writeFile(`${OUT}${shot.file}`, optimized);
+    if (shot.docs !== false) await writeFile(`${OUT}${shot.file}`, optimized);
+    if (copyTo) await writeFile(join(copyTo, shot.file), optimized);
     console.log(`${shot.file}  ${(optimized.length / 1024).toFixed(0)} KB`);
     await context.close();
   }

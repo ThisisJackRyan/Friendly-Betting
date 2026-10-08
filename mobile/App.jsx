@@ -8,7 +8,6 @@ import CreateForm from '../src/phone/CreateForm';
 import VoteScreen from '../src/phone/VoteScreen';
 import TallyScreen from '../src/phone/TallyScreen';
 import NotFound from '../src/phone/NotFound';
-import ResultNotifications from '../src/phone/ResultNotifications';
 import NativeLifecycle from './NativeLifecycle';
 
 function Chrome() {
@@ -34,6 +33,5 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>
-    <ResultNotifications />
   </>;
 }

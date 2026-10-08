@@ -3333,61 +3333,108 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .settle .result-card { margin: 12px 0 0; }
 .choice[aria-pressed='true'] { background: var(--wash); box-shadow: inset 0 0 0 2px var(--accent); }
 .choice[aria-pressed='true']::after { background: var(--accent); border-color: var(--accent); }
-.result-notifications {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: calc(86px + env(safe-area-inset-bottom));
-  z-index: 45;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-  max-width: calc(100vw - 32px);
-  color: var(--ink);
+/* Results: a header button with an inbox dialog dropping down below it. */
+.results-menu {
+  position: relative;
+  flex: none;
 }
-.results-trigger {
-  display: flex;
+.header-results {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
   min-height: 44px;
+  padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 30px;
+  border-radius: 9px;
   background: var(--raised);
-  box-shadow: 0 4px 20px #203b2e18;
+  color: var(--ink);
   font: inherit;
   font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
-.results-trigger > span { color: var(--accent); }
-.result-inbox, .result-toast {
+.header-results:hover { background: var(--wash); }
+.header-results > span { color: var(--accent); }
+.result-inbox {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 45;
   width: 350px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - 44px);
+  max-height: min(520px, calc(100dvh - 140px));
+  overflow-y: auto;
   border: 1px solid #c3d3b5;
   border-radius: 18px;
   background: var(--raised);
   box-shadow: 0 12px 40px #203b2e20;
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
-.result-inbox { max-height: min(520px, calc(100dvh - 200px)); overflow-y: auto; }
+.result-inbox:focus { outline: none; }
 .result-inbox-heading { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; }
 .result-inbox-heading h2 { margin: 0; font-size: 16px; }
 .result-inbox-empty, .result-inbox-error { margin: 0; padding: 0 20px 20px; font-size: 13px; line-height: 1.6; }
 .result-inbox ul { list-style: none; padding: 0; margin: 0; }
 .result-inbox li + li { border-top: 1px solid var(--line); }
-.result-inbox a, .result-toast a { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; color: var(--ink); text-decoration: none; font-size: 12px; line-height: 1.5; }
-.result-inbox a:hover, .result-toast a:hover, .result-inbox a.unread { background: var(--wash); }
-.result-inbox a small, .result-toast small { color: var(--muted); font-size: 11px; }
+.result-inbox a { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; color: var(--ink); text-decoration: none; font-size: 12px; line-height: 1.5; }
+.result-inbox a:hover, .result-inbox a.unread { background: var(--wash); }
+.result-inbox a small { color: var(--muted); font-size: 11px; }
 .result-notice-title { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 800; }
 .notice-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: auto; }
-.result-toast { position: relative; overflow: hidden; }
-.result-toast a { padding-right: 50px; }
-.result-toast a > strong { font-size: 16px; }
-.result-toast > button { position: absolute; right: 6px; top: 6px; }
-.results-trigger:focus-visible, .result-notifications a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-@media (min-width: 768px) {
-  .result-notifications { right: 24px; bottom: 24px; }
+.header-results:focus-visible, .result-inbox a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.vote-header > span { margin-left: auto; }
+@media (min-width: 768px) and (max-width: 1150px) {
+  .app-header .results-menu { margin-left: auto; }
+  .app-header .results-menu ~ .header-action { margin-left: 0; }
 }
+@media (max-width: 767px) {
+  .app-header .results-menu { margin-left: auto; }
+  /* Results takes the tagline's spot so the brand row stays one line. */
+  .vote-header:has(.results-menu) > span { display: none; }
+}
+
+/* Who picked each side, under its bar. */
+.voter-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+.voter-list:focus { outline: none; }
+.voter-list:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+.voter-list > li { min-width: 0; max-width: 100%; }
+.voter-name,
+.voter-unnamed {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid #e1e7d9;
+}
+.voter-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voter-unnamed { color: var(--muted); }
+.voter-more button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 8px;
+  margin: -10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 800;
+}
+.voter-more button:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: 8px; }
 
 /* My bets: delete a bet (creator only). */
 .bet-item { display: flex; flex-direction: column; min-width: 0; }

@@ -26,6 +26,7 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { rememberBet } from './notificationStore';
 import { settlementOf } from './settlement';
 import ResultCard from './ResultCard';
+import ResultsMenu from './ResultsMenu';
 import ResultShare from './ResultShare';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
@@ -111,6 +112,7 @@ const VoteScreen = () => {
           <Brand />
         </Link>
         <span>BETTER WITH FRIENDS</span>
+        <ResultsMenu />
       </header>
       <div className="scroll screen-fade vote-screen">
         {!reveal && <FriendlyLoader />}
@@ -150,7 +152,7 @@ const VoteScreen = () => {
                 <ResultCard bet={bet} voterId={user?.uid} />
                 <ResultShare bet={bet} code={code} />
                 <div className="results-heading"><h2>The group’s picks</h2><span>Final tally</span></div>
-                <Bars bet={bet} highlightId={bet.winnerId} />
+                <Bars bet={bet} highlightId={bet.winnerId} showVoters />
               </>
             )}
 

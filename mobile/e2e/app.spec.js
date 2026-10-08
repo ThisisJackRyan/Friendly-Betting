@@ -59,7 +59,8 @@ async function mockCrew(page) {
   await page.route('**/src/phone/api.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `import { buildSettlement } from ${JSON.stringify(new URL('./settlement.js', route.request().url()).href)};
-      let bet = ${JSON.stringify(bet)};
+      // Kept in sessionStorage so a settle survives page.goto within the test.
+      let bet = JSON.parse(sessionStorage.getItem('crew-bet') || 'null') || ${JSON.stringify(bet)};
       const listeners = new Set();
       export const subscribeBet = (code, cb) => { listeners.add(cb); cb(bet); return () => listeners.delete(cb); };
       export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
@@ -67,8 +68,10 @@ async function mockCrew(page) {
       export const createBet = async () => 'crew123';
       export const saveBet = async () => 'crew123';
       export const castVote = async () => {};
+      export const deleteBet = async () => {};
       export const settleBet = async (code, winnerId) => {
         bet = { ...bet, status: 'closed', winnerId, settledAt: 123, settlement: buildSettlement(bet, winnerId) };
+        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
         listeners.forEach(cb => cb(bet)); return bet;
       };`,
   }));
@@ -87,13 +90,25 @@ for (const [side, winner, ping] of [['Bears', 'Jack', 'You called it.'], ['Packe
     await expect(page.getByRole('region', { name: 'Result preview' })).toContainText(`${winner} won the $20 pot`);
     await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Settled result' })).toContainText(`${winner} won the $20 pot`);
-    await expect(page.locator('.result-toast')).toContainText(ping);
-    await page.getByRole('button', { name: 'Dismiss result notification' }).click();
+    await expect(page.getByRole('region', { name: 'Settled result' })).toContainText(ping);
+    // Nothing floats over the settled screen; Results lives in the header now.
+    await expect(page.locator('.results-trigger, .result-toast')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: `${winner} won the $20 pot`, exact: true })).toBeInViewport({ ratio: 1 });
     const header = await page.locator('.tally-screen > .nav-row').boundingBox();
     await expect.poll(async () => (await page.getByRole('region', { name: 'Settled result' }).boundingBox()).y).toBeGreaterThanOrEqual(header.y + header.height + 8);
     await page.screenshot({ path: testInfo.outputPath('settled.png'), animations: 'disabled', scale: 'css' });
     await page.getByRole('button', { name: 'Share the result', exact: true }).click();
     expect(await page.evaluate(() => window.sharedResult)).toContain(`FRIENDLY · Closed · ${winner} won the $20 pot`);
+
+    // The vote link's header carries Results, with the unread count and the participant line.
+    await page.goto('/b/crew123');
+    const results = page.locator('.vote-header').getByRole('button', { name: 'Results 1 new' });
+    await results.click();
+    const inbox = page.getByRole('dialog', { name: 'The final word' });
+    await expect(inbox).toContainText(ping);
+    await expect(inbox.getByRole('link', { name: new RegExp(ping) })).toHaveAttribute('href', '/b/crew123');
+    await page.keyboard.press('Escape');
+    await expect(inbox).toHaveCount(0);
+    await expect(page.locator('.vote-header').getByRole('button', { name: /^Results/ })).toBeFocused();
   });
 }
