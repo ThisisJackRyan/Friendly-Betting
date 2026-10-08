@@ -17,7 +17,8 @@
     "mobile:android": "npm run mobile:sync && cap open android",
     "mobile:assets": "node mobile/scripts/assets.mjs",
     "test:mobile": "playwright test --config mobile/playwright.config.mjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-friendly-betting \"jest --config jest.rules.config.js --runInBand\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-friendly-betting \"jest --config jest.rules.config.js --runInBand\"",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.5.2",
