@@ -1,5 +1,7 @@
 import UIKit
 import Capacitor
+import FirebaseAuth
+import FirebaseCore
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,8 +9,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Configure Firebase first so its app-delegate swizzling (remote
+        // notifications, URL handling) is in place before phone auth runs.
+        // The Capacitor plugin skips its own configure once an app exists.
+        if FirebaseApp.app() == nil {
+            if FirebaseOptions.defaultOptions() != nil {
+                FirebaseApp.configure()
+            } else {
+                NSLog("[Friendly] GoogleService-Info.plist is missing from the App target. Add it in Xcode (Add Files to \"App\", target App checked) so it is in Copy Bundle Resources.")
+            }
+        }
         return true
+    }
+
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        // Non-scene fallback; SceneDelegate handles URLs while a scene is active.
+        if FirebaseApp.app() != nil && Auth.auth().canHandle(url) {
+            return true
+        }
+        return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
