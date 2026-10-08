@@ -190,7 +190,7 @@ const TallyScreen = () => {
               <h2>The group’s picks</h2>
               <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
             </div>
-            <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} />
+            <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters />
             {error && (
               <p className="form-error" role="alert">
                 {error}

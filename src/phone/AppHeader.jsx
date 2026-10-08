@@ -3,6 +3,7 @@
 import Link from '../platform/Link';
 import { FiList, FiPlus } from 'react-icons/fi';
 import { Brand } from './ProductUI';
+import ResultsMenu from './ResultsMenu';
 
 export default function AppHeader({
   className = '',
@@ -21,6 +22,7 @@ export default function AppHeader({
         <span className="live-dot" />
         Good friends. Friendly bets.
       </span>
+      <ResultsMenu />
       <Link
         className="header-action"
         href={createActive ? '/bets' : '/new'}

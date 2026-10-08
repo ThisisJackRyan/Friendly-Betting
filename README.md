@@ -23,8 +23,8 @@
   <tr>
     <td align="center" width="25%"><img src="docs/screenshots/text-the-crew.png" alt="Ready to text screen for the bet Chiefs cover -3? with a $20 pot" width="200"></td>
     <td align="center" width="25%"><img src="docs/screenshots/vote.png" alt="Vote screen asking What's your call? with Chiefs -3 and Bills +3" width="200"></td>
-    <td align="center" width="25%"><img src="docs/screenshots/live-tally.png" alt="Live tally with Chiefs -3 at 60 percent and Bills +3 at 40 percent" width="200"></td>
-    <td align="center" width="25%"><img src="docs/screenshots/settled.png" alt="Settled result: Jack, Maya and Sam won the $20 pot. Bragging rights, secured." width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/live-tally.png" alt="Live tally with Chiefs -3 at 63 percent and Bills +3 at 38 percent, with who picked each side under its bar" width="200"></td>
+    <td align="center" width="25%"><img src="docs/screenshots/settled.png" alt="Settled result: Jack, Maya, Sam and 2 friends won the $20 pot. Bragging rights, secured." width="200"></td>
   </tr>
   <tr>
     <td align="center"><b>Put the group chat on the line.</b></td>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import Link from '../platform/Link';
 import { FiAward, FiBell, FiX } from 'react-icons/fi';
 import { subscribeBet } from './api';
@@ -8,18 +8,33 @@ import { useIdentity } from './identity';
 import { markResultRead, watchResults } from './notificationStore';
 import { notificationFor } from './settlement';
 
+// The Results inbox, opened from a header button. It sits in the header row
+// instead of floating, so it never covers the screen's own buttons.
 function ResultInbox({ uid }) {
   const [saved, setSaved] = useState({ codes: [], read: [] });
   const [results, setResults] = useState({});
   const [errors, setErrors] = useState({});
   const [retry, setRetry] = useState(0);
   const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
   const trigger = useRef(null);
   const panel = useRef(null);
+  const panelId = useId();
+  const titleId = useId();
 
   useEffect(() => watchResults(uid, setSaved), [uid]);
   useEffect(() => {
     if (open) panel.current?.focus();
+  }, [open]);
+
+  // A tap outside the panel closes it, without pulling focus back.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (event) => {
+      if (!wrap.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
   }, [open]);
 
   // Read receipts should not restart Firestore listeners.
@@ -40,7 +55,6 @@ function ResultInbox({ uid }) {
 
   const notices = Object.values(results).filter(Boolean).sort((a, b) => b.at - a.at);
   const unread = notices.filter((notice) => !saved.read.includes(notice.id));
-  const latest = unread[0];
   const failed = Object.values(errors).some(Boolean);
   if (!saved.codes.length) return null;
 
@@ -50,45 +64,40 @@ function ResultInbox({ uid }) {
   };
 
   return (
-    <aside
-      className="result-notifications"
-      aria-label="Bet notifications"
+    <div
+      ref={wrap}
+      className="results-menu"
       onKeyDown={(event) => {
-        if (event.key === 'Escape') close();
+        if (event.key === 'Escape' && open) close();
       }}
     >
       <span className="sr-only" role="status">
         {unread.length ? `${unread.length} new ${unread.length === 1 ? 'result' : 'results'}` : ''}
       </span>
-      {latest && !open && (
-        <div className="result-toast" key={latest.id}>
-          <Link href={`/b/${latest.code}`} onClick={() => markResultRead(uid, latest.id)}>
-            <strong>{latest.title}</strong>
-            <span>{latest.question}</span>
-            <span>{latest.outcome}</span>
-            <span>At stake: {latest.stake}</span>
-            <small>{latest.oneLiner}</small>
-          </Link>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Dismiss result notification"
-            onClick={() => markResultRead(uid, latest.id)}
-          >
-            <FiX aria-hidden="true" />
-          </button>
-        </div>
-      )}
+      <button
+        ref={trigger}
+        type="button"
+        className="header-results press"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <FiBell aria-hidden="true" />
+        Results
+        {unread.length > 0 && <span>{unread.length} new</span>}
+      </button>
       {open && (
         <section
           ref={panel}
           tabIndex={-1}
-          id="friendly-results"
+          id={panelId}
+          role="dialog"
           className="result-inbox"
-          aria-label="Your results"
+          aria-labelledby={titleId}
         >
           <div className="result-inbox-heading">
-            <h2>The final word</h2>
+            <h2 id={titleId}>The final word</h2>
             <button type="button" className="icon-btn" aria-label="Close results" onClick={close}>
               <FiX aria-hidden="true" />
             </button>
@@ -136,23 +145,11 @@ function ResultInbox({ uid }) {
           </ul>
         </section>
       )}
-      <button
-        ref={trigger}
-        type="button"
-        className="results-trigger press"
-        aria-expanded={open}
-        aria-controls={open ? 'friendly-results' : undefined}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <FiBell aria-hidden="true" />
-        Results
-        {unread.length > 0 && <span>{unread.length} new</span>}
-      </button>
-    </aside>
+    </div>
   );
 }
 
-export default function ResultNotifications() {
+export default function ResultsMenu() {
   const user = useIdentity();
   return user?.uid ? <ResultInbox key={user.uid} uid={user.uid} /> : null;
 }

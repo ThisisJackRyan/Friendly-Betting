@@ -48,7 +48,7 @@ Prod: https://www.friendly-bets.com (the apex `friendly-bets.com` redirects to `
 | Creator delete from My Bets | Same DeleteBetDialog; calls the prod `DELETE /api/bets/:code` |
 | Anonymous one-tap picks and live tally | Same VoteScreen, TallyScreen and Firestore API |
 | Creator-only settlement, winning names/stake, result preview | Same transactional settlement and ResultCard |
-| Winner ping, softer loser ping, Results inbox/read receipts | Same ResultNotifications and device storage |
+| Winner ping, softer loser ping, Results inbox/read receipts | Same header ResultsMenu and device storage |
 | Optional result-text number (behind `NEXT_PUBLIC_RESULT_TEXTS`) | Same ResultTextCard; calls the prod API |
 | Text invitations and share final results | Native share sheet; links always point to prod |
 | `/b/:code`, `/t/:code`, legacy `/Bet/:collection/:id` | Same screens, with native deep-link handlers |
@@ -84,7 +84,7 @@ There is no paywall in this release. Pricing stays locked: 3 free creations, the
 
 `CreateForm` → `api.createBet` → `model.formatSms` → `share.shareMessage` → Messages/native share/clipboard → `/b/:code` → `api.castVote` → live Firestore subscriptions.
 
-`TallyScreen` → creator phone gate → choose side + `ResultCard` preview → `api.settleBet` transaction → saved settlement snapshot → `ResultNotifications` for remembered participant IDs → `ResultShare` → `settlement.formatResultMessage` → the same share adapter.
+`TallyScreen` → creator phone gate → choose side + `ResultCard` preview → `api.settleBet` transaction → saved settlement snapshot → `ResultsMenu` for remembered participant IDs → `ResultShare` → `settlement.formatResultMessage` → the same share adapter.
 
 The default notification delivery channel is the in-app inbox, while open or on return. Background push is not built. Tapping **Settle & notify** does not imply an SMS on its own.
 
@@ -94,7 +94,7 @@ Optional result texts ("text me who won"), off by default: with `NEXT_PUBLIC_RES
 
 Creators pick the winning side, review the result, then tap **Settle & notify**. The close and result snapshot are saved in one Firestore transaction, including all winning participants, the stake, and recipient IDs. Repeating the same close keeps the original result; a different winner or a late edit is rejected by the app and by this repo's `firestore.rules` (see [Firestore rules](#firestore-rules) for deployment). Only the creator can close or settle (`calledOff` can only be set by settling).
 
-Participants get **in-app** results: “You called it.” for winners, “This one’s settled.” for everyone else. A Results inbox appears after a successful pick, with an unread ping when the creator settles. Reopening Friendly in the same browser also picks up results settled while away. Read receipts survive reloads and sync between tabs. No participant phone number or extra sign-in is required. Automatic SMS (see result texts above) and background push are not live. Browser storage and the participant identity must still be available; clearing them or using another device loses inbox continuity. Returning to an old bet link registers an existing participant for future results.
+Participants get **in-app** results: “You called it.” for winners, “This one’s settled.” for everyone else. A Results button appears in the header after a successful pick, with an unread count when the creator settles. Reopening Friendly in the same browser also picks up results settled while away. Read receipts survive reloads and sync between tabs. No participant phone number or extra sign-in is required. Automatic SMS (see result texts above) and background push are not live. Browser storage and the participant identity must still be available; clearing them or using another device loses inbox continuity. Returning to an old bet link registers an existing participant for future results.
 
 Both the invite and tally links show the final result, winning names, winning side, and stake. **Share the result** opens the native share sheet, Messages, clipboard, or a copyable text fallback. Money is not collected or paid out. Stakes are displayed as entered; `$5` is not multiplied into a pot, and multiple winners are not assigned invented payout amounts. Only an explicit stake such as `$20 pot` is described as a pot. Noncash and blank stakes work too (blank means bragging rights).
 
@@ -105,8 +105,8 @@ Voice: short, playful, a little competitive. “Make your call.” “Text the c
 ### Crew check before release
 
 1. Create a bet with an explicit `$20 pot`, invite a few friends, and have at least two choose the winning side. Keep one participant on a different page in Friendly; close another participant’s browser.
-2. As the creator, preview the winner and settle. Check the winning names and stake, a winner ping, and the softer message for a losing pick. The participant who was away should see their unread result on reopening the same browser.
-3. Dismiss a ping, reload, and open Results. The result should still be there without a new unread ping. Open the invite link and share the final result back to the group chat.
+2. As the creator, preview the winner and settle. Check the winning names and stake, the “n new” count on Results, the winner line, and the softer message for a losing pick. The participant who was away should see their unread result on reopening the same browser.
+3. Open Results, tap the result, then reload and open Results again. The result should still be there without a new unread count. Open the invite link and share the final result back to the group chat.
 4. Repeat with pizza, an empty stake, nobody on the winning side, and an expired pick deadline. Expiry alone must not announce a winner. Try a second close and a late pick; neither should change the final result.
 5. As the creator, delete a bet from My bets and confirm its links show the bet is gone. As a non-creator, confirm there is no delete.
 
@@ -162,7 +162,7 @@ npm run screenshots               # or: node scripts/screenshots.mjs vote.png
 
 `scripts/screenshots.mjs` reuses a Vite app preview already on `http://127.0.0.1:5173` or starts `npm run mobile:dev` and stops it afterwards. It opens each screen in Playwright's Chromium at 393×852, 2x scale, touch, reduced motion. Like `mobile/e2e/app.spec.js`, it aborts every Google/Firebase request and serves fixture versions of `src/phone/identity.js` and `src/phone/api.js` through `page.route`, so no app code changes, nothing signs in and no real bets are created. The settled shot builds its result with the app's own `buildSettlement`. Images are palette-compressed with `sharp`. The script fails if a page throws.
 
-Shots: `create-bet.png` (stake slide), `text-the-crew.png` (ready-to-text recap), `vote.png` (one-tap pick), `live-tally.png` (creator's live tally) and `settled.png` (winner's settled result). Older design-review captures are in `docs/design-refresh/`.
+Shots: `create-bet.png` (stake slide), `text-the-crew.png` (ready-to-text recap), `vote.png` (one-tap pick), `live-tally.png` (creator's live tally, with who picked each side) and `settled.png` (winner's settled result and final tally). `many-voters.png` (a side with more than five names) `settled-tally.png` (the settled final tally) and `results-open.png` (the header Results inbox) are only written with `--copy-to=<dir>`, which also copies every shot to that directory. Older design-review captures are in `docs/design-refresh/`.
 
 ## Deploy on Vercel
 

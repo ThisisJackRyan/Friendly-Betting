@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
@@ -76,6 +76,10 @@ jest.mock('./resultTexts', () => ({
 jest.mock('./share', () => ({
   shareMessage: jest.fn(async () => 'copied'),
 }));
+
+// The header Results inbox keeps its own bet listeners (ResultsMenu.test.jsx);
+// stub it so these tests only see the screen's own subscription.
+jest.mock('./ResultsMenu', () => () => <span data-testid="results-menu" />);
 
 beforeEach(() => {
   useIdentity.mockReturnValue(phoneCreator);
@@ -659,7 +663,20 @@ describe('live results after voting', () => {
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('You called it.');
     expect(screen.getByText('Final tally')).toBeInTheDocument();
     expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Picked by Jack' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Picked by Sam' })).toBeInTheDocument();
   });
+
+  test('the You’re on view keeps counts only, without voter names', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(document.querySelector('.voter-list')).toBeNull();
+  });
+});
+
+test('the vote screen header carries the Results menu', async () => {
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(within(await screen.findByRole('banner')).getByTestId('results-menu')).toBeInTheDocument();
 });
 
 describe('your own pick counts right away', () => {
