@@ -40,6 +40,43 @@ test('direct routes retain all bet types, My bets and missing-link recovery', as
   await expect(page.getByRole('link', { name: /home/i })).toBeVisible();
 });
 
+test('browser back walks the create steps and keeps the draft', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Start a bet', exact: true }).click();
+  await expect(page).toHaveURL(/\/new$/);
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await expect(page).toHaveURL(/\/new#step-2$/);
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page).toHaveURL(/\/new#step-3$/);
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+
+  // The same history back the iOS swipe and Android back button use.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/new#step-2$/);
+  await expect(page.getByLabel(/Question/)).toHaveValue('Who takes the win?');
+  await page.goForward();
+  await expect(page.getByLabel('Stake', { exact: true })).toHaveValue('$20 pot');
+
+  // On-screen back is a history back too, down to the type picker, then home.
+  await page.locator('.create-pane:not(.is-leaving)').getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/new#step-2$/);
+  await page.locator('.create-pane:not(.is-leaving)').getByRole('button', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/new$/);
+  await expect(page.getByRole('button', { name: /Money Line/ })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
+
+  // A refresh on a step hash starts Create over cleanly.
+  await page.goto('/new/prop#step-3');
+  await expect(page).toHaveURL(/\/new\/prop$/);
+  await expect(page.getByLabel(/Option 1/)).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 async function mockCrew(page) {
   const bet = {
     id: 'crew123', code: 'crew123', schemaVersion: 2, type: 'money-line',

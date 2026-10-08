@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from '../platform/Link';
-import { useParams, useRouter } from '../platform/navigation';
+import { useParams, usePathname, useRouter } from '../platform/navigation';
 import {
   FiCheckCircle,
   FiChevronLeft,
@@ -64,6 +64,19 @@ const COPY = {
   sending: 'Getting it ready\u2026',
 };
 
+// Each Create step after the one Create opened on is its own `#step-N` history
+// entry on this same page, pushed through the platform router (a same-document
+// hash navigation in both Next and React Router, so the draft in state survives).
+// The iOS swipe, Android back, browser back, and the on-screen back all pop it.
+const STEP_HASH = /^#step-(\d+)$/;
+
+function stepFromHash(hash) {
+  const match = STEP_HASH.exec(hash || '');
+  return match ? Number(match[1]) : null;
+}
+
+const SKIP_WHEN_CREATOR = [CREATE_STEP.phone, CREATE_STEP.code];
+
 function draftInput(state) {
   return {
     question: state.question,
@@ -102,6 +115,7 @@ function Recap({ fields }) {
 
 const CreateForm = () => {
   const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
   const identity = useIdentity();
   const [linkedUser, setLinkedUser] = useState(null);
@@ -115,6 +129,10 @@ const CreateForm = () => {
   const invalidRoute = Boolean(rawType) && !routeType;
 
   const [step, setStep] = useState(routeType ? 2 : 1);
+  // entries[0] is the hashless entry Create opened on; later ones carry `#step-N`.
+  // Forward moves push, so steps in entries only grow and a hash finds its entry.
+  const stepHistory = useRef({ entries: [step], index: 0 });
+  const onPopRef = useRef(null);
   const [leaving, setLeaving] = useState(null);
   const [motion, setMotion] = useState('forward');
   const [hasMoved, setHasMoved] = useState(false);
@@ -157,6 +175,21 @@ const CreateForm = () => {
     if (invalidRoute) router.replace('/new');
   }, [invalidRoute, router]);
 
+  // A refresh (or a return from another page) on a step hash starts Create over
+  // on its first step, so the stale hash is dropped instead of adding an entry.
+  useEffect(() => {
+    if (!invalidRoute && stepFromHash(window.location.hash) != null) {
+      router.replace(pathname, { scroll: false });
+    }
+    // Mount only: later hashes are this form's own entries.
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => onPopRef.current?.();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   useEffect(() => {
     const titles = {
       1: COPY.newBet,
@@ -188,24 +221,76 @@ const CreateForm = () => {
 
   stepRef.current = step;
 
+  const stepUrl = (next) => `${pathname}#step-${next}`;
+
+  const pushStep = (next) => {
+    const trail = stepHistory.current;
+    trail.entries = [...trail.entries.slice(0, trail.index + 1), next];
+    trail.index = trail.entries.length - 1;
+    router.push(stepUrl(next), { scroll: false });
+  };
+
+  // Replace semantics: no new entry. The entry Create opened on keeps its URL.
+  const replaceStep = (next) => {
+    const trail = stepHistory.current;
+    trail.entries = trail.entries.map((entry, i) => (i === trail.index ? next : entry));
+    if (trail.index > 0) router.replace(stepUrl(next), { scroll: false });
+  };
+
+  const show = (next, direction) => {
+    setMotion(direction);
+    setLeaving(stepRef.current);
+    setHasMoved(true);
+    setError('');
+    setStep(next);
+  };
+
   useEffect(() => {
     if (!phone.verifiedUser || advancedAuth.current) return;
     advancedAuth.current = true;
     setLinkedUser(phone.verifiedUser);
-    setMotion('forward');
-    setLeaving(stepRef.current);
-    setHasMoved(true);
-    setError('');
-    setStep(CREATE_STEP.share);
+    // The share slide takes the code slide's entry: back from share goes to stake
+    // (as the on-screen back does), never to a spent code.
+    if (SKIP_WHEN_CREATOR.includes(stepRef.current)) replaceStep(CREATE_STEP.share);
+    else pushStep(CREATE_STEP.share);
+    show(CREATE_STEP.share, 'forward');
   }, [phone.verifiedUser]);
 
+  // Forward moves add an entry; a backward move that isn't a history back
+  // (nothing of ours behind it) replaces the current one.
   const go = (next) => {
     if (exitHome || next == null || next === step || next < 1 || next > CREATE_STEP.share) return;
-    setMotion(next > step ? 'forward' : 'back');
-    setLeaving(step);
-    setHasMoved(true);
-    setError('');
-    setStep(next);
+    if (next > step) pushStep(next);
+    else replaceStep(next);
+    show(next, next > step ? 'forward' : 'back');
+  };
+
+  // Moves back to `target` through history when it is the entry right behind,
+  // so the slide comes from the popstate below like any swipe or Android back.
+  const goBackTo = (target) => {
+    const trail = stepHistory.current;
+    if (trail.index > 0 && trail.entries[trail.index - 1] === target) router.back();
+    else go(target);
+  };
+
+  onPopRef.current = () => {
+    if (window.location.pathname !== pathname) return;
+    const trail = stepHistory.current;
+    const hashStep = stepFromHash(window.location.hash);
+    const index = hashStep == null ? 0 : trail.entries.indexOf(hashStep, 1);
+    if (index < 0) return;
+    const from = trail.index;
+    trail.index = index;
+    const target = trail.entries[index];
+    if (exitHome || target === stepRef.current) return;
+    // Same rule as adjacentCreateStep: a verified creator never sees phone or
+    // code again, so keep walking past that entry in the same direction.
+    if (SKIP_WHEN_CREATOR.includes(target) && isCreator(user)) {
+      if (index < from) router.back();
+      else window.history.forward();
+      return;
+    }
+    show(target, target < stepRef.current ? 'back' : 'forward');
   };
 
   const goHome = () => {
@@ -233,15 +318,18 @@ const CreateForm = () => {
   const pickType = (id) => {
     if (exitHome) return;
     setType(id);
-    setMotion('forward');
-    setLeaving(step);
-    setHasMoved(true);
-    setError('');
-    setStep(2);
+    pushStep(2);
+    show(2, 'forward');
   };
 
+  // With a Create entry behind, back is a history back: the same path as a
+  // swipe. On the entry Create opened on, back works as it always has.
   const onBack = (stepNumber) => {
     if (exitHome) return;
+    if (stepHistory.current.index > 0) {
+      router.back();
+      return;
+    }
     const prev = adjacentCreateStep(stepNumber, user, -1);
     if (prev == null) {
       goHome();
@@ -583,7 +671,7 @@ const CreateForm = () => {
             otp={phone.otp}
             onOtp={phone.onOtp}
             onResend={() => phone.send()}
-            onChangeNumber={() => go(CREATE_STEP.phone)}
+            onChangeNumber={() => goBackTo(CREATE_STEP.phone)}
             busy={phone.busy}
           />
           {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
