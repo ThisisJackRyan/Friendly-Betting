@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { App } from '@capacitor/app';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isNativeApp } from '../src/platform/runtime';
+import { isTabRoot } from '../src/platform/tabRoots';
 import { appPathFromUrl } from './deepLinks';
+import { goToRoot } from './navigation';
 
 export default function NativeLifecycle() {
   const navigate = useNavigate();
@@ -27,10 +29,15 @@ export default function NativeLifecycle() {
     // A link pushes, so back returns to where the user was. On a cold launch
     // that is Home: the app boots on '/', so Home sits under the link rather than
     // a blank entry. A link to the page already showing (iOS also replays the
-    // launch URL as appUrlOpen) replaces, so back never repeats a page.
+    // launch URL as appUrlOpen) replaces, so back never repeats a page. A link
+    // to a tab resets to it, like tapping the tab.
     const open = ({ url }) => {
       const path = appPathFromUrl(url);
       if (!active || !path) return;
+      if (isTabRoot(path)) {
+        goToRoot(navigateRef.current, path);
+        return;
+      }
       const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       navigateRef.current(path, { replace: path === here });
     };
@@ -39,11 +46,14 @@ export default function NativeLifecycle() {
       const launch = await App.getLaunchUrl();
       if (launch) open(launch);
       // The one back handler (with it, Capacitor skips the WebView's own back).
-      // React Router's idx is the app's history, Create steps included.
+      // React Router's idx is the app's history, Create steps included. Home is
+      // a hard stop: back there leaves the app whatever history the WebView
+      // holds. My bets, the other tab, goes Home first, as tabbed apps do.
       await attach('backButton', () => {
-        if (window.history.state?.idx > 0) navigateRef.current(-1);
-        else if (window.location.pathname !== '/') navigateRef.current('/', { replace: true });
-        else App.minimizeApp();
+        const { pathname } = window.location;
+        if (pathname === '/') App.minimizeApp();
+        else if (!isTabRoot(pathname) && window.history.state?.idx > 0) navigateRef.current(-1);
+        else goToRoot(navigateRef.current, '/');
       });
     };
     start().catch(() => { /* Ordinary in-app navigation remains available. */ });

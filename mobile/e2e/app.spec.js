@@ -337,3 +337,131 @@ for (const [side, winner, ping, headline, subline] of [
     await expect(page.locator('.vote-header').getByRole('button', { name: /^Results/ })).toBeFocused();
   });
 }
+
+// The app as Capacitor runs it: a native platform, with the App plugin's back
+// button and minimize recorded on window so a test can press back.
+async function mockNative(page) {
+  await page.addInitScript(() => {
+    window.CapacitorCustomPlatform = { name: 'android' };
+  });
+  await page.route('**/node_modules/.vite/deps/@capacitor_app.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `const handlers = {};
+      window.minimized = 0;
+      window.appEmit = (event, data) => (handlers[event] || new Set()).forEach((callback) => callback(data));
+      window.appListens = (event) => Boolean(handlers[event]?.size);
+      export const App = {
+        addListener: async (event, callback) => {
+          (handlers[event] ||= new Set()).add(callback);
+          return { remove: async () => handlers[event].delete(callback) };
+        },
+        getLaunchUrl: async () => undefined,
+        minimizeApp: async () => { window.minimized += 1; },
+      };`,
+  }));
+}
+
+const tab = (page, name) => page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name, exact: true });
+const androidBack = (page) => page.evaluate(() => window.appEmit('backButton', { canGoBack: window.history.length > 1 }));
+const appIndex = (page) => page.evaluate(() => window.history.state?.idx);
+
+test('tabs are roots: Home has nothing behind it after switching tabs', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page);
+  await page.goto('/bets');
+  await tab(page, 'Home').click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await tab(page, 'My bets').click();
+  await expect(page).toHaveURL(/\/bets$/);
+  await tab(page, 'Home').click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  expect(await appIndex(page)).toBe(0);
+
+  // The history back the iOS swipe uses never lands on My bets.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/bets$/);
+  expect(errors).toEqual([]);
+});
+
+test('a tally opened from My bets backs out to My bets, and Home from Create unwinds', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page);
+  await page.goto('/');
+  await page.getByRole('link', { name: /View your bets/ }).click();
+  await expect(page).toHaveURL(/\/bets$/);
+  expect(await appIndex(page)).toBe(0);
+  await page.getByRole('link', { name: /Who takes the win\?/ }).click();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/bets$/);
+  await expect(tab(page, 'My bets')).toHaveAttribute('aria-current', 'page');
+
+  // Home from a Create step walks back to the first entry rather than pushing.
+  await tab(page, 'Create').click();
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await expect(page).toHaveURL(/\/new#step-2$/);
+  expect(await appIndex(page)).toBe(2);
+  await page.locator('.create-pane:not(.is-leaving)').getByRole('link', { name: /friendly/i }).first().click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
+  expect(await appIndex(page)).toBe(0);
+  await page.goBack();
+  await expect(page).not.toHaveURL(/127\.0\.0\.1:5173\/(?:bets|new.*)$/);
+  expect(errors).toEqual([]);
+});
+
+test('making a bet from My bets lands on its tally, and back returns to My bets', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [], share: 'dismiss' });
+  await page.goto('/bets');
+  await tab(page, 'Create').click();
+  await expect(page).toHaveURL(/\/new$/);
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByLabel('Option A').fill('Bears');
+  await page.getByLabel('Option B').fill('Packers');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/bets$/);
+  expect(errors).toEqual([]);
+});
+
+test('in the app, Android back on Home minimizes and on My bets goes Home', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page);
+  await mockNative(page);
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => window.appListens?.('backButton'))).toBe(true);
+
+  // Home -> My bets -> a tally -> back -> Home.
+  await tab(page, 'My bets').click();
+  await expect(page).toHaveURL(/\/bets$/);
+  await page.getByRole('link', { name: /Who takes the win\?/ }).click();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await androidBack(page);
+  await expect(page).toHaveURL(/\/bets$/);
+  expect(await page.evaluate(() => window.minimized)).toBe(0);
+  await androidBack(page);
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  expect(await appIndex(page)).toBe(0);
+  expect(await page.evaluate(() => window.minimized)).toBe(0);
+  await androidBack(page);
+  await expect.poll(() => page.evaluate(() => window.minimized)).toBe(1);
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+
+  // Even with app entries behind Home, back there leaves the app.
+  await page.evaluate(() => {
+    window.history.pushState({ ...window.history.state, idx: 1 }, '', '/');
+  });
+  await androidBack(page);
+  await expect.poll(() => page.evaluate(() => window.minimized)).toBe(2);
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  expect(errors).toEqual([]);
+});

@@ -139,3 +139,42 @@ test('listeners that attach after unmount are removed at once', async () => {
   expect(mockRemoves).toHaveLength(2);
   mockRemoves.forEach((remove) => expect(remove).toHaveBeenCalledTimes(1));
 });
+
+test('Android back on Home minimizes even with app history behind it', async () => {
+  await start('/t/abc');
+  act(() => navigate('/'));
+  expect(idx()).toBe(1);
+  await act(async () => mockHandlers.backButton({ canGoBack: true }));
+  expect(App.minimizeApp).toHaveBeenCalledTimes(1);
+  expect(where()).toBe('/');
+  expect(idx()).toBe(1);
+});
+
+test('Android back on My bets goes Home with nothing behind it, then minimizes', async () => {
+  await start('/t/abc');
+  act(() => navigate('/bets'));
+  expect(idx()).toBe(1);
+  await act(async () => mockHandlers.backButton({ canGoBack: true }));
+  await waitFor(() => expect(where()).toBe('/'));
+  await waitFor(() => expect(idx()).toBe(0));
+  expect(App.minimizeApp).not.toHaveBeenCalled();
+  await act(async () => mockHandlers.backButton({ canGoBack: true }));
+  expect(App.minimizeApp).toHaveBeenCalledTimes(1);
+});
+
+test('Android back from a screen opened from My bets returns to My bets', async () => {
+  await start('/bets');
+  act(() => navigate('/t/abc'));
+  await act(async () => mockHandlers.backButton({ canGoBack: true }));
+  await waitFor(() => expect(where()).toBe('/bets'));
+  expect(idx()).toBe(0);
+  expect(App.minimizeApp).not.toHaveBeenCalled();
+});
+
+test('a link to a tab while running resets to it like tapping the tab', async () => {
+  await start('/');
+  act(() => navigate('/t/abc'));
+  await act(async () => mockHandlers.appUrlOpen({ url: 'friendlybetting://bets' }));
+  await waitFor(() => expect(where()).toBe('/bets'));
+  await waitFor(() => expect(idx()).toBe(0));
+});
