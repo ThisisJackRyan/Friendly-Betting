@@ -104,7 +104,11 @@ async function mockCrew(page, { votes, share } = {}) {
       export const hydrateBet = async b => b;
       export const createBet = async () => 'crew123';
       export const saveBet = async () => 'crew123';
-      export const castVote = async () => {};
+      export const castVote = async (code, vote) => {
+        bet = { ...bet, votes: [...bet.votes.filter(v => v.voterId !== vote.voterId), { ...vote, at: 1 }] };
+        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
+        listeners.forEach(cb => cb(bet));
+      };
       export const deleteBet = async () => {};
       export const settleBet = async (code, winnerId) => {
         bet = { ...bet, status: 'closed', winnerId, settledAt: 123, settlement: buildSettlement(bet, winnerId) };
@@ -159,8 +163,9 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   const button = page.getByRole('button', { name: 'Text the crew', exact: true });
   await expect(button).toHaveClass(/cta-nudge/);
   await expect(page.locator('.tally-share.is-nudge')).toBeVisible();
-  // The invite card is just the button: no vote link under it.
-  await expect(page.locator('.tally-share a')).toHaveCount(0);
+  // Under the invite, only the creator's own way to vote: no raw vote URL.
+  await expect(page.locator('.tally-share a')).toHaveCount(1);
+  await expect(page.locator('.tally-share a')).toHaveText('Wanna vote?');
   await expect(page.locator('.tally-share')).not.toContainText('/b/crew123');
   await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
   expect(await shares()).toEqual([invite]);
@@ -193,6 +198,54 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   expect(errors).toEqual([]);
 });
 
+test('after Create, Wanna vote? opens the vote page, back returns to the tally, and a pick hides it', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [], share: 'dismiss' });
+  const shares = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
+
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Start a bet', exact: true }).click();
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByLabel('Option A').fill('Bears');
+  await page.getByLabel('Option B').fill('Packers');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+
+  const link = page.getByRole('link', { name: 'Wanna vote?', exact: true });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', '/b/crew123');
+  await expect(page.locator('.tally-share.is-nudge').getByRole('link')).toHaveText('Wanna vote?');
+  await page.screenshot({ path: testInfo.outputPath('creator-vote-link.png'), animations: 'disabled', scale: 'css' });
+
+  // In-app navigation: the vote page, then history back to the same tally.
+  await link.click();
+  await expect(page).toHaveURL(/\/b\/crew123$/);
+  await expect(page.getByRole('heading', { name: 'What’s your call?' })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
+  await expect(link).toBeVisible();
+  // Coming back never reopens the share sheet.
+  expect(await shares()).toHaveLength(1);
+
+  // Once the creator picks, the tally drops the link.
+  await link.click();
+  await expect(page).toHaveURL(/\/b\/crew123$/);
+  await page.getByRole('button', { name: 'Bears', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'What’s your call?' })).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(page.locator('.voter-list')).toContainText('Jack');
+  await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toBeVisible();
+  await expect(link).toHaveCount(0);
+  expect(await shares()).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
 test('with no share sheet and no clipboard, the tally shows the whole invite to copy', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -206,7 +259,8 @@ test('with no share sheet and no clipboard, the tally shows the whole invite to 
   await expect(card.locator('.manual-message')).toHaveText(
     'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123',
   );
-  await expect(card.locator('a')).toHaveCount(0);
+  // No raw vote URL to tap; the creator's only link is Wanna vote?.
+  await expect(card.locator('a')).toHaveText(['Wanna vote?']);
   expect(page.url()).toMatch(/\/t\/crew123$/);
   expect(errors).toEqual([]);
 });

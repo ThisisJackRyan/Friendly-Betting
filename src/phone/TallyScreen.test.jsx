@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet } from './api';
 import { buildSettlement } from './settlement';
+import { withOptimisticVote } from './model';
 import { hasShareSheet, openShareSheet, shareMessage } from './share';
 import { markFreshBet } from './freshBet';
 import { navigation } from 'next/navigation';
@@ -266,7 +267,7 @@ describe('the invite right after Create', () => {
     await signIn(creator);
     expect(inviteButton()).toHaveClass('cta', 'cta-nudge');
     expect(inviteButton().closest('.tally-share')).toHaveClass('is-nudge');
-    // The invite card is just the button: no vote link under it.
+    // No raw vote URL under the invite.
     expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/\/b\/abc123/)).not.toBeInTheDocument();
 
@@ -303,6 +304,71 @@ describe('the invite right after Create', () => {
     expect(shareMessage).toHaveBeenCalledWith(invite);
     expect(screen.getByText('Copied \u2014 paste into a text.')).toBeInTheDocument();
     expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
+  });
+});
+
+describe('the creator’s Wanna vote? link', () => {
+  const voteLink = () => screen.queryByRole('link', { name: 'Wanna vote?' });
+  const own = { voterId: 'creator-1', name: 'Maya', optionId: 'a' };
+
+  test('shows under Text the crew for the creator’s open bet they haven’t picked on', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink()).toHaveAttribute('href', '/b/abc123');
+    expect(voteLink()).toHaveTextContent(/^Wanna vote\?$/);
+    expect(voteLink()).toHaveClass('text-link');
+    expect(voteLink().closest('.tally-share')).toHaveClass('is-nudge');
+    expect(voteLink().previousElementSibling).toHaveTextContent('Text the crew');
+  });
+
+  test('shows with other picks in, not only on the zero-picks card', async () => {
+    mockBet.current = { ...openBet, votes: [{ voterId: 'sam', name: 'Sam', optionId: 'a' }] };
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink().closest('.tally-share')).not.toHaveClass('is-nudge');
+    expect(voteLink()).toHaveAttribute('href', '/b/abc123');
+  });
+
+  test('hides once the creator has picked', async () => {
+    mockBet.current = { ...openBet, votes: [own] };
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides for a bet carrying the creator’s optimistic own pick', async () => {
+    mockBet.current = withOptimisticVote(openBet, own);
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides for anyone but the creator', async () => {
+    await renderTally();
+    await signIn(anon);
+    expect(voteLink()).not.toBeInTheDocument();
+    await signIn(otherPhone);
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides on a settled bet', async () => {
+    mockBet.current = { ...openBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(openBet, 'a') };
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides on a called-off bet', async () => {
+    for (const bet of [{ ...openBet, calledOff: true }, { ...openBet, status: 'called-off' }]) {
+      mockBet.current = bet;
+      await renderTally();
+      await signIn(creator);
+      expect(screen.getByText('This bet was called off.')).toBeInTheDocument();
+      expect(voteLink()).not.toBeInTheDocument();
+      cleanup();
+    }
   });
 });
 
@@ -523,6 +589,14 @@ describe('live tally', () => {
     await push({ ...openBet, votes: [vote('v1', 'a')] });
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('the creator’s pick landing live hides Wanna vote?', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('link', { name: 'Wanna vote?' })).toBeInTheDocument();
+    await push({ ...openBet, votes: [vote('creator-1', 'a')] });
+    expect(screen.queryByRole('link', { name: 'Wanna vote?' })).not.toBeInTheDocument();
   });
 
   test('settling elsewhere flips the tally live and removes Close & settle', async () => {

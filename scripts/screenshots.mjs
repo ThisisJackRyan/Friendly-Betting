@@ -7,7 +7,8 @@
 // Shots marked docs: false (many-voters.png, results-open.png, the settled
 // reveal variants winner-b.png, loser-b.png, creator-t.png,
 // nobody-called-it.png, and the tally right after Create with its share sheet
-// up, tally-after-create.png, or dismissed, tally-after-create-dismissed.png)
+// up, tally-after-create.png, or dismissed, tally-after-create-dismissed.png,
+// and the creator's Wanna vote? link under the invite, creator-vote-link.png)
 // only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
@@ -211,6 +212,16 @@ const SHOTS = [
     async run(page) {
       await makeBet(page);
       await page.getByText('Saved. Text when you’re ready.').waitFor();
+    },
+  },
+  {
+    file: 'creator-vote-link.png',
+    docs: false,
+    user: JACK,
+    bet: FRESH_BET,
+    async run(page) {
+      await makeBet(page);
+      await page.getByRole('link', { name: 'Wanna vote?', exact: true }).waitFor();
     },
   },
   {

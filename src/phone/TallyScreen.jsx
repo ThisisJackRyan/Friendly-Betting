@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from '../platform/Link';
 import { useParams, useRouter } from '../platform/navigation';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
@@ -16,6 +17,7 @@ import {
   statusLabel,
   tallyCounts,
   typeLabelOf,
+  voteFor,
   votingOpen,
 } from './model';
 import { formatInvite } from './inviteCopy';
@@ -157,6 +159,11 @@ const TallyScreen = () => {
   // The creator's own open bet with no picks yet: texting the crew is next.
   const nudge = Boolean(bet) && votingOpen(bet) && isBetCreator(user, bet)
     && tallyCounts(bet).every((row) => row.count === 0);
+  // The creator's own open bet they haven't picked on yet. `settled` also
+  // covers a called-off bet. A pick made on the vote page shows up here once
+  // its snapshot does (the vote screen's optimistic pick stays on that screen).
+  const offerVote = Boolean(bet) && votingOpen(bet) && !settled && isBetCreator(user, bet)
+    && !voteFor(bet, user.uid);
 
   useEffect(() => {
     if (bet?.votes?.some((vote) => vote.voterId === user?.uid)) rememberBet(user.uid, betId);
@@ -234,6 +241,11 @@ const TallyScreen = () => {
                 <FiShare2 size={18} aria-hidden="true" />
                 Text the crew
               </button>
+              {offerVote && (
+                <Link className="text-link tally-vote-link" href={`/b/${encodeURIComponent(bet.code || betId)}`}>
+                  Wanna vote?
+                </Link>
+              )}
             </div>}
             {canSettle && !settling && (
               <button type="button" className="danger press" onClick={() => setSettling(true)}>
