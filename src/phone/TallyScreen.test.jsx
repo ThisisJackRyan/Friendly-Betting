@@ -3,6 +3,9 @@ import userEvent from '@testing-library/user-event';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet } from './api';
 import { buildSettlement } from './settlement';
+import { withOptimisticVote } from './model';
+import { hasShareSheet, openShareSheet, shareMessage } from './share';
+import { markFreshBet } from './freshBet';
 import { navigation } from 'next/navigation';
 
 jest.mock('next/navigation');
@@ -61,6 +64,8 @@ jest.mock('./api', () => ({
 
 jest.mock('./share', () => ({
   shareMessage: jest.fn(async () => 'copied'),
+  hasShareSheet: jest.fn(() => true),
+  openShareSheet: jest.fn(async () => 'aborted'),
 }));
 
 const anon = { uid: 'anon-1', isAnonymous: true, providerData: [{ providerId: 'anonymous' }] };
@@ -79,6 +84,12 @@ beforeEach(() => {
   subscribeBet.mockClear();
   navigation.pathname = '/t/abc123';
   navigation.params = { code: 'abc123' };
+  window.sessionStorage.clear();
+  shareMessage.mockClear();
+  hasShareSheet.mockReset();
+  hasShareSheet.mockReturnValue(true);
+  openShareSheet.mockReset();
+  openShareSheet.mockResolvedValue('aborted');
 });
 
 async function signIn(user) {
@@ -186,6 +197,179 @@ test('the creator can still settle a bet that closed without a winner', async ()
   expect(closeButton()).toBeInTheDocument();
   await signIn(otherPhone);
   expect(closeButton()).not.toBeInTheDocument();
+});
+
+describe('the invite right after Create', () => {
+  const invite = 'New bet: Who is late\nStakes: $5\nPick your side: http://localhost/b/abc123';
+  const inviteButton = () => screen.getByRole('button', { name: 'Text the crew' });
+
+  beforeEach(() => {
+    mockBet.current = { ...openBet, stake: '$5' };
+  });
+
+  test('the share sheet opens once on arrival with the one invite, and not after a reload', async () => {
+    markFreshBet('abc123');
+    await renderTally();
+    await signIn(creator);
+    expect(openShareSheet).toHaveBeenCalledTimes(1);
+    expect(openShareSheet).toHaveBeenCalledWith(invite);
+    expect(shareMessage).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('friendly.freshBet')).toBeNull();
+    // Dismissed: the tally says so and the invite button is still there.
+    expect(screen.getByText('Saved. Text when you’re ready.')).toBeInTheDocument();
+    expect(inviteButton()).toBeEnabled();
+
+    // A reload (or back, then forward) mounts the tally again: no sheet.
+    cleanup();
+    await renderTally();
+    await signIn(creator);
+    expect(openShareSheet).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Saved. Text when you’re ready.')).not.toBeInTheDocument();
+  });
+
+  test('without a share sheet nothing opens on its own, and the note is still spent', async () => {
+    hasShareSheet.mockReturnValue(false);
+    markFreshBet('abc123');
+    await renderTally();
+    await signIn(creator);
+    expect(openShareSheet).not.toHaveBeenCalled();
+    expect(shareMessage).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('friendly.freshBet')).toBeNull();
+    expect(inviteButton()).toHaveClass('cta-nudge');
+  });
+
+  test('a tally opened any other way never opens the sheet', async () => {
+    markFreshBet('zzz999');
+    await renderTally();
+    await signIn(creator);
+    expect(openShareSheet).not.toHaveBeenCalled();
+  });
+
+  test('a settled bet never opens the sheet, even right after Create', async () => {
+    mockBet.current = { ...openBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(openBet, 'a') };
+    markFreshBet('abc123');
+    await renderTally();
+    expect(openShareSheet).not.toHaveBeenCalled();
+  });
+
+  test('Text the crew sends exactly the text the sheet opened with after Create', async () => {
+    markFreshBet('abc123');
+    await renderTally();
+    await signIn(creator);
+    await userEvent.click(inviteButton());
+    expect(shareMessage).toHaveBeenCalledTimes(1);
+    expect(shareMessage.mock.calls[0][0]).toBe(openShareSheet.mock.calls[0][0]);
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+  });
+
+  test('the invite is emphasized only for the creator’s own open bet with zero picks', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(inviteButton()).toHaveClass('cta', 'cta-nudge');
+    expect(inviteButton().closest('.tally-share')).toHaveClass('is-nudge');
+    // No raw vote URL under the invite.
+    expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/b\/abc123/)).not.toBeInTheDocument();
+
+    await signIn(anon);
+    expect(inviteButton()).not.toHaveClass('cta-nudge');
+    expect(inviteButton().closest('.tally-share')).not.toHaveClass('is-nudge');
+
+    cleanup();
+    mockBet.current = { ...mockBet.current, votes: [{ voterId: 'sam', name: 'Sam', optionId: 'a' }] };
+    await renderTally();
+    await signIn(creator);
+    expect(inviteButton()).not.toHaveClass('cta-nudge');
+    expect(inviteButton().closest('.tally-share')).not.toHaveClass('is-nudge');
+  });
+  test('with nothing to share to, the whole invite shows for manual copying', async () => {
+    hasShareSheet.mockReturnValue(false);
+    shareMessage.mockResolvedValueOnce('manual');
+    await renderTally();
+    await signIn(creator);
+    expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
+    await userEvent.click(inviteButton());
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(document.querySelector('.manual-message')).toHaveTextContent(invite, { normalizeWhitespace: false });
+    expect(screen.getByText('Copy the message below.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
+  });
+
+  test('a copied invite says so and shows no message to copy by hand', async () => {
+    hasShareSheet.mockReturnValue(false);
+    shareMessage.mockResolvedValueOnce('copied');
+    await renderTally();
+    await signIn(creator);
+    await userEvent.click(inviteButton());
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(screen.getByText('Copied \u2014 paste into a text.')).toBeInTheDocument();
+    expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
+  });
+});
+
+describe('the creator’s Wanna vote? link', () => {
+  const voteLink = () => screen.queryByRole('link', { name: 'Wanna vote?' });
+  const own = { voterId: 'creator-1', name: 'Maya', optionId: 'a' };
+
+  test('shows under Text the crew for the creator’s open bet they haven’t picked on', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink()).toHaveAttribute('href', '/b/abc123');
+    expect(voteLink()).toHaveTextContent(/^Wanna vote\?$/);
+    expect(voteLink()).toHaveClass('text-link');
+    expect(voteLink().closest('.tally-share')).toHaveClass('is-nudge');
+    expect(voteLink().previousElementSibling).toHaveTextContent('Text the crew');
+  });
+
+  test('shows with other picks in, not only on the zero-picks card', async () => {
+    mockBet.current = { ...openBet, votes: [{ voterId: 'sam', name: 'Sam', optionId: 'a' }] };
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink().closest('.tally-share')).not.toHaveClass('is-nudge');
+    expect(voteLink()).toHaveAttribute('href', '/b/abc123');
+  });
+
+  test('hides once the creator has picked', async () => {
+    mockBet.current = { ...openBet, votes: [own] };
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides for a bet carrying the creator’s optimistic own pick', async () => {
+    mockBet.current = withOptimisticVote(openBet, own);
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides for anyone but the creator', async () => {
+    await renderTally();
+    await signIn(anon);
+    expect(voteLink()).not.toBeInTheDocument();
+    await signIn(otherPhone);
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides on a settled bet', async () => {
+    mockBet.current = { ...openBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(openBet, 'a') };
+    await renderTally();
+    await signIn(creator);
+    expect(voteLink()).not.toBeInTheDocument();
+  });
+
+  test('hides on a called-off bet', async () => {
+    for (const bet of [{ ...openBet, calledOff: true }, { ...openBet, status: 'called-off' }]) {
+      mockBet.current = bet;
+      await renderTally();
+      await signIn(creator);
+      expect(screen.getByText('This bet was called off.')).toBeInTheDocument();
+      expect(voteLink()).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
 });
 
 describe('live tally', () => {
@@ -405,6 +589,14 @@ describe('live tally', () => {
     await push({ ...openBet, votes: [vote('v1', 'a')] });
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('the creator’s pick landing live hides Wanna vote?', async () => {
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('link', { name: 'Wanna vote?' })).toBeInTheDocument();
+    await push({ ...openBet, votes: [vote('creator-1', 'a')] });
+    expect(screen.queryByRole('link', { name: 'Wanna vote?' })).not.toBeInTheDocument();
   });
 
   test('settling elsewhere flips the tally live and removes Close & settle', async () => {

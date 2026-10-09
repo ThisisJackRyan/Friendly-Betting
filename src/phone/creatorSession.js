@@ -6,7 +6,6 @@ export const CREATE_STEP = {
   stake: 3,
   phone: 4,
   code: 5,
-  share: 6,
 };
 
 const CREATE_ORDER = [
@@ -15,7 +14,6 @@ const CREATE_ORDER = [
   CREATE_STEP.stake,
   CREATE_STEP.phone,
   CREATE_STEP.code,
-  CREATE_STEP.share,
 ];
 
 export const AUTH_COPY = {
@@ -104,20 +102,17 @@ export function createStepOrder(user) {
       CREATE_STEP.type,
       CREATE_STEP.details,
       CREATE_STEP.stake,
-      CREATE_STEP.share,
     ];
   }
   return CREATE_ORDER.slice();
 }
 
+// null past the last step: that is where the bet is made and Create hands off
+// to the live tally.
 export function adjacentCreateStep(current, user, direction) {
   const order = createStepOrder(user);
   const index = order.indexOf(current);
   if (index === -1) {
-    if (direction > 0 && (current === CREATE_STEP.phone || current === CREATE_STEP.code)) {
-      return CREATE_STEP.share;
-    }
-    if (direction < 0 && current === CREATE_STEP.share) return CREATE_STEP.stake;
     if (direction < 0 && current === CREATE_STEP.phone) return CREATE_STEP.stake;
     return null;
   }

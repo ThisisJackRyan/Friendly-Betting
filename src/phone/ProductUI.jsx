@@ -38,7 +38,6 @@ const STEP_LABELS = {
   3: 'Stakes',
   4: 'Your phone',
   5: 'Verify',
-  6: 'Share',
 };
 
 export function FlowProgress({ step = 1, user }) {
