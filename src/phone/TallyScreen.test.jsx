@@ -307,6 +307,48 @@ describe('the invite right after Create', () => {
   });
 });
 
+// Both ways a bet can be called off. The flag variant is an open bet with the
+// flag, so neither one leans on status 'closed' to look closed.
+const CALLED_OFF = [
+  ['status called-off', { status: 'called-off' }],
+  ['calledOff flag', { calledOff: true }],
+];
+
+describe.each(CALLED_OFF)('a called-off bet (%s)', (_label, patch) => {
+  beforeEach(() => {
+    // Every open-bet extra the tally reacts to: a future close time, a fresh
+    // Create, the creator signed in with zero picks (the nudge case).
+    mockBet.current = { ...openBet, ...patch, stake: '$5', closesAt: Date.now() + 86400000 };
+  });
+
+  test('shows the called-off reveal and none of the open-bet invite', async () => {
+    markFreshBet('abc123');
+    await renderTally();
+    await signIn(creator);
+    const region = screen.getByRole('region', { name: 'Settled result' });
+    expect(region).toHaveTextContent('This bet was called off.');
+    expect(region).toHaveTextContent('Nobody won this one.');
+    expect(screen.getByRole('heading', { name: 'The final word' })).toBeInTheDocument();
+    expect(screen.getByText('Closed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Wanna vote?' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Picks close/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Picks are closed. The final call is coming.')).not.toBeInTheDocument();
+    expect(document.querySelector('.is-nudge, .cta-nudge')).toBeNull();
+    expect(openShareSheet).not.toHaveBeenCalled();
+    expect(shareMessage).not.toHaveBeenCalled();
+    expect(closeButton()).not.toBeInTheDocument();
+  });
+
+  test('looks the same to an anonymous viewer', async () => {
+    await renderTally();
+    await signIn(anon);
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+    expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Picks close/)).not.toBeInTheDocument();
+  });
+});
+
 describe('the creator’s Wanna vote? link', () => {
   const voteLink = () => screen.queryByRole('link', { name: 'Wanna vote?' });
   const own = { voterId: 'creator-1', name: 'Maya', optionId: 'a' };
@@ -597,6 +639,20 @@ describe('live tally', () => {
     expect(screen.getByRole('link', { name: 'Wanna vote?' })).toBeInTheDocument();
     await push({ ...openBet, votes: [vote('creator-1', 'a')] });
     expect(screen.queryByRole('link', { name: 'Wanna vote?' })).not.toBeInTheDocument();
+  });
+
+  test.each(CALLED_OFF)('calling it off elsewhere (%s) swaps the invite for the reveal live', async (_label, patch) => {
+    await renderTally();
+    await signIn(creator);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    await userEvent.click(closeButton());
+    expect(screen.getByText('Who won?')).toBeInTheDocument();
+    await push({ ...openBet, ...patch });
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+    expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Wanna vote?' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
+    expect(closeButton()).not.toBeInTheDocument();
   });
 
   test('settling elsewhere flips the tally live and removes Close & settle', async () => {

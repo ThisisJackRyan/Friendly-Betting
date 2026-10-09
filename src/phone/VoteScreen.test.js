@@ -565,6 +565,16 @@ describe('text me who won', () => {
     expect(card()).not.toBeInTheDocument();
   });
 
+  test.each([
+    ['status called-off', { status: 'called-off' }],
+    ['calledOff flag', { calledOff: true }],
+  ])('is never shown on a called-off bet (%s)', async (_label, patch) => {
+    subscribeBet.mockImplementation((_code, onChange) => { onChange({ ...votedBet, ...patch }); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+    expect(card()).not.toBeInTheDocument();
+  });
+
   test('the tally never renders a saved number', async () => {
     subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
     renderAt('/t/abc123', <TallyScreen />);
@@ -795,4 +805,56 @@ test('a mistyped code shows the not-found screen with a way to start a bet', asy
   expect(start).toHaveAttribute('href', '/new');
   expect(start).toHaveClass('cta');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+describe.each([
+  ['status called-off', { status: 'called-off' }],
+  ['calledOff flag', { calledOff: true }],
+])('a called-off bet (%s) on the vote page', (_label, patch) => {
+  const anon = { uid: 'anon-1', isAnonymous: true, providerData: [] };
+
+  beforeEach(() => {
+    useIdentity.mockReturnValue(anon);
+    const bet = { ...openBet, ...patch, closesAt: Date.now() + 86400000 };
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+  });
+
+  test('blocks voting and shows the called-off reveal', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const region = await screen.findByRole('region', { name: 'Settled result' });
+    expect(region).toHaveTextContent('This bet was called off.');
+    expect(region).toHaveTextContent('Nobody won this one.');
+    expect(screen.getByText('Closed')).toBeInTheDocument();
+    // No options, no name field, nothing to submit.
+    expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'No' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'What’s your call?' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Picks close/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Picks are closed. The final call is coming.')).not.toBeInTheDocument();
+    expect(castVote).not.toHaveBeenCalled();
+  });
+
+  test('a voter who already picked sees the reveal, not their pick', async () => {
+    const bet = { ...openBet, ...patch, votes: [{ voterId: 'anon-1', name: 'Sam', optionId: 'a' }] };
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
+  });
+
+  test('calling it off live takes the options away', async () => {
+    let publish;
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = (bet) => act(() => onChange(bet));
+      onChange(openBet);
+      return () => {};
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByRole('button', { name: 'Yes' })).toBeInTheDocument();
+    publish({ ...openBet, ...patch });
+    expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+  });
 });

@@ -77,13 +77,14 @@ test('browser back walks the create steps and keeps the draft', async ({ page })
   expect(errors).toEqual([]);
 });
 
-async function mockCrew(page, { votes, share } = {}) {
+async function mockCrew(page, { votes, share, patch } = {}) {
   const bet = {
     id: 'crew123', code: 'crew123', schemaVersion: 2, type: 'money-line',
     question: 'Who takes the win?', stake: '$20 pot', status: 'open',
     createdByID: 'jack', createdByName: 'Jack',
     options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Packers' }],
     votes: votes || [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }],
+    ...patch,
   };
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
@@ -243,6 +244,35 @@ test('after Create, Wanna vote? opens the vote page, back returns to the tally, 
   await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toBeVisible();
   await expect(link).toHaveCount(0);
   expect(await shares()).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
+test('a bet called off by status alone shows the reveal on the tally and blocks voting', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  // No calledOff flag, a future close time and zero picks: everything that
+  // would light up the open-bet invite for the creator.
+  await mockCrew(page, { votes: [], share: 'dismiss', patch: { status: 'called-off', closesAt: Date.now() + 86400000 } });
+
+  await page.goto('/t/crew123');
+  const reveal = page.getByRole('region', { name: 'Settled result' });
+  await expect(reveal).toContainText('This bet was called off.');
+  await expect(reveal).toContainText('Nobody won this one.');
+  await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Wanna vote?', exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Picks close/)).toHaveCount(0);
+  await expect(page.locator('.is-nudge, .cta-nudge')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /close & settle/i })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('tally-called-off.png'), animations: 'disabled', scale: 'css' });
+
+  await page.goto('/b/crew123');
+  await expect(page.getByRole('region', { name: 'Settled result' })).toContainText('This bet was called off.');
+  await expect(page.getByRole('heading', { name: 'What’s your call?' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Bears', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Packers', exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Picks close/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('vote-called-off.png'), animations: 'disabled', scale: 'css' });
+  expect(await page.evaluate(() => sessionStorage.getItem('e2e-shares'))).toBeNull();
   expect(errors).toEqual([]);
 });
 

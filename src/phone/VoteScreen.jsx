@@ -23,8 +23,8 @@ import {
 import Bars from './Bars';
 import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
+import { isFinished } from './betStatus';
 import { rememberBet } from './notificationStore';
-import { settlementOf } from './settlement';
 import SettledReveal from './SettledReveal';
 import { buildReveal } from './reveal';
 import ResultsMenu from './ResultsMenu';
@@ -69,19 +69,20 @@ const VoteScreen = () => {
   const open = bet ? votingOpen(bet) : false;
   const showVoted = Boolean(selected);
   const reveal = minElapsed && bet !== undefined;
-  const result = settlementOf(bet);
   const settled = buildReveal({ bet, viewerId: user?.uid });
-  // Only a recorded pick on an unsettled bet, from a real (anonymous) account.
-  const offerResultText = resultTextsEnabled() && Boolean(existing) && !result
-    && bet?.status !== 'closed' && Boolean(user) && !user.isLocal;
+  // Only a recorded pick on a bet that isn't settled or called off, from a
+  // real (anonymous) account.
+  const offerResultText = resultTextsEnabled() && Boolean(existing) && !isFinished(bet)
+    && Boolean(user) && !user.isLocal;
 
   useEffect(() => {
     if (existing) rememberBet(user.uid, code);
   }, [existing, user?.uid, code]);
 
+  const final = Boolean(settled);
   useEffect(() => {
-    if (result) document.title = 'The final word · Friendly';
-  }, [result]);
+    if (final) document.title = 'The final word · Friendly';
+  }, [final]);
 
   const choose = async (optionId) => {
     if (!bet || !user || !open || saving) return;

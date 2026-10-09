@@ -5,6 +5,7 @@ import { REVEAL_COPY } from './reveal';
 
 // The settled view on /b/ and /t/: who won, then Share the result. Takes a
 // buildReveal() result. A count-only legacy bet keeps the plain result card.
+// A called-off bet has no result to share, so it gets no Share button.
 export default function SettledReveal({ bet, code, reveal, voterId }) {
   return (
     <>
@@ -16,7 +17,7 @@ export default function SettledReveal({ bet, code, reveal, voterId }) {
           {reveal.stake && <p className="reveal-stake">{REVEAL_COPY.stake(reveal.stake)}</p>}
         </section>
       )}
-      <ResultShare bet={bet} code={code} />
+      {reveal.kind !== 'called-off' && <ResultShare bet={bet} code={code} />}
       {reveal.startBet && (
         <Link className="cta press reveal-start" href="/new">
           {REVEAL_COPY.startBet}

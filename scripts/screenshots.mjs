@@ -8,7 +8,9 @@
 // reveal variants winner-b.png, loser-b.png, creator-t.png,
 // nobody-called-it.png, and the tally right after Create with its share sheet
 // up, tally-after-create.png, or dismissed, tally-after-create-dismissed.png,
-// and the creator's Wanna vote? link under the invite, creator-vote-link.png)
+// and the creator's Wanna vote? link under the invite, creator-vote-link.png,
+// and a bet called off by status alone on /t/ and /b/, tally-called-off.png
+// and vote-called-off.png)
 // only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
@@ -64,6 +66,14 @@ const FULL_BET = {
 const SAT_OUT_BET = { ...FULL_BET, votes: FULL_BET.votes.filter((vote) => vote.voterId !== 'jack') };
 // Everyone took the favorite; settled on the other side, nobody called it.
 const UPSET_BET = { ...FULL_BET, votes: FULL_BET.votes.map((vote) => ({ ...vote, optionId: 'a' })) };
+// Called off by status alone, no calledOff flag, with a close time still
+// ahead and Jack yet to pick: every open-bet cue would show if it read as open.
+const CALLED_OFF_BET = {
+  ...OPEN_BET,
+  status: 'called-off',
+  closesAt: Date.now() + 2 * 86400000,
+  votes: OPEN_BET.votes.filter((vote) => vote.voterId !== 'jack'),
+};
 const CROWD_BET = {
   ...FULL_BET,
   votes: [
@@ -222,6 +232,27 @@ const SHOTS = [
     async run(page) {
       await makeBet(page);
       await page.getByRole('link', { name: 'Wanna vote?', exact: true }).waitFor();
+    },
+  },
+  {
+    file: 'tally-called-off.png',
+    docs: false,
+    user: JACK,
+    bet: CALLED_OFF_BET,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByRole('region', { name: 'Settled result' }).waitFor();
+    },
+  },
+  {
+    file: 'vote-called-off.png',
+    docs: false,
+    user: MAYA,
+    name: 'Maya',
+    bet: CALLED_OFF_BET,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('region', { name: 'Settled result' }).waitFor();
     },
   },
   {
