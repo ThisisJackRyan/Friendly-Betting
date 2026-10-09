@@ -122,9 +122,9 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
 });
 
 const textFriendsMessage = [
-  'Votes are coming in on Who is late',
+  'New bet: Who is late',
   'Stakes: a coffee',
-  'Get your pick in: http://localhost/b/abc123',
+  'Pick your side: http://localhost/b/abc123',
 ].join('\n');
 
 test('the creator can close and settle from the tally', async () => {

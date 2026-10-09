@@ -1,4 +1,4 @@
-import { isMobileUa, smsHref, shareMessage } from './share';
+import { hasShareSheet, isMobileUa, openShareSheet, smsHref, shareMessage } from './share';
 import { isNativeApp } from '../platform/runtime';
 import { Share } from '@capacitor/share';
 
@@ -35,4 +35,49 @@ test('a failed native sheet offers manual copying', async () => {
   isNativeApp.mockReturnValue(true);
   Share.share.mockRejectedValue(new Error('Unavailable'));
   await expect(shareMessage('result')).resolves.toBe('manual');
+});
+
+describe('the share sheet alone', () => {
+  afterEach(() => {
+    isNativeApp.mockReturnValue(false);
+    delete navigator.share;
+  });
+
+  test('is there in the app and with navigator.share, and nowhere else', () => {
+    isNativeApp.mockReturnValue(false);
+    expect(hasShareSheet()).toBe(false);
+    navigator.share = jest.fn();
+    expect(hasShareSheet()).toBe(true);
+    delete navigator.share;
+    isNativeApp.mockReturnValue(true);
+    expect(hasShareSheet()).toBe(true);
+  });
+
+  test('a refused or failed sheet falls back to nothing, not Messages or the clipboard', async () => {
+    isNativeApp.mockReturnValue(false);
+    const writeText = jest.fn();
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    navigator.share = jest.fn(async () => {
+      throw Object.assign(new Error('No gesture'), { name: 'NotAllowedError' });
+    });
+    await expect(openShareSheet('invite')).resolves.toBe('');
+    expect(writeText).not.toHaveBeenCalled();
+    delete navigator.share;
+    await expect(openShareSheet('invite')).resolves.toBe('');
+    isNativeApp.mockReturnValue(true);
+    Share.share.mockRejectedValue(new Error('Unavailable'));
+    await expect(openShareSheet('invite')).resolves.toBe('');
+    delete navigator.clipboard;
+  });
+
+  test('a sheet that opens reports shared or dismissed', async () => {
+    isNativeApp.mockReturnValue(false);
+    navigator.share = jest.fn(async () => {});
+    await expect(openShareSheet('invite')).resolves.toBe('shared');
+    expect(navigator.share).toHaveBeenCalledWith({ text: 'invite' });
+    navigator.share = jest.fn(async () => {
+      throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+    });
+    await expect(openShareSheet('invite')).resolves.toBe('aborted');
+  });
 });

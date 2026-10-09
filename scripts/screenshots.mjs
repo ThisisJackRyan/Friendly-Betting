@@ -4,14 +4,17 @@
 //   npm run screenshots -- live-tally.png settled.png --copy-to=/tmp/shots
 //
 // File names pick shots; --copy-to also writes each image to that directory.
-// Shots marked docs: false (many-voters.png, results-open.png and the settled
+// Shots marked docs: false (many-voters.png, results-open.png, the settled
 // reveal variants winner-b.png, loser-b.png, creator-t.png,
-// nobody-called-it.png) only go to --copy-to.
+// nobody-called-it.png, and the tally right after Create with its share sheet
+// up, tally-after-create.png, or dismissed, tally-after-create-dismissed.png)
+// only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
 // modules (src/phone/identity.js, src/phone/api.js) are swapped for fixtures
-// in the browser, the same way mobile/e2e/app.spec.js does. Nothing here
+// in the browser, the same way mobile/e2e/app.spec.js does, and vote links
+// show the production origin (src/phone/routes.js), as the app's do. Nothing here
 // signs in, creates a bet or touches prod, and no app code knows about it.
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -40,6 +43,8 @@ const OPEN_BET = {
     { voterId: 'tyler', name: 'Tyler', optionId: 'b' },
   ],
 };
+// Right after Create: nobody has picked yet.
+const FRESH_BET = { ...OPEN_BET, votes: [] };
 // Named friends, two picks with no name and one very long name, so the
 // voter lists under each bar show every case.
 const FULL_BET = {
@@ -87,8 +92,10 @@ async function startServer() {
 
 // `bet` is the fixture every subscription sees. `settled` closes it with a
 // real settlement snapshot built by the app's own buildSettlement: true
-// settles on side a, or pass the winning option id.
-async function fixtures(page, { user, name, bet, settled = false }) {
+// settles on side a, or pass the winning option id. `shareSheet` gives the
+// page a navigator.share (Chromium on Linux has none): 'open' never closes,
+// like a sheet still on screen, and 'dismiss' is closed without sending.
+async function fixtures(page, { user, name, bet, settled = false, shareSheet = null }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -115,6 +122,20 @@ async function fixtures(page, { user, name, bet, settled = false }) {
       export const settleBet = async () => bet;
       export const deleteBet = async () => {};`,
   }));
+  await page.route('**/src/phone/routes.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `export function voteUrl(code) { return 'https://www.friendly-bets.com/b/' + encodeURIComponent(code); }`,
+  }));
+  if (shareSheet) {
+    await page.addInitScript((mode) => {
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: () => (mode === 'open'
+          ? new Promise(() => {})
+          : Promise.reject(new DOMException('Share canceled', 'AbortError'))),
+      });
+    }, shareSheet);
+  }
   await page.addInitScript(() => {
     const style = document.createElement('style');
     style.textContent = 'vite-error-overlay { display: none !important; } *, *::before, *::after { caret-color: transparent !important; }';
@@ -138,6 +159,19 @@ async function showBars(page, selector = '.results-heading') {
   });
 }
 
+// Create a bet the way a creator does; Create hands off to the live tally.
+async function makeBet(page) {
+  await page.goto('/new/money-line');
+  await page.getByLabel(/Question/).fill('Chiefs cover -3?');
+  await page.getByLabel('Option A').fill('Chiefs -3');
+  await page.getByLabel('Option B').fill('Bills +3');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+  await page.waitForURL(`**/t/${CODE}`);
+  await page.locator('.tally-share.is-nudge').waitFor();
+}
+
 const SHOTS = [
   {
     file: 'create-bet.png',
@@ -157,17 +191,26 @@ const SHOTS = [
   {
     file: 'text-the-crew.png',
     user: JACK,
-    bet: OPEN_BET,
+    bet: FRESH_BET,
+    run: makeBet,
+  },
+  {
+    file: 'tally-after-create.png',
+    docs: false,
+    user: JACK,
+    bet: FRESH_BET,
+    shareSheet: 'open',
+    run: makeBet,
+  },
+  {
+    file: 'tally-after-create-dismissed.png',
+    docs: false,
+    user: JACK,
+    bet: FRESH_BET,
+    shareSheet: 'dismiss',
     async run(page) {
-      await page.goto('/new/money-line');
-      await page.getByLabel(/Question/).fill('Chiefs cover -3?');
-      await page.getByLabel('Option A').fill('Chiefs -3');
-      await page.getByLabel('Option B').fill('Bills +3');
-      await page.getByRole('button', { name: 'Next', exact: true }).click();
-      await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
-      await page.getByRole('button', { name: 'Next', exact: true }).click();
-      await page.getByText('Put the group chat on the line.').waitFor();
-      await page.locator('.create-pane.is-leaving').waitFor({ state: 'detached' });
+      await makeBet(page);
+      await page.getByText('Saved. Text when you’re ready.').waitFor();
     },
   },
   {
@@ -302,7 +345,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

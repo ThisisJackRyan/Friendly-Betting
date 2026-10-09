@@ -77,13 +77,13 @@ test('browser back walks the create steps and keeps the draft', async ({ page })
   expect(errors).toEqual([]);
 });
 
-async function mockCrew(page) {
+async function mockCrew(page, { votes, share } = {}) {
   const bet = {
     id: 'crew123', code: 'crew123', schemaVersion: 2, type: 'money-line',
     question: 'Who takes the win?', stake: '$20 pot', status: 'open',
     createdByID: 'jack', createdByName: 'Jack',
     options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Packers' }],
-    votes: [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }],
+    votes: votes || [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }],
   };
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
@@ -112,10 +112,74 @@ async function mockCrew(page) {
         listeners.forEach(cb => cb(bet)); return bet;
       };`,
   }));
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'share', { configurable: true, value: async ({ text }) => { window.sharedResult = text; } });
-  });
+  await page.addInitScript((dismiss) => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async ({ text }) => {
+        window.sharedResult = text;
+        // Counted across reloads, so a second sheet would show up.
+        const shares = JSON.parse(sessionStorage.getItem('e2e-shares') || '[]');
+        sessionStorage.setItem('e2e-shares', JSON.stringify([...shares, text]));
+        if (dismiss) throw new DOMException('Share canceled', 'AbortError');
+      },
+    });
+  }, share === 'dismiss');
 }
+
+test('making a bet lands on its live tally, opens the share sheet once, and back goes home', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [], share: 'dismiss' });
+  const shares = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
+  const invite = 'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123';
+
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Start a bet', exact: true }).click();
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByLabel('Option A').fill('Bears');
+  await page.getByLabel('Option B').fill('Packers');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Step 3 of 3')).toBeVisible();
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+
+  // No recap step: the tally takes Create's place.
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
+  const button = page.getByRole('button', { name: 'Text the crew', exact: true });
+  await expect(button).toHaveClass(/cta-nudge/);
+  await expect(page.locator('.tally-share.is-nudge')).toBeVisible();
+  await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+  expect(await shares()).toEqual([invite]);
+  await page.screenshot({ path: testInfo.outputPath('tally-after-create.png'), animations: 'disabled', scale: 'css' });
+
+  // The button sends the very same text.
+  await button.click();
+  await expect.poll(shares).toEqual([invite, invite]);
+
+  // A reload never opens it again.
+  await page.reload();
+  await expect(button).toBeVisible();
+  await expect(page.getByText('Saved. Text when you’re ready.')).toHaveCount(0);
+  expect(await shares()).toHaveLength(2);
+
+  // Back (the iOS swipe and Android back use the same history) skips Create.
+  await page.goBack();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
+  // Forward returns to the tally, again with no sheet.
+  await page.goForward();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(button).toBeVisible();
+  expect(await shares()).toHaveLength(2);
+  // Past the tally, forward is only ever a fresh Create, never the sent step.
+  await page.goForward();
+  await expect(page).toHaveURL(/\/new$/);
+  await expect(page.getByRole('button', { name: /Money Line/ })).toBeVisible();
+  expect(await shares()).toHaveLength(2);
+  expect(errors).toEqual([]);
+});
 
 for (const [side, winner, ping, headline, subline] of [
   ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Bragging rights, secured.'],

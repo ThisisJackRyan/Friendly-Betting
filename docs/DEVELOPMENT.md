@@ -19,7 +19,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Core loop: Create → Text friends → open the `/b/[code]` link → vote → Tally → Close & settle.
+Core loop: Create → the live tally `/t/[code]` (share sheet opens once, Text the crew) → open the `/b/[code]` link → vote → Tally → Close & settle.
 
 ### Scripts and checks
 
@@ -82,7 +82,7 @@ There is no paywall in this release. Pricing stays locked: 3 free creations, the
 
 ### Current close/settle and SMS map
 
-`CreateForm` → `api.createBet` → `model.formatSms` → `share.shareMessage` → Messages/native share/clipboard → `/b/:code` → `api.castVote` → live Firestore subscriptions.
+`CreateForm` → `api.saveBet` → replaces Create with `/t/:code` (`TallyScreen`) → `inviteCopy.formatInvite` → `share.openShareSheet` once on arrival (only when a share sheet exists), then `share.shareMessage` from Text the crew → Messages/native share/clipboard → `/b/:code` → `api.castVote` → live Firestore subscriptions.
 
 `TallyScreen` → creator phone gate → choose side + `ResultCard` preview → `api.settleBet` transaction → saved settlement snapshot → `ResultsMenu` for remembered participant IDs → `ResultShare` → `settlement.formatResultMessage` → the same share adapter.
 
@@ -160,9 +160,9 @@ npx playwright install chromium   # once
 npm run screenshots               # or: node scripts/screenshots.mjs vote.png
 ```
 
-`scripts/screenshots.mjs` reuses a Vite app preview already on `http://127.0.0.1:5173` or starts `npm run mobile:dev` and stops it afterwards. It opens each screen in Playwright's Chromium at 393×852, 2x scale, touch, reduced motion. Like `mobile/e2e/app.spec.js`, it aborts every Google/Firebase request and serves fixture versions of `src/phone/identity.js` and `src/phone/api.js` through `page.route`, so no app code changes, nothing signs in and no real bets are created. The settled shot builds its result with the app's own `buildSettlement`. Images are palette-compressed with `sharp`. The script fails if a page throws.
+`scripts/screenshots.mjs` reuses a Vite app preview already on `http://127.0.0.1:5173` or starts `npm run mobile:dev` and stops it afterwards. It opens each screen in Playwright's Chromium at 393×852, 2x scale, touch, reduced motion. Like `mobile/e2e/app.spec.js`, it aborts every Google/Firebase request and serves fixture versions of `src/phone/identity.js`, `src/phone/api.js` and `src/phone/routes.js` (vote links on the production origin) through `page.route`, so no app code changes, nothing signs in and no real bets are created. The settled shot builds its result with the app's own `buildSettlement`. Images are palette-compressed with `sharp`. The script fails if a page throws.
 
-Shots: `create-bet.png` (stake slide), `text-the-crew.png` (ready-to-text recap), `vote.png` (one-tap pick), `live-tally.png` (creator's live tally, with who picked each side) and `settled.png` (winner's settled result and final tally). `many-voters.png` (a side with more than five names) `settled-tally.png` (the settled final tally) and `results-open.png` (the header Results inbox) are only written with `--copy-to=<dir>`, which also copies every shot to that directory. Older design-review captures are in `docs/design-refresh/`.
+Shots: `create-bet.png` (stake slide), `text-the-crew.png` (the live tally right after Create, with Text the crew emphasized), `vote.png` (one-tap pick), `live-tally.png` (creator's live tally, with who picked each side) and `settled.png` (winner's settled result and final tally). `many-voters.png` (a side with more than five names) `settled-tally.png` (the settled final tally) `results-open.png` (the header Results inbox), `tally-after-create.png` (the tally behind the share sheet that opens after Create) and `tally-after-create-dismissed.png` (the same tally once that sheet is dismissed) are only written with `--copy-to=<dir>`, which also copies every shot to that directory. Older design-review captures are in `docs/design-refresh/`.
 
 ## Deploy on Vercel
 
