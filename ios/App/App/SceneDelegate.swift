@@ -4,10 +4,21 @@ import FirebaseAuth
 import FirebaseCore
 
 // Lets the iOS edge swipe walk the web view's history; React Router handles the popstate.
+// The tabs (Home and My bets) are roots with nothing to swipe to, so the swipe is
+// off while one shows. The JS side already keeps a tab first in the back list
+// (mobile/navigation.js goToRoot); this also blocks the forward swipe into
+// entries a tab unwound past. `url` KVO fires for pushState/replaceState too.
 class MainViewController: CAPBridgeViewController {
+    // Keep in sync with src/platform/tabRoots.js.
+    private static let tabRoots: Set<String> = ["/", "/bets"]
+    private var urlObservation: NSKeyValueObservation?
+
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
-        webView?.allowsBackForwardNavigationGestures = true
+        urlObservation = webView?.observe(\.url, options: [.initial, .new]) { webView, _ in
+            let path = webView.url?.path ?? "/"
+            webView.allowsBackForwardNavigationGestures = !MainViewController.tabRoots.contains(path.isEmpty ? "/" : path)
+        }
     }
 }
 
