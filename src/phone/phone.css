@@ -562,7 +562,6 @@ body {
   font-weight: 600;
 }
 
-.vote-link,
 .share-note,
 .manual-message,
 .form-error,
@@ -573,16 +572,6 @@ body {
 .inviter {
   font-size: 14px;
   line-height: 1.35;
-}
-
-.vote-link {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--accent);
-  text-align: center;
-  word-break: break-all;
-  text-decoration: none;
-  font-weight: 500;
 }
 
 .share-note,
@@ -865,10 +854,6 @@ body {
   box-shadow: inset 0 0 0 1px #dce5cc;
 }
 
-.tally-share.is-nudge .vote-link {
-  margin: 0;
-}
-
 .cta.cta-nudge {
   height: 60px;
   min-height: 60px;
@@ -1101,8 +1086,7 @@ body {
 .text-link:focus-visible,
 .icon-btn:focus-visible,
 .nav-home:focus-visible,
-.tab:focus-visible,
-.vote-link:focus-visible {
+.tab:focus-visible {
   outline: none;
   box-shadow: var(--focus);
 }

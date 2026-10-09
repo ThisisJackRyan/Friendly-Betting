@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from '../platform/Link';
 import { useParams, useRouter } from '../platform/navigation';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
@@ -235,11 +234,6 @@ const TallyScreen = () => {
                 <FiShare2 size={18} aria-hidden="true" />
                 Text the crew
               </button>
-              {nudge && (
-                <Link className="vote-link" href={`/b/${encodeURIComponent(bet.code || betId)}`}>
-                  {voteUrl(bet.code || betId)}
-                </Link>
-              )}
             </div>}
             {canSettle && !settling && (
               <button type="button" className="danger press" onClick={() => setSettling(true)}>

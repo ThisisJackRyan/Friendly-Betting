@@ -266,12 +266,13 @@ describe('the invite right after Create', () => {
     await signIn(creator);
     expect(inviteButton()).toHaveClass('cta', 'cta-nudge');
     expect(inviteButton().closest('.tally-share')).toHaveClass('is-nudge');
-    expect(screen.getByRole('link', { name: 'http://localhost/b/abc123' })).toHaveAttribute('href', '/b/abc123');
+    // The invite card is just the button: no vote link under it.
+    expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/\/b\/abc123/)).not.toBeInTheDocument();
 
     await signIn(anon);
     expect(inviteButton()).not.toHaveClass('cta-nudge');
     expect(inviteButton().closest('.tally-share')).not.toHaveClass('is-nudge');
-    expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
 
     cleanup();
     mockBet.current = { ...mockBet.current, votes: [{ voterId: 'sam', name: 'Sam', optionId: 'a' }] };
@@ -279,6 +280,29 @@ describe('the invite right after Create', () => {
     await signIn(creator);
     expect(inviteButton()).not.toHaveClass('cta-nudge');
     expect(inviteButton().closest('.tally-share')).not.toHaveClass('is-nudge');
+  });
+  test('with nothing to share to, the whole invite shows for manual copying', async () => {
+    hasShareSheet.mockReturnValue(false);
+    shareMessage.mockResolvedValueOnce('manual');
+    await renderTally();
+    await signIn(creator);
+    expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
+    await userEvent.click(inviteButton());
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(document.querySelector('.manual-message')).toHaveTextContent(invite, { normalizeWhitespace: false });
+    expect(screen.getByText('Copy the message below.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /\/b\/abc123/ })).not.toBeInTheDocument();
+  });
+
+  test('a copied invite says so and shows no message to copy by hand', async () => {
+    hasShareSheet.mockReturnValue(false);
+    shareMessage.mockResolvedValueOnce('copied');
+    await renderTally();
+    await signIn(creator);
+    await userEvent.click(inviteButton());
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(screen.getByText('Copied \u2014 paste into a text.')).toBeInTheDocument();
+    expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
   });
 });
 

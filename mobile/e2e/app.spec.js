@@ -112,6 +112,15 @@ async function mockCrew(page, { votes, share } = {}) {
         listeners.forEach(cb => cb(bet)); return bet;
       };`,
   }));
+  if (share === 'none') {
+    // A desktop browser with no share sheet and no clipboard: only manual copying is left.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+      Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (Macintosh)' });
+    });
+    return;
+  }
   await page.addInitScript((dismiss) => {
     Object.defineProperty(navigator, 'share', {
       configurable: true,
@@ -150,6 +159,9 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   const button = page.getByRole('button', { name: 'Text the crew', exact: true });
   await expect(button).toHaveClass(/cta-nudge/);
   await expect(page.locator('.tally-share.is-nudge')).toBeVisible();
+  // The invite card is just the button: no vote link under it.
+  await expect(page.locator('.tally-share a')).toHaveCount(0);
+  await expect(page.locator('.tally-share')).not.toContainText('/b/crew123');
   await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
   expect(await shares()).toEqual([invite]);
   await page.screenshot({ path: testInfo.outputPath('tally-after-create.png'), animations: 'disabled', scale: 'css' });
@@ -178,6 +190,24 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   await expect(page).toHaveURL(/\/new$/);
   await expect(page.getByRole('button', { name: /Money Line/ })).toBeVisible();
   expect(await shares()).toHaveLength(2);
+  expect(errors).toEqual([]);
+});
+
+test('with no share sheet and no clipboard, the tally shows the whole invite to copy', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [], share: 'none' });
+  await page.goto('/t/crew123');
+  const card = page.locator('.tally-share.is-nudge');
+  await expect(card).toBeVisible();
+  await expect(card.locator('.manual-message')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect(card.getByText('Copy the message below.')).toBeVisible();
+  await expect(card.locator('.manual-message')).toHaveText(
+    'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123',
+  );
+  await expect(card.locator('a')).toHaveCount(0);
+  expect(page.url()).toMatch(/\/t\/crew123$/);
   expect(errors).toEqual([]);
 });
 

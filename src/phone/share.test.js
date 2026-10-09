@@ -81,3 +81,55 @@ describe('the share sheet alone', () => {
     await expect(openShareSheet('invite')).resolves.toBe('aborted');
   });
 });
+
+describe('with no share sheet, or one the browser refuses', () => {
+  const ua = Object.getOwnPropertyDescriptor(window.navigator, 'userAgent');
+  const setUa = (value) => Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value });
+  let assigned;
+  const location = window.location;
+
+  beforeEach(() => {
+    isNativeApp.mockReturnValue(false);
+    assigned = '';
+    delete window.location;
+    window.location = { set href(value) { assigned = value; }, get href() { return assigned; } };
+  });
+
+  afterEach(() => {
+    window.location = location;
+    if (ua) Object.defineProperty(window.navigator, 'userAgent', ua);
+    else delete window.navigator.userAgent;
+    delete navigator.share;
+    delete navigator.clipboard;
+  });
+
+  test('a phone browser opens Messages with the whole invite', async () => {
+    setUa('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)');
+    navigator.share = jest.fn(async () => {
+      throw Object.assign(new Error('No gesture'), { name: 'NotAllowedError' });
+    });
+    await expect(shareMessage('invite text')).resolves.toBe('sms');
+    expect(assigned).toBe(`sms:&body=${encodeURIComponent('invite text')}`);
+  });
+
+  test('a desktop browser copies the whole invite', async () => {
+    setUa('Mozilla/5.0 (Macintosh)');
+    const writeText = jest.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await expect(shareMessage('invite text')).resolves.toBe('copied');
+    expect(writeText).toHaveBeenCalledWith('invite text');
+    expect(assigned).toBe('');
+  });
+
+  test('a refused or missing clipboard falls back to manual copying', async () => {
+    setUa('Mozilla/5.0 (Macintosh)');
+    const writeText = jest.fn(async () => {
+      throw new Error('Denied');
+    });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await expect(shareMessage('invite text')).resolves.toBe('manual');
+    delete navigator.clipboard;
+    await expect(shareMessage('invite text')).resolves.toBe('manual');
+    expect(assigned).toBe('');
+  });
+});
