@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
@@ -117,9 +117,13 @@ describe('buildReveal copy', () => {
     expect(reveal.startBet).toBe(true);
   });
 
-  test('called off', () => {
-    const bet = { ...settled({ winners: [['jack', 'Jack']] }), calledOff: true };
+  test.each([
+    ['calledOff flag on a settled bet', { ...settled({ winners: [['jack', 'Jack']] }), calledOff: true }],
+    ['calledOff flag on an open bet', makeBet({ winners: [['jack', 'Jack']], calledOff: true })],
+    ['status called-off', makeBet({ winners: [['jack', 'Jack']], status: 'called-off' })],
+  ])('called off (%s)', (_label, bet) => {
     const reveal = buildReveal({ bet, viewerId: 'jack' });
+    expect(reveal.kind).toBe('called-off');
     expect(lines(reveal)).toEqual(['', 'This bet was called off.', 'Nobody won this one.', '$20']);
     expect(reveal.startBet).toBe(false);
     expect(buildReveal({ bet: { ...bet, stake: '' } }).stake).toBe('');
@@ -258,14 +262,23 @@ describe('settled screens', () => {
     expect(screen.queryByText(/^Stakes:/)).not.toBeInTheDocument();
   });
 
-  test('called off drops the eyebrow and names nobody', async () => {
-    as('jack');
-    feed({ ...settled(crew), calledOff: true });
-    await renderAt('/b/abc123', <VoteScreen />);
-    expect([...region().children].map((node) => node.textContent)).toEqual([
-      'This bet was called off.', 'Nobody won this one.', 'Stakes: $20',
-    ]);
-    expect(screen.queryByRole('link', { name: 'Start a bet' })).not.toBeInTheDocument();
+  test.each([
+    ['calledOff flag', { ...settled(crew), calledOff: true }],
+    ['status called-off', makeBet({ ...crew, status: 'called-off' })],
+  ])('called off (%s) drops the eyebrow and names nobody, on /b/ and /t/', async (_label, bet) => {
+    feed(bet);
+    for (const [route, Screen, uid, phone] of [['/b/abc123', VoteScreen, 'maya', false], ['/t/abc123', TallyScreen, 'jack', true]]) {
+      as(uid, phone);
+      await renderAt(route, <Screen />);
+      expect([...region().children].map((node) => node.textContent)).toEqual([
+        'This bet was called off.', 'Nobody won this one.', 'Stakes: $20',
+      ]);
+      // Nobody won, so there is no result to share and no winner to name.
+      expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Start a bet' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Chiefs -3 won/)).not.toBeInTheDocument();
+      cleanup();
+    }
   });
 
   test('a legacy settled bet with no settlement field still reveals from its votes', async () => {

@@ -165,6 +165,13 @@ test('settle requires the phone creator who owns the bet', () => {
   expect(canSettleBet({ ...anonUser, uid: 'creator-1' }, open)).toBe(false);
 });
 
+test('a called-off bet cannot be settled, by status or by flag', () => {
+  const open = { status: 'open', createdByID: 'creator-1' };
+  expect(canSettleBet(phoneUser, { ...open, status: 'called-off' })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, calledOff: true })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, status: 'closed', winnerId: 'a', calledOff: true })).toBe(false);
+});
+
 test('nobody can settle a legacy bet without a creator uid from the client', () => {
   const legacy = { betID: 'ml-1', type: 'Money Line', bet: 'Who wins' };
   expect(canSettleBet(phoneUser, legacy)).toBe(false);

@@ -1,3 +1,5 @@
+import { isCalledOff, isSettled } from './betStatus';
+
 export const PHONE_PROVIDER = 'phone';
 
 export const CREATE_STEP = {
@@ -130,7 +132,7 @@ export function isBetCreator(user, bet) {
 
 export function canSettleBet(user, bet) {
   if (!isBetCreator(user, bet)) return false;
-  return !(bet.status === 'closed' && bet.winnerId);
+  return !isSettled(bet) && !isCalledOff(bet);
 }
 
 // Same identity as settling: only the creator, and never a bet with no creator uid.

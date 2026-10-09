@@ -97,6 +97,23 @@ test('an unsettled pick shows the empty line', async () => {
   expect(within(inbox()).getByText('Your picks are in. Results land here when your friend settles.')).toBeInTheDocument();
 });
 
+test.each([
+  ['status called-off', { status: 'called-off' }],
+  ['calledOff flag on a settled bet', null],
+])('a called-off bet (%s) is no win or loss in the inbox', async (_label, patch) => {
+  rememberBet(uid, 'abc123');
+  bet = patch
+    ? { ...bet, ...patch }
+    : { ...bet, status: 'closed', winnerId: 'a', settledAt: 123, settlement: buildSettlement(bet, 'a'), calledOff: true };
+  render(<ResultsMenu />);
+  expect(resultsButton()).toHaveAccessibleName('Results');
+  await userEvent.click(resultsButton());
+  expect(within(inbox()).getByText('Your picks are in. Results land here when your friend settles.')).toBeInTheDocument();
+  expect(within(inbox()).queryByRole('link')).not.toBeInTheDocument();
+  expect(screen.queryByText('You called it.')).not.toBeInTheDocument();
+  expect(screen.queryByText('This one’s settled.')).not.toBeInTheDocument();
+});
+
 test('switching identities removes the previous participant’s results and listeners', () => {
   rememberBet(uid, 'abc123');
   const view = render(<ResultsMenu />);

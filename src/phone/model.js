@@ -108,19 +108,8 @@ export function formatCloses(ts) {
   }).format(new Date(ts));
 }
 
-export function votingOpen(bet, now = Date.now()) {
-  if (!bet) return false;
-  if (bet.status === 'closed') return false;
-  if (bet.closesAt && bet.closesAt <= now) return false;
-  return true;
-}
-
-export function statusLabel(bet, now = Date.now()) {
-  if (!bet) return '';
-  if (bet.status === 'closed' && bet.winnerId) return 'Settled';
-  if (bet.status === 'closed' || (bet.closesAt && bet.closesAt <= now)) return 'Closed';
-  return 'Open';
-}
+// Open/closed/settled/called-off logic lives in betStatus.js.
+export { statusLabel, votingOpen } from './betStatus';
 
 export function voteFor(bet, voterId) {
   if (!bet || !voterId || !Array.isArray(bet.votes)) return null;

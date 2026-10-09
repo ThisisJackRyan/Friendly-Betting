@@ -1,3 +1,4 @@
+import { isCalledOff } from './betStatus';
 import { settlementOf } from './settlement';
 
 // Every on-screen string for the settled reveal on /b/ and /t/.
@@ -37,10 +38,6 @@ export function winnerPhrase(winners) {
   if (names.length === winners.length && winners.length <= 3) return joinNames(names);
   const shown = names.slice(0, NAMED);
   return joinNames([...shown, REVEAL_COPY.others(winners.length - shown.length)]);
-}
-
-function isCalledOff(bet) {
-  return bet?.calledOff === true || bet?.status === 'called-off';
 }
 
 // What a settled bet says to this viewer, or null while it is not settled.

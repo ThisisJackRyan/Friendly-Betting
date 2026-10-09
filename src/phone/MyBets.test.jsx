@@ -85,6 +85,31 @@ test('filters real bets by status, including expired bets, and preserves tally l
   expect(screen.getByText('No takes it')).toBeInTheDocument();
 });
 
+test.each([
+  ['status called-off', { status: 'called-off' }],
+  ['calledOff flag on an open bet', { calledOff: true }],
+  ['calledOff flag on a settled bet', { status: 'closed', winnerId: 'a', settledAt: 1, calledOff: true }],
+])('a called-off bet (%s) counts as Closed, never Open or Settled', async (_label, patch) => {
+  const off = {
+    id: 'off', createdByID: 'creator', schemaVersion: 2, type: 'money-line', question: 'Rain delay?',
+    status: 'open', options, votes: [{ voterId: 'sam', optionId: 'a' }], ...patch,
+  };
+  subscribeMyBets.mockImplementation((_uid, publish) => { publish([...bets, off]); return () => {}; });
+  render(<MyBetsList user={user} />);
+  const filters = screen.getByRole('group', { name: 'Filter bets by status' });
+  expect(within(filters).getByRole('button', { name: 'Open 1' })).toBeInTheDocument();
+  expect(within(filters).getByRole('button', { name: 'Closed 2' })).toBeInTheDocument();
+  expect(within(filters).getByRole('button', { name: 'Settled 1' })).toBeInTheDocument();
+  const card = screen.getByRole('link', { name: /Rain delay\?/ });
+  expect(within(card).getByText('Closed')).toHaveClass('status', 'closed');
+  expect(card).toHaveTextContent('This bet was called off.');
+  expect(card).not.toHaveTextContent(/Yes takes it|won/i);
+  await userEvent.click(within(filters).getByRole('button', { name: 'Closed 2' }));
+  expect(screen.getByText('Rain delay?')).toBeInTheDocument();
+  await userEvent.click(within(filters).getByRole('button', { name: 'Open 1' }));
+  expect(screen.queryByText('Rain delay?')).not.toBeInTheDocument();
+});
+
 test('searches questions, stakes, and types and can recover from no results', async () => {
   render(<MyBetsList user={user} />);
   const search = screen.getByRole('searchbox', { name: 'Search bets' });

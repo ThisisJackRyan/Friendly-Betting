@@ -9,7 +9,9 @@ import CreatorAuthFlow from './AuthSlides';
 import { signOutCreator } from './creatorAuth';
 import { PHONE_OFFLINE_ERROR, canDeleteBet, isCreator } from './creatorSession';
 import { useIdentity } from './identity';
+import { isCalledOff } from './betStatus';
 import { questionOf, statusLabel, typeLabelOf } from './model';
+import { REVEAL_COPY } from './reveal';
 import { resultHeadline, settlementOf } from './settlement';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
@@ -228,7 +230,9 @@ export function MyBetsList({ user }) {
                           <BetFacts bet={bet} />
                           <span className="bet-card-bottom">
                             <span>
-                              {result ? resultHeadline(result) : 'See who’s in'}
+                              {isCalledOff(bet)
+                                ? REVEAL_COPY.calledOff
+                                : result ? resultHeadline(result) : 'See who’s in'}
                             </span>
                             <FiArrowRight aria-hidden="true" />
                           </span>

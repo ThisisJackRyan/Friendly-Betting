@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
 import { normalizeE164 } from '../phone/resultTexts';
+import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
 import { PROD_ORIGIN } from '../platform/runtime';
 
@@ -67,14 +68,6 @@ function fill(template, values) {
   return template.replace(/\{(title|side|link)\}/g, (_match, key) => values[key]);
 }
 
-function isCalledOff(bet) {
-  return bet?.calledOff === true || bet?.status === 'called-off';
-}
-
-function isSettled(bet) {
-  return bet?.status === 'closed' && Boolean(bet.winnerId);
-}
-
 function winningSide(bet) {
   if (bet.settlement?.optionLabel) return bet.settlement.optionLabel;
   const option = (bet.options || []).find((item) => item.id === bet.winnerId);
@@ -125,7 +118,7 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
     const snap = await tx.get(db.doc(`bets/${code}`));
     if (!snap.exists) throw failure('not-found');
     const bet = snap.data();
-    if (bet.status === 'closed' || isCalledOff(bet)) throw failure('closed');
+    if (isFinished(bet)) throw failure('closed');
     // The side comes from the voter's recorded pick, never from the request.
     const vote = (bet.votes || []).find((item) => item.voterId === uid);
     if (!uid || !vote) throw failure('no-vote');

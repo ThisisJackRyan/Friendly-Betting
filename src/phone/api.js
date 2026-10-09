@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
+import { isCalledOff, isFinished, isSettled, votingOpen } from './betStatus';
 import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
@@ -66,7 +67,7 @@ export async function saveBet(existingCode, fields) {
       if (!isCreator(auth?.currentUser) || auth.currentUser.uid !== bet.createdByID) {
         throw new Error('Only the creator can edit this bet.');
       }
-      if (bet.status === 'closed') throw new Error('This one’s settled. Start a fresh bet.');
+      if (isFinished(bet)) throw new Error('This one’s settled. Start a fresh bet.');
       tx.update(ref, fields);
     });
     return existingCode;
@@ -145,8 +146,9 @@ export async function castVote(code, vote) {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('This bet is gone.');
     const data = snap.data();
-    if (data.status === 'closed') throw new Error('This bet is closed.');
-    if (data.closesAt && data.closesAt <= Date.now()) throw new Error('This bet is closed.');
+    // The rules only refuse votes on status 'closed', so this guard is what
+    // keeps picks off a called-off bet.
+    if (!votingOpen(data)) throw new Error('This bet is closed.');
     if (!vote.voterId) throw new Error('Still connecting. Try your pick again.');
     const full = await hydrateBet(data, (legacyRef) => tx.get(legacyRef));
     if (!full.options.some((option) => option.id === vote.optionId)) {
@@ -174,7 +176,8 @@ export async function settleBet(code, winnerId) {
     if (!isBetCreator(auth?.currentUser, bet)) {
       throw new Error('Only the creator can settle this bet.');
     }
-    if (bet.status === 'closed' && bet.winnerId) {
+    if (isCalledOff(bet)) throw new Error('This bet is closed.');
+    if (isSettled(bet)) {
       if (bet.winnerId === winnerId) return bet;
       throw new Error('This one’s already settled. The result is locked.');
     }

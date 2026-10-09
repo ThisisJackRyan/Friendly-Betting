@@ -111,6 +111,8 @@ describe('saveVoterNumber', () => {
     ['invalid-phone', openBet(), 'jack', '+44 20 7946 0958'],
     ['not-found', null, 'jack', '2025550143'],
     ['closed', settle(openBet(), 'a'), 'jack', '2025550143'],
+    ['closed', openBet({ status: 'called-off' }), 'jack', '2025550143'],
+    ['closed', openBet({ calledOff: true }), 'jack', '2025550143'],
     ['no-vote', openBet(), 'stranger', '2025550143'],
   ])('rejects %s and writes nothing', async (code, bet, uid, phone) => {
     const db = fakeDb(bet ? { 'bets/abc123': bet } : {});
@@ -214,8 +216,12 @@ describe('deliverResultTexts', () => {
     warn.mockRestore();
   });
 
-  test('a called-off bet sends the called-off text to everyone', async () => {
-    const db = await seeded(openBet({ calledOff: true }));
+  test.each([
+    ['calledOff flag', openBet({ calledOff: true })],
+    ['status called-off', openBet({ status: 'called-off' })],
+    ['calledOff flag on a settled bet', { ...settle(openBet(), 'a'), calledOff: true }],
+  ])('a called-off bet (%s) sends the called-off text to everyone', async (_label, bet) => {
+    const db = await seeded(bet);
     const sendSms = jest.fn(async () => {});
     expect(await deliverResultTexts({ db, code: 'abc123', sendSms })).toEqual({ sent: 2, failed: 0 });
     expect(sendSms.mock.calls.map(([, body]) => body)).toEqual([calledOffText, calledOffText]);

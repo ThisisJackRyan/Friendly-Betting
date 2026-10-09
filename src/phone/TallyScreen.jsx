@@ -169,9 +169,10 @@ const TallyScreen = () => {
     if (bet?.votes?.some((vote) => vote.voterId === user?.uid)) rememberBet(user.uid, betId);
   }, [bet, user?.uid, betId]);
 
+  const final = Boolean(settled);
   useEffect(() => {
-    if (result) document.title = 'The final word · Friendly';
-  }, [result]);
+    if (final) document.title = 'The final word · Friendly';
+  }, [final]);
 
   useEffect(() => {
     if (!result || settling || !revealSettlement.current) return;
@@ -192,7 +193,7 @@ const TallyScreen = () => {
         <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.back()}>
           <FiChevronLeft size={28} />
         </button>
-        <h1 className="nav-title">{result ? 'The final word' : 'The picks'}</h1>
+        <h1 className="nav-title">{settled ? 'The final word' : 'The picks'}</h1>
       </div>
       <div className="scroll">
         {!reveal && <FriendlyLoader />}
@@ -214,7 +215,7 @@ const TallyScreen = () => {
             <h2 className="question-xl">{questionOf(bet)}</h2>
             <div className="vote-meta">
               {bet.closesAt && votingOpen(bet) ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
-              {!result && !votingOpen(bet) && <p className="closes">Picks are closed. The final call is coming.</p>}
+              {!settled && !votingOpen(bet) && <p className="closes">Picks are closed. The final call is coming.</p>}
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
