@@ -55,6 +55,11 @@ beforeEach(() => {
   navigation.push.mockReset();
   navigation.replace.mockReset();
   navigation.back.mockReset();
+  // Like the real routers: push/replace write same-document history entries and
+  // back pops one (popstate fires asynchronously, as in a browser).
+  navigation.push.mockImplementation((url) => window.history.pushState({}, '', url));
+  navigation.replace.mockImplementation((url) => window.history.replaceState({}, '', url));
+  navigation.back.mockImplementation(() => window.history.back());
   saveBet.mockReset();
   saveBet.mockResolvedValue('abc123');
   shareMessage.mockReset();
@@ -67,9 +72,10 @@ function renderForm(path) {
     navigation.pathname = path;
     navigation.params = { type };
   } else {
-    navigation.pathname = '/';
+    navigation.pathname = '/new';
     navigation.params = {};
   }
+  window.history.replaceState({}, '', navigation.pathname);
   return render(<CreateForm />);
 }
 
@@ -119,7 +125,8 @@ test('step 1 is the type picker and back returns home', async () => {
 test('picking a type slides forward into that type’s details', async () => {
   renderForm();
   await userEvent.click(screen.getByRole('button', { name: /over-under/i }));
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).toHaveBeenCalledTimes(1);
+  expect(navigation.push).toHaveBeenCalledWith('/new#step-2', { scroll: false });
   expect(screen.getByRole('heading', { name: 'Over-Under' })).toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(screen.getByLabelText(/line/i)).toBeInTheDocument();
@@ -187,9 +194,10 @@ test('back from later steps keeps the draft and slides left to right', async () 
   await userEvent.type(screen.getByLabelText(/^stake$/i), 'Pizza');
   expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(navigation.back).toHaveBeenCalledTimes(1);
+  expect(await screen.findByLabelText(/question/i)).toHaveValue('Who is late');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
-  expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).not.toHaveBeenCalledWith('/');
   expect(saveBet).not.toHaveBeenCalled();
 });
 
@@ -269,6 +277,7 @@ test('over-under still shares the same short vote text', async () => {
 test('phone tabs hide after step 1 and return when the walkthrough is back on pick type', async () => {
   navigation.pathname = '/new';
   navigation.params = {};
+  window.history.replaceState({}, '', '/new');
   render(
     <CreateChromeProvider>
       <AppShell>
@@ -314,7 +323,7 @@ test('Friendly in the create nav returns home from every later step', async () =
   expect(
     document.querySelector('.create-pane.is-entering .home-preview-header'),
   ).toBeInTheDocument();
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).not.toHaveBeenCalledWith('/');
   await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
   expect(navigation.push).not.toHaveBeenCalledWith('/bets');
   expect(saveBet).not.toHaveBeenCalled();
@@ -631,7 +640,8 @@ test('send after a check does not reload or show the person sentence', async () 
   });
   expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
   expect(screen.queryByText(/Couldn\u2019t confirm you\u2019re a person/)).not.toBeInTheDocument();
-  expect(window.location.href).toBe(href);
+  // Only the code step's own history entry changed the URL.
+  expect(window.location.href).toBe(href.replace('#step-4', '#step-5'));
 });
 
 test('the person check slot is in the phone step and is not clipped shut', () => {
@@ -655,4 +665,172 @@ test('an unknown create route leaves the walkthrough', () => {
   navigation.params = { type: 'nope' };
   render(<CreateForm />);
   expect(navigation.replace).toHaveBeenCalledWith('/new');
+});
+
+describe('create steps are history entries', () => {
+  const activeStep = () => document.querySelector('.create-pane:not(.is-leaving)').dataset.step;
+
+  test('forward steps push one entry each and the first step adds none', async () => {
+    const before = window.history.length;
+    renderForm();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(window.history.length).toBe(before);
+
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    expect(window.location.hash).toBe('#step-2');
+    await goToStake('Who is late');
+    expect(window.location.hash).toBe('#step-3');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(window.location.hash).toBe('#step-6');
+    expect(navigation.push.mock.calls).toEqual([
+      ['/new#step-2', { scroll: false }],
+      ['/new#step-3', { scroll: false }],
+      ['/new#step-6', { scroll: false }],
+    ]);
+    expect(window.history.length).toBe(before + 3);
+  });
+
+  test('a swipe back slides back a step, keeps the draft, and forward returns', async () => {
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.type(screen.getByLabelText(/^stake$/i), 'Pizza');
+
+    act(() => window.history.back());
+    expect(await screen.findByRole('heading', { name: 'Money Line' })).toBeInTheDocument();
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+    expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
+    expect(navigation.back).not.toHaveBeenCalled();
+
+    act(() => window.history.forward());
+    expect(await screen.findByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+    expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Pizza');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Pizza');
+    expect(saveBet).not.toHaveBeenCalled();
+  });
+
+  test('on-screen back is a history back while a create entry is behind', async () => {
+    renderForm();
+    await userEvent.click(screen.getByRole('button', { name: /prop/i }));
+    expect(activeStep()).toBe('2');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(activeStep()).toBe('1'));
+    expect(window.location.hash).toBe('');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+
+    // Back on the first step leaves Create for home, exactly as before.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
+  });
+
+  test('a deep link has nothing behind it, so back steps in place to pick type', async () => {
+    const before = window.history.length;
+    renderForm('/new/over-under');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(activeStep()).toBe('1');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+    expect(navigation.back).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(window.history.length).toBe(before);
+
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    expect(window.location.pathname + window.location.hash).toBe('/new/over-under#step-2');
+    act(() => window.history.back());
+    await waitFor(() => expect(activeStep()).toBe('1'));
+  });
+
+  test('a swipe off the first step leaves Create without touching it', async () => {
+    window.history.replaceState({}, '', '/');
+    window.history.pushState({}, '', '/new');
+    navigation.pathname = '/new';
+    navigation.params = {};
+    render(<CreateForm />);
+    act(() => window.history.back());
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(activeStep()).toBe('1');
+    expect(document.querySelector('.create-pane.is-leaving')).toBeNull();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  test('a refresh on a step hash starts over on the first step and drops the hash', () => {
+    navigation.pathname = '/new';
+    navigation.params = {};
+    window.history.replaceState({}, '', '/new#step-3');
+    render(<CreateForm />);
+    expect(activeStep()).toBe('1');
+    expect(navigation.replace).toHaveBeenCalledWith('/new', { scroll: false });
+    expect(window.location.hash).toBe('');
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  test('after phone sign-in, back from share skips the spent phone and code slides', async () => {
+    sendPhoneCode.mockResolvedValue('vid-1');
+    verifyPhoneCode.mockResolvedValue({
+      uid: 'anon-1',
+      phoneNumber: '+15551234567',
+      providerData: [{ providerId: 'phone' }],
+    });
+    await reachPhone();
+    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#step-5');
+
+    // Change number is the same history back as a swipe.
+    await userEvent.click(screen.getByRole('button', { name: 'Change number' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+    act(() => window.history.forward());
+    expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+
+    '123456'.split('').forEach((digit, index) => {
+      fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), { target: { value: digit } });
+    });
+    expect(await screen.findByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+    expect(navigation.replace).toHaveBeenCalledWith('/new/money-line#step-6', { scroll: false });
+    await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
+    expect(await screen.findByRole('link', { name: 'View live tally' })).toBeInTheDocument();
+    expect(saveBet).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#step-3');
+    expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
+    expect(saveBet).toHaveBeenCalledTimes(1);
+
+    // Forward walks past the spent slides too.
+    act(() => window.history.forward());
+    expect(await screen.findByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#step-6');
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('with reduced motion a swipe still moves the step', async () => {
+    const previous = window.matchMedia;
+    window.matchMedia = jest.fn((query) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    }));
+    try {
+      renderForm('/new/money-line');
+      await goToStake('Who is late');
+      act(() => window.history.back());
+      expect(await screen.findByRole('heading', { name: 'Money Line' })).toBeInTheDocument();
+      expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
+    } finally {
+      if (previous) window.matchMedia = previous;
+      else delete window.matchMedia;
+    }
+  });
 });

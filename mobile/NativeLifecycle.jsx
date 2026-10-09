@@ -24,14 +24,22 @@ export default function NativeLifecycle() {
       if (active) listeners.push(listener);
       else await listener.remove();
     };
+    // A link pushes, so back returns to where the user was. On a cold launch
+    // that is Home: the app boots on '/', so Home sits under the link rather than
+    // a blank entry. A link to the page already showing (iOS also replays the
+    // launch URL as appUrlOpen) replaces, so back never repeats a page.
     const open = ({ url }) => {
       const path = appPathFromUrl(url);
-      if (active && path) navigateRef.current(path);
+      if (!active || !path) return;
+      const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      navigateRef.current(path, { replace: path === here });
     };
     const start = async () => {
       await attach('appUrlOpen', open);
       const launch = await App.getLaunchUrl();
       if (launch) open(launch);
+      // The one back handler (with it, Capacitor skips the WebView's own back).
+      // React Router's idx is the app's history, Create steps included.
       await attach('backButton', () => {
         if (window.history.state?.idx > 0) navigateRef.current(-1);
         else if (window.location.pathname !== '/') navigateRef.current('/', { replace: true });
