@@ -4,8 +4,9 @@
 //   npm run screenshots -- live-tally.png settled.png --copy-to=/tmp/shots
 //
 // File names pick shots; --copy-to also writes each image to that directory.
-// Shots marked docs: false (many-voters.png, settled-tally.png, results-open.png)
-// only go to --copy-to.
+// Shots marked docs: false (many-voters.png, results-open.png and the settled
+// reveal variants winner-b.png, loser-b.png, creator-t.png,
+// nobody-called-it.png) only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
@@ -26,6 +27,7 @@ const CODE = 'k7q2xm';
 
 const JACK = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
 const MAYA = { uid: 'maya', providerData: [] };
+const JAKE = { uid: 'jake', providerData: [] };
 
 const OPEN_BET = {
   id: CODE, code: CODE, schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line',
@@ -51,6 +53,11 @@ const FULL_BET = {
     { voterId: 'bart', name: 'Bartholomew Maximilian Fitzgerald-Worthington the Third', optionId: 'b' },
   ],
 };
+// Jack made the bet but sat it out, so his settled tally shows the plain
+// "who won" reveal rather than his own result.
+const SAT_OUT_BET = { ...FULL_BET, votes: FULL_BET.votes.filter((vote) => vote.voterId !== 'jack') };
+// Everyone took the favorite; settled on the other side, nobody called it.
+const UPSET_BET = { ...FULL_BET, votes: FULL_BET.votes.map((vote) => ({ ...vote, optionId: 'a' })) };
 const CROWD_BET = {
   ...FULL_BET,
   votes: [
@@ -79,8 +86,10 @@ async function startServer() {
 }
 
 // `bet` is the fixture every subscription sees. `settled` closes it with a
-// real settlement snapshot built by the app's own buildSettlement.
+// real settlement snapshot built by the app's own buildSettlement: true
+// settles on side a, or pass the winning option id.
 async function fixtures(page, { user, name, bet, settled = false }) {
+  const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
@@ -95,7 +104,8 @@ async function fixtures(page, { user, name, bet, settled = false }) {
     contentType: 'application/javascript',
     body: `import { buildSettlement } from ${JSON.stringify(new URL('./settlement.js', route.request().url()).href)};
       let bet = ${JSON.stringify(bet)};
-      if (${settled}) bet = { ...bet, status: 'closed', winnerId: 'a', settledAt: Date.now(), settlement: buildSettlement(bet, 'a') };
+      const winnerId = ${JSON.stringify(winnerId || null)};
+      if (winnerId) bet = { ...bet, status: 'closed', winnerId, settledAt: Date.now(), settlement: buildSettlement(bet, winnerId) };
       export const subscribeBet = (code, cb) => { cb(bet); return () => {}; };
       export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
       export const hydrateBet = async (b) => b;
@@ -199,12 +209,12 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/b/${CODE}`);
-      await page.getByText('Bragging rights, secured.').first().waitFor();
-      await showBars(page, '.result-card');
+      await page.getByText('You called it.').waitFor();
+      await showBars(page, '.reveal');
     },
   },
   {
-    file: 'settled-tally.png',
+    file: 'winner-b.png',
     docs: false,
     user: MAYA,
     name: 'Maya',
@@ -212,8 +222,46 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/b/${CODE}`);
-      await page.getByText('Bragging rights, secured.').first().waitFor();
-      await showBars(page);
+      await page.getByText('You called it.').waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'loser-b.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: FULL_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('link', { name: 'Start a bet', exact: true }).waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'creator-t.png',
+    docs: false,
+    user: JACK,
+    bet: SAT_OUT_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Bragging rights, secured.').waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'nobody-called-it.png',
+    docs: false,
+    user: MAYA,
+    name: 'Maya',
+    bet: UPSET_BET,
+    settled: 'b',
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByText('Nobody called it.').waitFor();
+      await showBars(page, '.reveal');
     },
   },
   {

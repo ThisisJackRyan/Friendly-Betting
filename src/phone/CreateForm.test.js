@@ -244,7 +244,7 @@ test('Text friends saves once and provides vote and live tally links', async () 
     createdByName: 'Sam',
   }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'FRIENDLY · You in?\nWho is late?\n1. Yes\n2. No\nAt stake: a coffee\nMake your call: http://localhost/b/abc123',
+    'New bet: Who is late\nStakes: a coffee\nPick your side: http://localhost/b/abc123',
   );
 });
 
@@ -260,7 +260,7 @@ test('suggested stakes remain editable and appear in the recap', async () => {
   expect(screen.getByText('Coffee for the crew')).toBeInTheDocument();
 });
 
-test('over-under still shares the same short vote text', async () => {
+test('over-under shares the same short invite, without its sides', async () => {
   renderForm('/new/over-under');
   await userEvent.type(screen.getByLabelText(/question/i), 'Rolls');
   await userEvent.type(screen.getByLabelText(/line/i), '13.5');
@@ -270,7 +270,7 @@ test('over-under still shares the same short vote text', async () => {
   expect(screen.getByText('Under 13.5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
   expect(shareMessage).toHaveBeenCalledWith(
-    'FRIENDLY · You in?\nRolls?\n1. Over 13.5\n2. Under 13.5\nMake your call: http://localhost/b/abc123',
+    'New bet: Rolls\nPick your side: http://localhost/b/abc123',
   );
 });
 

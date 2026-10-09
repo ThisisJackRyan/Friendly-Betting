@@ -122,12 +122,9 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
 });
 
 const textFriendsMessage = [
-  'FRIENDLY · You in?',
-  'Who is late?',
-  '1. Yes',
-  '2. No',
-  'At stake: a coffee',
-  'Make your call: http://localhost/b/abc123',
+  'Votes are coming in on Who is late',
+  'Stakes: a coffee',
+  'Get your pick in: http://localhost/b/abc123',
 ].join('\n');
 
 test('the creator can close and settle from the tally', async () => {
@@ -283,7 +280,10 @@ test('the creator previews, confirms, and gets the committed result immediately'
   expect(screen.getByRole('region', { name: 'Result preview' })).toBeInTheDocument();
   expect(settleBet).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('button', { name: 'Settle & notify' }));
-  expect(await screen.findByRole('heading', { name: 'Sam won the $20 pot' })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Sam won.' })).toBeInTheDocument();
+  // The creator voted Yes, so they get the lost variant and the way back in.
+  expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Not your day. Get ’em next time.');
+  expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
   expect(screen.queryByRole('button', { name: 'Close & settle' })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
   expect(shareMessage).toHaveBeenCalledWith(expect.stringContaining('Closed · Sam won the $20 pot'));
@@ -303,7 +303,7 @@ test('failed settlement keeps the preview available and does not claim a result'
 
 test.each([
   ['a', 'You called it.'],
-  ['b', 'This one’s settled. Thanks for being in.'],
+  ['b', 'Not your day. Get ’em next time.'],
 ])('a participant sees the %s outcome directly on the original invite link', async (winnerId, copy) => {
   subscribeBet.mockImplementation((_code, onChange) => { onChange(finishedBet(winnerId)); return () => {}; });
   renderAt('/b/abc123', <VoteScreen />);
@@ -661,10 +661,9 @@ describe('live results after voting', () => {
 
     await push({ ...votedBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(votedBet, 'a') });
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('You called it.');
-    expect(screen.getByText('Final tally')).toBeInTheDocument();
+    expect(screen.queryByText('Final tally')).not.toBeInTheDocument();
     expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Picked by Jack' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Picked by Sam' })).toBeInTheDocument();
+    expect(document.querySelector('.bars, .voter-list')).toBeNull();
   });
 
   test('the You’re on view keeps counts only, without voter names', async () => {

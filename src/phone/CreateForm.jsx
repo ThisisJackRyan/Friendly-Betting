@@ -30,11 +30,11 @@ import {
   buildDraft,
   choiceLabels,
   formatCloses,
-  formatSms,
   friendlyError,
   parseCloses,
   TYPE_META,
 } from './model';
+import { formatInvite } from './inviteCopy';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import CreatePick from './CreatePick';
@@ -385,9 +385,8 @@ const CreateForm = () => {
     setError('');
     try {
       const id = await saveBet(code, fields);
-      const text = formatSms({
-        question: fields.question,
-        choices: choiceLabels(fields),
+      const text = formatInvite({
+        title: fields.question,
         stake: fields.stake,
         url: voteUrl(id),
       });
