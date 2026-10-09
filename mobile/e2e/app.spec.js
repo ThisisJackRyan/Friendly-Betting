@@ -117,7 +117,10 @@ async function mockCrew(page) {
   });
 }
 
-for (const [side, winner, ping] of [['Bears', 'Jack', 'You called it.'], ['Packers', 'Sam', 'This one’s settled.']]) {
+for (const [side, winner, ping, headline, subline] of [
+  ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Bragging rights, secured.'],
+  ['Packers', 'Sam', 'This one’s settled.', 'Sam won.', 'Not your day. Get ’em next time.'],
+]) {
   test(`settle in the app: ${winner} wins, with the right participant ping`, async ({ page }, testInfo) => {
     page.on('pageerror', (error) => console.error('App preview error:', error.message));
     await mockCrew(page);
@@ -126,11 +129,18 @@ for (const [side, winner, ping] of [['Bears', 'Jack', 'You called it.'], ['Packe
     await page.getByRole('button', { name: side, exact: true }).click();
     await expect(page.getByRole('region', { name: 'Result preview' })).toContainText(`${winner} won the $20 pot`);
     await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
-    await expect(page.getByRole('region', { name: 'Settled result' })).toContainText(`${winner} won the $20 pot`);
-    await expect(page.getByRole('region', { name: 'Settled result' })).toContainText(ping);
+    const reveal = page.getByRole('region', { name: 'Settled result' });
+    await expect(reveal).toContainText(`${side} won`);
+    await expect(reveal).toContainText(subline);
+    await expect(reveal).toContainText('Stakes: $20 pot');
+    // The reveal replaces the per-side breakdown and voter lists.
+    await expect(page.locator('.bars, .voter-list')).toHaveCount(0);
+    // Only the viewer who lost gets the way back in.
+    await expect(page.getByRole('link', { name: 'Start a bet', exact: true })).toHaveCount(winner === 'Jack' ? 0 : 1);
     // Nothing floats over the settled screen; Results lives in the header now.
     await expect(page.locator('.results-trigger, .result-toast')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: `${winner} won the $20 pot`, exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(reveal.getByRole('heading', { name: headline, exact: true })).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const header = await page.locator('.tally-screen > .nav-row').boundingBox();
     await expect.poll(async () => (await page.getByRole('region', { name: 'Settled result' }).boundingBox()).y).toBeGreaterThanOrEqual(header.y + header.height + 8);
     await page.screenshot({ path: testInfo.outputPath('settled.png'), animations: 'disabled', scale: 'css' });

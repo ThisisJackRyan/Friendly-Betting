@@ -281,7 +281,7 @@ describe('live tally', () => {
     expect(feeds).toHaveLength(1);
   });
 
-  test('a new pick adds that name under its side live, and settling keeps the lists', async () => {
+  test('a new pick adds that name under its side live, and settling swaps the lists for the reveal', async () => {
     const named = (voterId, name, optionId) => ({ voterId, name, optionId });
     const list = (index) => document.querySelectorAll('.bar-row')[index].querySelector('.voter-list');
     await renderTally();
@@ -298,9 +298,9 @@ describe('live tally', () => {
 
     const voted = { ...openBet, votes };
     await push({ ...voted, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(voted, 'a') });
-    expect(screen.getByText('Final tally')).toBeInTheDocument();
-    expect(list(0)).toHaveAttribute('aria-label', 'Picked by Jake');
-    expect(list(1)).toHaveAttribute('aria-label', 'Picked by Maya and 1 friend');
+    expect(screen.queryByText('Final tally')).not.toBeInTheDocument();
+    expect(document.querySelector('.bars, .voter-list')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Jake won.' })).toBeInTheDocument();
     expect(feeds).toHaveLength(1);
   });
 
@@ -428,9 +428,9 @@ describe('live tally', () => {
       settlement: buildSettlement({ ...openBet, votes }, 'b'),
     });
     expect(screen.getByRole('heading', { name: 'The final word' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Settled result' })).toBeInTheDocument();
-    expect(screen.getByText('Final tally')).toBeInTheDocument();
-    expect(document.querySelector('.bar-row.mine')).toHaveTextContent('No');
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('No won');
+    expect(screen.queryByText('Final tally')).not.toBeInTheDocument();
+    expect(document.querySelector('.bar-row')).toBeNull();
     expect(closeButton()).not.toBeInTheDocument();
     expect(screen.queryByText('Who won?')).not.toBeInTheDocument();
     expect(settleBet).not.toHaveBeenCalled();

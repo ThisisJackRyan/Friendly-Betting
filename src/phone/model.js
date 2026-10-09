@@ -90,18 +90,6 @@ export function choiceLabels(bet) {
   return (bet?.options || []).map((option) => optionVoteLabel(bet, option));
 }
 
-export function formatSms({ question, choices, stake, url }) {
-  const q = String(question || '').trim();
-  const choiceLines = (choices || [])
-    .filter(Boolean)
-    .map((label, index) => `${index + 1}. ${label}`);
-  const stakeText = String(stake || '').trim();
-  const lines = ['FRIENDLY · You in?', /[?!.,]$/.test(q) ? q : `${q}?`, ...choiceLines];
-  if (stakeText) lines.push(`At stake: ${stakeText}`);
-  lines.push(`Make your call: ${url}`);
-  return lines.join('\n');
-}
-
 export function parseCloses(value) {
   if (!value) return null;
   const time = new Date(value).getTime();

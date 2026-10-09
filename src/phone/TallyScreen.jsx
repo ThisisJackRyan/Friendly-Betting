@@ -9,9 +9,7 @@ import { useLiveBet } from './useLiveBet';
 import { canSettleBet } from './creatorSession';
 import { useIdentity } from './identity';
 import {
-  choiceLabels,
   formatCloses,
-  formatSms,
   friendlyError,
   optionVoteLabel,
   questionOf,
@@ -19,6 +17,7 @@ import {
   typeLabelOf,
   votingOpen,
 } from './model';
+import { formatTallyInvite } from './inviteCopy';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
 import Bars from './Bars';
@@ -26,7 +25,8 @@ import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
-import ResultShare from './ResultShare';
+import SettledReveal from './SettledReveal';
+import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 
@@ -110,10 +110,8 @@ const TallyScreen = () => {
 
   const onShare = async () => {
     if (!bet || sharing) return;
-    const text = formatSms({
-      name: bet.createdByName,
-      question: questionOf(bet),
-      choices: choiceLabels(bet),
+    const text = formatTallyInvite({
+      title: questionOf(bet),
       stake: bet.stake,
       url: voteUrl(bet.code || betId),
     });
@@ -129,6 +127,7 @@ const TallyScreen = () => {
 
   const canSettle = canSettleBet(user, bet);
   const result = settlementOf(bet);
+  const settled = buildReveal({ bet, viewerId: user?.uid });
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
 
@@ -185,12 +184,17 @@ const TallyScreen = () => {
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
-            {result && <><div ref={resultRef}><ResultCard bet={bet} voterId={user?.uid} /></div><ResultShare bet={bet} code={betId} /></>}
-            <div className="results-heading">
-              <h2>The group’s picks</h2>
-              <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
-            </div>
-            <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters />
+            {settled ? (
+              <div ref={resultRef} className="reveal-wrap"><SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} /></div>
+            ) : (
+              <>
+                <div className="results-heading">
+                  <h2>The group’s picks</h2>
+                  <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
+                </div>
+                <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters />
+              </>
+            )}
             {error && (
               <p className="form-error" role="alert">
                 {error}
