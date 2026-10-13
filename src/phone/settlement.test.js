@@ -74,3 +74,11 @@ test('legacy settled bets still render but do not create historical notification
   expect(settlementOf({ ...legacy, winnerId: null })).toBeNull();
   expect(settlementOf({ ...legacy, winnerId: 'missing' })).toBeNull();
 });
+
+test.each([
+  ['status called-off', { ...bet, status: 'called-off' }],
+  ['calledOff flag on a settled bet', { ...settled(), calledOff: true }],
+])('a called-off bet (%s) has no result and no notification', (_label, off) => {
+  expect(settlementOf(off)).toBeNull();
+  for (const uid of ['jack', 'sam', 'spectator']) expect(notificationFor(off, uid)).toBeNull();
+});

@@ -1,32 +1,36 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from '../platform/Link';
 import { useParams, useRouter } from '../platform/navigation';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
 import { settleBet } from './api';
 import { useLiveBet } from './useLiveBet';
-import { canSettleBet } from './creatorSession';
+import { canSettleBet, isBetCreator } from './creatorSession';
 import { useIdentity } from './identity';
 import {
-  choiceLabels,
   formatCloses,
-  formatSms,
   friendlyError,
   optionVoteLabel,
   questionOf,
   statusLabel,
+  tallyCounts,
   typeLabelOf,
+  voteFor,
   votingOpen,
 } from './model';
+import { formatInvite } from './inviteCopy';
 import { voteUrl } from './routes';
-import { shareMessage } from './share';
+import { hasShareSheet, openShareSheet, shareMessage } from './share';
+import { takeFreshBet } from './freshBet';
 import Bars from './Bars';
 import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
-import ResultShare from './ResultShare';
+import SettledReveal from './SettledReveal';
+import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 
@@ -78,7 +82,14 @@ const TallyScreen = () => {
   const [sharing, setSharing] = useState(false);
   const resultRef = useRef(null);
   const revealSettlement = useRef(false);
+  // Whether this tab just made this bet (see freshBet): undefined until the
+  // first mount takes the note, then true until the share sheet opens once.
+  const fresh = useRef(undefined);
   const minElapsed = useMinHold(betId);
+
+  useEffect(() => {
+    if (fresh.current === undefined) fresh.current = takeFreshBet(betId);
+  }, [betId]);
 
   useEffect(() => {
     document.title = 'The picks · Friendly';
@@ -108,15 +119,15 @@ const TallyScreen = () => {
     }
   };
 
+  const inviteText = () => formatInvite({
+    title: questionOf(bet),
+    stake: bet.stake,
+    url: voteUrl(bet.code || betId),
+  });
+
   const onShare = async () => {
     if (!bet || sharing) return;
-    const text = formatSms({
-      name: bet.createdByName,
-      question: questionOf(bet),
-      choices: choiceLabels(bet),
-      stake: bet.stake,
-      url: voteUrl(bet.code || betId),
-    });
+    const text = inviteText();
     setMessage(text);
     setSharing(true);
     try {
@@ -127,18 +138,41 @@ const TallyScreen = () => {
     }
   };
 
+  // Right after Create, the share sheet opens by itself, once. Only a real
+  // sheet: with none (or if the browser refuses it) the invite button waits.
+  useEffect(() => {
+    if (!bet || !fresh.current || !votingOpen(bet)) return;
+    fresh.current = false;
+    if (!hasShareSheet()) return;
+    setMessage(inviteText());
+    setSharing(true);
+    openShareSheet(inviteText())
+      .then((result) => setShareState(result))
+      .finally(() => setSharing(false));
+  }, [bet]);
+
   const canSettle = canSettleBet(user, bet);
   const result = settlementOf(bet);
+  const settled = buildReveal({ bet, viewerId: user?.uid });
   const reveal = minElapsed && bet !== undefined;
   const shareNote = SHARE_NOTE[shareState];
+  // The creator's own open bet with no picks yet: texting the crew is next.
+  const nudge = Boolean(bet) && votingOpen(bet) && isBetCreator(user, bet)
+    && tallyCounts(bet).every((row) => row.count === 0);
+  // The creator's own open bet they haven't picked on yet. `settled` also
+  // covers a called-off bet. A pick made on the vote page shows up here once
+  // its snapshot does (the vote screen's optimistic pick stays on that screen).
+  const offerVote = Boolean(bet) && votingOpen(bet) && !settled && isBetCreator(user, bet)
+    && !voteFor(bet, user.uid);
 
   useEffect(() => {
     if (bet?.votes?.some((vote) => vote.voterId === user?.uid)) rememberBet(user.uid, betId);
   }, [bet, user?.uid, betId]);
 
+  const final = Boolean(settled);
   useEffect(() => {
-    if (result) document.title = 'The final word · Friendly';
-  }, [result]);
+    if (final) document.title = 'The final word · Friendly';
+  }, [final]);
 
   useEffect(() => {
     if (!result || settling || !revealSettlement.current) return;
@@ -159,7 +193,7 @@ const TallyScreen = () => {
         <button type="button" className="icon-btn" aria-label="Back" onClick={() => router.back()}>
           <FiChevronLeft size={28} />
         </button>
-        <h1 className="nav-title">{result ? 'The final word' : 'The picks'}</h1>
+        <h1 className="nav-title">{settled ? 'The final word' : 'The picks'}</h1>
       </div>
       <div className="scroll">
         {!reveal && <FriendlyLoader />}
@@ -181,28 +215,38 @@ const TallyScreen = () => {
             <h2 className="question-xl">{questionOf(bet)}</h2>
             <div className="vote-meta">
               {bet.closesAt && votingOpen(bet) ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
-              {!result && !votingOpen(bet) && <p className="closes">Picks are closed. The final call is coming.</p>}
+              {!settled && !votingOpen(bet) && <p className="closes">Picks are closed. The final call is coming.</p>}
             </div>
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
-            {result && <><div ref={resultRef}><ResultCard bet={bet} voterId={user?.uid} /></div><ResultShare bet={bet} code={betId} /></>}
-            <div className="results-heading">
-              <h2>The group’s picks</h2>
-              <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
-            </div>
-            <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} />
+            {settled ? (
+              <div ref={resultRef} className="reveal-wrap"><SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} /></div>
+            ) : (
+              <>
+                <div className="results-heading">
+                  <h2>The group’s picks</h2>
+                  <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
+                </div>
+                <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters />
+              </>
+            )}
             {error && (
               <p className="form-error" role="alert">
                 {error}
               </p>
             )}
-            {votingOpen(bet) && <div className="tally-share">
+            {votingOpen(bet) && <div className={nudge ? 'tally-share is-nudge' : 'tally-share'}>
               {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
-              <button type="button" className="cta press" disabled={sharing} onClick={onShare}>
+              <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
                 Text the crew
               </button>
+              {offerVote && (
+                <Link className="text-link tally-vote-link" href={`/b/${encodeURIComponent(bet.code || betId)}`}>
+                  Wanna vote?
+                </Link>
+              )}
             </div>}
             {canSettle && !settling && (
               <button type="button" className="danger press" onClick={() => setSettling(true)}>

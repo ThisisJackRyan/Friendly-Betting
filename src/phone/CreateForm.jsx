@@ -2,15 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from '../platform/Link';
-import { useParams, useRouter } from '../platform/navigation';
-import {
-  FiCheckCircle,
-  FiChevronLeft,
-  FiFlag,
-  FiMessageCircle,
-  FiShield,
-  FiX,
-} from 'react-icons/fi';
+import { useParams, usePathname, useRouter } from '../platform/navigation';
+import { FiChevronLeft, FiFlag, FiMessageCircle, FiShield, FiX } from 'react-icons/fi';
 import { FlowProgress, PageIntro } from './ProductUI';
 import { saveBet } from './api';
 import {
@@ -26,33 +19,15 @@ import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
 import { AUTH_COPY, CREATE_STEP, adjacentCreateStep, isCreator } from './creatorSession';
 import { creatorName, useIdentity } from './identity';
-import {
-  buildDraft,
-  choiceLabels,
-  formatCloses,
-  formatSms,
-  friendlyError,
-  parseCloses,
-  TYPE_META,
-} from './model';
-import { voteUrl } from './routes';
-import { shareMessage } from './share';
+import { buildDraft, friendlyError, parseCloses, TYPE_META } from './model';
+import { markFreshBet } from './freshBet';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
 import AppHeader from './AppHeader';
 
-const SHARE_NOTE = {
-  shared: 'Pick who gets it.',
-  sms: 'Opening Messages.',
-  copied: 'Copied \u2014 paste into a text.',
-  aborted: 'Saved. Text when you\u2019re ready.',
-  manual: 'Copy the message below.',
-};
-
 const COPY = {
   newBet: 'New bet',
   stake: 'Stake',
-  textFriendsTitle: 'Text friends',
   stakeHint: 'Skip if it\u2019s just bragging rights.',
   stakePlaceholder: 'Pizza, $5, bragging rights',
   questionPlaceholder: 'Who shows up last?',
@@ -63,6 +38,21 @@ const COPY = {
   textFriends: 'Text friends',
   sending: 'Getting it ready\u2026',
 };
+
+// Each Create step after the one Create opened on is its own `#step-N` history
+// entry on this same page, pushed through the platform router (a same-document
+// hash navigation in both Next and React Router, so the draft in state survives).
+// The iOS swipe, Android back, browser back, and the on-screen back all pop it.
+// Making the bet hands off to its live tally in place of these entries (see
+// leaveForTally), so no way back lands on a step that already sent.
+const STEP_HASH = /^#step-(\d+)$/;
+
+function stepFromHash(hash) {
+  const match = STEP_HASH.exec(hash || '');
+  return match ? Number(match[1]) : null;
+}
+
+const SKIP_WHEN_CREATOR = [CREATE_STEP.phone, CREATE_STEP.code];
 
 function draftInput(state) {
   return {
@@ -78,30 +68,9 @@ function draftInput(state) {
   };
 }
 
-function Recap({ fields }) {
-  const choices = choiceLabels(fields);
-  return (
-    <>
-      <p className="recap-eyebrow">Ready to text</p>
-      <div className="recap-card">
-        <span className="chip">{fields.typeLabel}</span>
-        <p className="recap-question">{fields.question}</p>
-        {choices.length > 0 && (
-          <div className="recap-choices">
-            {choices.map((choice, index) => (
-              <span key={index}>{choice}</span>
-            ))}
-          </div>
-        )}
-        {fields.stake ? <p className="stake-line">{fields.stake}</p> : null}
-        {fields.closesAt ? <p className="closes">Closes {formatCloses(fields.closesAt)}</p> : null}
-      </div>
-    </>
-  );
-}
-
 const CreateForm = () => {
   const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
   const identity = useIdentity();
   const [linkedUser, setLinkedUser] = useState(null);
@@ -115,6 +84,10 @@ const CreateForm = () => {
   const invalidRoute = Boolean(rawType) && !routeType;
 
   const [step, setStep] = useState(routeType ? 2 : 1);
+  // entries[0] is the hashless entry Create opened on; later ones carry `#step-N`.
+  // Forward moves push, so steps in entries only grow and a hash finds its entry.
+  const stepHistory = useRef({ entries: [step], index: 0 });
+  const onPopRef = useRef(null);
   const [leaving, setLeaving] = useState(null);
   const [motion, setMotion] = useState('forward');
   const [hasMoved, setHasMoved] = useState(false);
@@ -129,11 +102,11 @@ const CreateForm = () => {
   const [overLabel, setOverLabel] = useState('Over');
   const [underLabel, setUnderLabel] = useState('Under');
   const [propOptions, setPropOptions] = useState(['', '']);
-  const [code, setCode] = useState(null);
-  const [message, setMessage] = useState('');
-  const [shareState, setShareState] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const leavingRef = useRef(false);
+  const mountedRef = useRef(false);
 
   const meta = TYPE_META[type] || null;
   const input = draftInput({
@@ -157,6 +130,28 @@ const CreateForm = () => {
     if (invalidRoute) router.replace('/new');
   }, [invalidRoute, router]);
 
+  // A refresh (or a return from another page) on a step hash starts Create over
+  // on its first step, so the stale hash is dropped instead of adding an entry.
+  useEffect(() => {
+    if (!invalidRoute && stepFromHash(window.location.hash) != null) {
+      router.replace(pathname, { scroll: false });
+    }
+    // Mount only: later hashes are this form's own entries.
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => onPopRef.current?.();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   useEffect(() => {
     const titles = {
       1: COPY.newBet,
@@ -164,7 +159,6 @@ const CreateForm = () => {
       3: COPY.stake,
       4: AUTH_COPY.phoneTitle,
       5: AUTH_COPY.codeTitle,
-      6: COPY.textFriendsTitle,
     };
     document.title = `${titles[step] || COPY.newBet} · Friendly`;
   }, [step, meta]);
@@ -188,24 +182,133 @@ const CreateForm = () => {
 
   stepRef.current = step;
 
+  const stepUrl = (next) => `${pathname}#step-${next}`;
+
+  const pushStep = (next) => {
+    const trail = stepHistory.current;
+    trail.entries = [...trail.entries.slice(0, trail.index + 1), next];
+    trail.index = trail.entries.length - 1;
+    router.push(stepUrl(next), { scroll: false });
+  };
+
+  // Replace semantics: no new entry. The entry Create opened on keeps its URL.
+  const replaceStep = (next) => {
+    const trail = stepHistory.current;
+    trail.entries = trail.entries.map((entry, i) => (i === trail.index ? next : entry));
+    if (trail.index > 0) router.replace(stepUrl(next), { scroll: false });
+  };
+
+  const show = (next, direction) => {
+    setMotion(direction);
+    setLeaving(stepRef.current);
+    setHasMoved(true);
+    setError('');
+    setStep(next);
+  };
+
+  // Back from the tally goes to wherever Create was opened from: walk back to
+  // the hashless entry Create opened on, then put the tally in its place. The
+  // step entries ahead of it are only reachable by forward, which opens a
+  // fresh Create (see the refresh rule above), never the bet that just sent.
+  const leaveForTally = (id) => {
+    const href = `/t/${encodeURIComponent(id)}`;
+    const behind = stepHistory.current.index;
+    leavingRef.current = true;
+    if (behind <= 0) {
+      router.replace(href);
+      return;
+    }
+    const arrive = () => {
+      window.removeEventListener('popstate', arrive);
+      // After the router has handled the same popstate.
+      window.setTimeout(() => router.replace(href), 0);
+    };
+    window.addEventListener('popstate', arrive);
+    window.history.go(-behind);
+  };
+
+  // Makes the bet and opens its live tally, which offers the invite. Once
+  // saved, this Create is done: the button stays busy until the tally shows.
+  const makeBet = async (creator) => {
+    if (savingRef.current || leavingRef.current) return;
+    const ready = buildDraft(type, input);
+    if (!ready.ok) {
+      setError(ready.error);
+      return;
+    }
+    if (!isCreator(creator)) {
+      go(CREATE_STEP.phone);
+      return;
+    }
+
+    const fields = {
+      ...ready.fields,
+      createdByID: creator.uid,
+      createdByName: creatorName(creator),
+    };
+    if (creator.email) fields.createdByEmail = creator.email;
+
+    savingRef.current = true;
+    setSaving(true);
+    setError('');
+    try {
+      const id = await saveBet(null, fields);
+      // Left Create mid-save: the bet is in My bets, and no tally opens.
+      if (!mountedRef.current) return;
+      markFreshBet(id);
+      leaveForTally(id);
+    } catch (err) {
+      savingRef.current = false;
+      setSaving(false);
+      // A spent code can't be used again, so a failed save after sign-in
+      // waits on the stake slide, where trying again makes the bet.
+      if (stepRef.current !== CREATE_STEP.stake) go(CREATE_STEP.stake);
+      setError(friendlyError(err, 'Could not save this bet.'));
+    }
+  };
+
   useEffect(() => {
     if (!phone.verifiedUser || advancedAuth.current) return;
     advancedAuth.current = true;
     setLinkedUser(phone.verifiedUser);
-    setMotion('forward');
-    setLeaving(stepRef.current);
-    setHasMoved(true);
-    setError('');
-    setStep(CREATE_STEP.share);
+    makeBet(phone.verifiedUser);
   }, [phone.verifiedUser]);
 
+  // Forward moves add an entry; a backward move that isn't a history back
+  // (nothing of ours behind it) replaces the current one.
   const go = (next) => {
-    if (exitHome || next == null || next === step || next < 1 || next > CREATE_STEP.share) return;
-    setMotion(next > step ? 'forward' : 'back');
-    setLeaving(step);
-    setHasMoved(true);
-    setError('');
-    setStep(next);
+    if (exitHome || next == null || next === step || next < 1 || next > CREATE_STEP.code) return;
+    if (next > step) pushStep(next);
+    else replaceStep(next);
+    show(next, next > step ? 'forward' : 'back');
+  };
+
+  // Moves back to `target` through history when it is the entry right behind,
+  // so the slide comes from the popstate below like any swipe or Android back.
+  const goBackTo = (target) => {
+    const trail = stepHistory.current;
+    if (trail.index > 0 && trail.entries[trail.index - 1] === target) router.back();
+    else go(target);
+  };
+
+  onPopRef.current = () => {
+    if (leavingRef.current || window.location.pathname !== pathname) return;
+    const trail = stepHistory.current;
+    const hashStep = stepFromHash(window.location.hash);
+    const index = hashStep == null ? 0 : trail.entries.indexOf(hashStep, 1);
+    if (index < 0) return;
+    const from = trail.index;
+    trail.index = index;
+    const target = trail.entries[index];
+    if (exitHome || target === stepRef.current) return;
+    // Same rule as adjacentCreateStep: a verified creator never sees phone or
+    // code again, so keep walking past that entry in the same direction.
+    if (SKIP_WHEN_CREATOR.includes(target) && isCreator(user)) {
+      if (index < from) router.back();
+      else window.history.forward();
+      return;
+    }
+    show(target, target < stepRef.current ? 'back' : 'forward');
   };
 
   const goHome = () => {
@@ -233,15 +336,18 @@ const CreateForm = () => {
   const pickType = (id) => {
     if (exitHome) return;
     setType(id);
-    setMotion('forward');
-    setLeaving(step);
-    setHasMoved(true);
-    setError('');
-    setStep(2);
+    pushStep(2);
+    show(2, 'forward');
   };
 
+  // With a Create entry behind, back is a history back: the same path as a
+  // swipe. On the entry Create opened on, back works as it always has.
   const onBack = (stepNumber) => {
     if (exitHome) return;
+    if (stepHistory.current.index > 0) {
+      router.back();
+      return;
+    }
     const prev = adjacentCreateStep(stepNumber, user, -1);
     if (prev == null) {
       goHome();
@@ -275,51 +381,11 @@ const CreateForm = () => {
     go(3);
   };
 
-  const onTextFriends = async () => {
-    const ready = buildDraft(type, input);
-    if (!ready.ok) {
-      setError(ready.error);
-      return;
-    }
-    if (!isCreator(user)) {
-      go(CREATE_STEP.phone);
-      return;
-    }
-
-    const fields = {
-      ...ready.fields,
-      createdByID: user.uid,
-      createdByName: creatorName(user),
-    };
-    if (user.email) fields.createdByEmail = user.email;
-
-    setSaving(true);
-    setError('');
-    try {
-      const id = await saveBet(code, fields);
-      const text = formatSms({
-        question: fields.question,
-        choices: choiceLabels(fields),
-        stake: fields.stake,
-        url: voteUrl(id),
-      });
-      setCode(id);
-      setMessage(text);
-      const result = await shareMessage(text);
-      setShareState(result);
-    } catch (err) {
-      setError(friendlyError(err, 'Could not save this bet.'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const titleFor = (stepNumber) => {
     if (stepNumber === CREATE_STEP.details) return meta?.label || COPY.newBet;
     if (stepNumber === CREATE_STEP.stake) return COPY.stake;
     if (stepNumber === CREATE_STEP.phone) return AUTH_COPY.phoneTitle;
     if (stepNumber === CREATE_STEP.code) return AUTH_COPY.codeTitle;
-    if (stepNumber === CREATE_STEP.share) return COPY.textFriendsTitle;
     return COPY.newBet;
   };
 
@@ -485,6 +551,7 @@ const CreateForm = () => {
     }
 
     if (stepNumber === 3) {
+      const makesBet = adjacentCreateStep(CREATE_STEP.stake, user, 1) == null;
       body = (
         <>
           <PageIntro icon={FiFlag} title="What’s on the line?">
@@ -541,15 +608,17 @@ const CreateForm = () => {
         <button
           type="button"
           className="cta press"
+          disabled={saving}
           onClick={() => {
             if (!user) {
               setError('Still connecting. Try again in a second.');
               return;
             }
-            go(adjacentCreateStep(CREATE_STEP.stake, user, 1));
+            if (makesBet) makeBet(user);
+            else go(adjacentCreateStep(CREATE_STEP.stake, user, 1));
           }}
         >
-          {COPY.next}
+          {!makesBet ? COPY.next : saving ? COPY.sending : COPY.textFriends}
         </button>
       );
     }
@@ -583,49 +652,18 @@ const CreateForm = () => {
             otp={phone.otp}
             onOtp={phone.onOtp}
             onResend={() => phone.send()}
-            onChangeNumber={() => go(CREATE_STEP.phone)}
+            onChangeNumber={() => goBackTo(CREATE_STEP.phone)}
             busy={phone.busy}
           />
           {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>
       );
       cta = (
-        <VerifyButton busy={phone.busy} ready={phone.readyCode} onVerify={() => phone.verify()} />
-      );
-    }
-
-    if (stepNumber === CREATE_STEP.share) {
-      body = (
-        <>
-          <PageIntro
-            icon={FiCheckCircle}
-            title={code ? 'The bet is on.' : 'Put the group chat on the line.'}
-          >
-            {code
-              ? 'Your bet is saved. Share it again or follow the picks as they come in.'
-              : 'Looking good. Text your friends and see who’s in.'}
-          </PageIntro>
-          {draft.ok && <Recap fields={draft.fields} />}
-          {code && (
-            <Link className="secondary press recap-tally" href={`/t/${code}`}>
-              View live tally
-            </Link>
-          )}
-          {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
-        </>
-      );
-      cta = (
-        <>
-          {code && (
-            <Link className="vote-link" href={`/b/${code}`}>
-              {voteUrl(code)}
-            </Link>
-          )}
-          {shareState && <p className="share-note">{SHARE_NOTE[shareState]}</p>}
-          <button className="cta press" type="button" disabled={saving} onClick={onTextFriends}>
-            {saving ? COPY.sending : COPY.textFriends}
-          </button>
-        </>
+        <VerifyButton
+          busy={phone.busy || (saving ? 'verify' : null)}
+          ready={phone.readyCode}
+          onVerify={() => phone.verify()}
+        />
       );
     }
 

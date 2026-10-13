@@ -90,18 +90,6 @@ export function choiceLabels(bet) {
   return (bet?.options || []).map((option) => optionVoteLabel(bet, option));
 }
 
-export function formatSms({ question, choices, stake, url }) {
-  const q = String(question || '').trim();
-  const choiceLines = (choices || [])
-    .filter(Boolean)
-    .map((label, index) => `${index + 1}. ${label}`);
-  const stakeText = String(stake || '').trim();
-  const lines = ['FRIENDLY · You in?', /[?!.,]$/.test(q) ? q : `${q}?`, ...choiceLines];
-  if (stakeText) lines.push(`At stake: ${stakeText}`);
-  lines.push(`Make your call: ${url}`);
-  return lines.join('\n');
-}
-
 export function parseCloses(value) {
   if (!value) return null;
   const time = new Date(value).getTime();
@@ -120,19 +108,8 @@ export function formatCloses(ts) {
   }).format(new Date(ts));
 }
 
-export function votingOpen(bet, now = Date.now()) {
-  if (!bet) return false;
-  if (bet.status === 'closed') return false;
-  if (bet.closesAt && bet.closesAt <= now) return false;
-  return true;
-}
-
-export function statusLabel(bet, now = Date.now()) {
-  if (!bet) return '';
-  if (bet.status === 'closed' && bet.winnerId) return 'Settled';
-  if (bet.status === 'closed' || (bet.closesAt && bet.closesAt <= now)) return 'Closed';
-  return 'Open';
-}
+// Open/closed/settled/called-off logic lives in betStatus.js.
+export { statusLabel, votingOpen } from './betStatus';
 
 export function voteFor(bet, voterId) {
   if (!bet || !voterId || !Array.isArray(bet.votes)) return null;

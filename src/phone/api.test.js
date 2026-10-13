@@ -293,3 +293,26 @@ describe('deleteBet', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('called-off bets', () => {
+  test.each([
+    ['status called-off', { status: 'called-off' }],
+    ['calledOff flag', { calledOff: true }],
+  ])('%s: castVote refuses before writing', async (_label, patch) => {
+    stored = { ...stored, ...patch };
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('This bet is closed.');
+    expect(tx.update).not.toHaveBeenCalled();
+    expect(rememberBet).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['status called-off', { status: 'called-off' }],
+    ['calledOff flag', { calledOff: true }],
+  ])('%s: the creator cannot settle or edit it', async (_label, patch) => {
+    stored = { ...stored, ...patch };
+    await expect(settleBet('abc123', 'a')).rejects.toThrow('This bet is closed.');
+    await expect(saveBet('abc123', { stake: '$200' })).rejects.toThrow('settled');
+    expect(tx.update).not.toHaveBeenCalled();
+    expect(requestResultTexts).not.toHaveBeenCalled();
+  });
+});

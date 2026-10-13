@@ -23,10 +23,11 @@ import {
 import Bars from './Bars';
 import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
+import { isFinished } from './betStatus';
 import { rememberBet } from './notificationStore';
-import { settlementOf } from './settlement';
-import ResultCard from './ResultCard';
-import ResultShare from './ResultShare';
+import SettledReveal from './SettledReveal';
+import { buildReveal } from './reveal';
+import ResultsMenu from './ResultsMenu';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
 
@@ -68,18 +69,20 @@ const VoteScreen = () => {
   const open = bet ? votingOpen(bet) : false;
   const showVoted = Boolean(selected);
   const reveal = minElapsed && bet !== undefined;
-  const result = settlementOf(bet);
-  // Only a recorded pick on an unsettled bet, from a real (anonymous) account.
-  const offerResultText = resultTextsEnabled() && Boolean(existing) && !result
-    && bet?.status !== 'closed' && Boolean(user) && !user.isLocal;
+  const settled = buildReveal({ bet, viewerId: user?.uid });
+  // Only a recorded pick on a bet that isn't settled or called off, from a
+  // real (anonymous) account.
+  const offerResultText = resultTextsEnabled() && Boolean(existing) && !isFinished(bet)
+    && Boolean(user) && !user.isLocal;
 
   useEffect(() => {
     if (existing) rememberBet(user.uid, code);
   }, [existing, user?.uid, code]);
 
+  const final = Boolean(settled);
   useEffect(() => {
-    if (result) document.title = 'The final word · Friendly';
-  }, [result]);
+    if (final) document.title = 'The final word · Friendly';
+  }, [final]);
 
   const choose = async (optionId) => {
     if (!bet || !user || !open || saving) return;
@@ -111,6 +114,7 @@ const VoteScreen = () => {
           <Brand />
         </Link>
         <span>BETTER WITH FRIENDS</span>
+        <ResultsMenu />
       </header>
       <div className="scroll screen-fade vote-screen">
         {!reveal && <FriendlyLoader />}
@@ -135,7 +139,7 @@ const VoteScreen = () => {
               </span>
               <p>
                 <span className="inviter">{bet.createdByName || 'A friend'}</span>
-                <span className="invite-caption">{result ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
+                <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
               </p>
             </div>
             <h1 className="question-xl">{questionOf(bet)}</h1>
@@ -145,16 +149,9 @@ const VoteScreen = () => {
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
 
-            {result && (
-              <>
-                <ResultCard bet={bet} voterId={user?.uid} />
-                <ResultShare bet={bet} code={code} />
-                <div className="results-heading"><h2>The group’s picks</h2><span>Final tally</span></div>
-                <Bars bet={bet} highlightId={bet.winnerId} />
-              </>
-            )}
+            {settled && <SettledReveal bet={bet} code={code} reveal={settled} voterId={user?.uid} />}
 
-            {showVoted && !result && (
+            {showVoted && !settled && (
               <div className="voted-in">
                 <p className="youre-on">
                   <FiCheckCircle size={22} aria-hidden="true" />
@@ -210,7 +207,7 @@ const VoteScreen = () => {
               </>
             )}
 
-            {!showVoted && !open && !result && (
+            {!showVoted && !open && !settled && (
               <div className="voted-in">
                 <p className="youre-on">
                   <FiSlash className="state-icon" size={16} aria-hidden="true" />

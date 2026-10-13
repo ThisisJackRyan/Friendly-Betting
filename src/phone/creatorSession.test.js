@@ -42,21 +42,21 @@ test('create slide order inserts phone and code unless a phone session exists', 
     CREATE_STEP.stake,
     CREATE_STEP.phone,
     CREATE_STEP.code,
-    CREATE_STEP.share,
   ]);
   expect(createStepOrder(anonUser)).toEqual(createStepOrder(null));
   expect(createStepOrder(phoneUser)).toEqual([
     CREATE_STEP.type,
     CREATE_STEP.details,
     CREATE_STEP.stake,
-    CREATE_STEP.share,
   ]);
-  expect(adjacentCreateStep(CREATE_STEP.stake, phoneUser, 1)).toBe(CREATE_STEP.share);
+  expect(Object.values(CREATE_STEP)).toEqual([1, 2, 3, 4, 5]);
+  // Past the last step the bet is made and Create hands off to the tally.
+  expect(adjacentCreateStep(CREATE_STEP.stake, phoneUser, 1)).toBeNull();
   expect(adjacentCreateStep(CREATE_STEP.stake, anonUser, 1)).toBe(CREATE_STEP.phone);
   expect(adjacentCreateStep(CREATE_STEP.phone, anonUser, 1)).toBe(CREATE_STEP.code);
-  expect(adjacentCreateStep(CREATE_STEP.code, anonUser, 1)).toBe(CREATE_STEP.share);
-  expect(adjacentCreateStep(CREATE_STEP.share, phoneUser, -1)).toBe(CREATE_STEP.stake);
-  expect(adjacentCreateStep(CREATE_STEP.code, phoneUser, 1)).toBe(CREATE_STEP.share);
+  expect(adjacentCreateStep(CREATE_STEP.code, anonUser, 1)).toBeNull();
+  expect(adjacentCreateStep(CREATE_STEP.code, phoneUser, 1)).toBeNull();
+  expect(adjacentCreateStep(CREATE_STEP.phone, phoneUser, -1)).toBe(CREATE_STEP.stake);
 });
 
 test('the phone sample is an ordinary example, and a typed test number still parses', () => {
@@ -163,6 +163,13 @@ test('settle requires the phone creator who owns the bet', () => {
   expect(canSettleBet(phoneUser, { ...open, status: 'closed', winnerId: null })).toBe(true);
   expect(canSettleBet(null, open)).toBe(false);
   expect(canSettleBet({ ...anonUser, uid: 'creator-1' }, open)).toBe(false);
+});
+
+test('a called-off bet cannot be settled, by status or by flag', () => {
+  const open = { status: 'open', createdByID: 'creator-1' };
+  expect(canSettleBet(phoneUser, { ...open, status: 'called-off' })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, calledOff: true })).toBe(false);
+  expect(canSettleBet(phoneUser, { ...open, status: 'closed', winnerId: 'a', calledOff: true })).toBe(false);
 });
 
 test('nobody can settle a legacy bet without a creator uid from the client', () => {

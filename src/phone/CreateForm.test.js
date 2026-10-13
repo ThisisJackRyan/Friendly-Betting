@@ -55,10 +55,16 @@ beforeEach(() => {
   navigation.push.mockReset();
   navigation.replace.mockReset();
   navigation.back.mockReset();
+  // Like the real routers: push/replace write same-document history entries and
+  // back pops one (popstate fires asynchronously, as in a browser).
+  navigation.push.mockImplementation((url) => window.history.pushState({}, '', url));
+  navigation.replace.mockImplementation((url) => window.history.replaceState({}, '', url));
+  navigation.back.mockImplementation(() => window.history.back());
   saveBet.mockReset();
   saveBet.mockResolvedValue('abc123');
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
+  window.sessionStorage.clear();
 });
 
 function renderForm(path) {
@@ -67,9 +73,10 @@ function renderForm(path) {
     navigation.pathname = path;
     navigation.params = { type };
   } else {
-    navigation.pathname = '/';
+    navigation.pathname = '/new';
     navigation.params = {};
   }
+  window.history.replaceState({}, '', navigation.pathname);
   return render(<CreateForm />);
 }
 
@@ -119,7 +126,8 @@ test('step 1 is the type picker and back returns home', async () => {
 test('picking a type slides forward into that type’s details', async () => {
   renderForm();
   await userEvent.click(screen.getByRole('button', { name: /over-under/i }));
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).toHaveBeenCalledTimes(1);
+  expect(navigation.push).toHaveBeenCalledWith('/new#step-2', { scroll: false });
   expect(screen.getByRole('heading', { name: 'Over-Under' })).toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(screen.getByLabelText(/line/i)).toBeInTheDocument();
@@ -185,49 +193,69 @@ test('back from later steps keeps the draft and slides left to right', async () 
   expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
   expect(screen.getByText(/skip if it’s just bragging rights/i)).toBeInTheDocument();
   await userEvent.type(screen.getByLabelText(/^stake$/i), 'Pizza');
-  expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Text friends' })).toBeEnabled();
   await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(navigation.back).toHaveBeenCalledTimes(1);
+  expect(await screen.findByLabelText(/question/i)).toHaveValue('Who is late');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
-  expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).not.toHaveBeenCalledWith('/');
   expect(saveBet).not.toHaveBeenCalled();
 });
 
-test('stake step is optional and the recap shows only filled stake and closes', async () => {
+// Opened from home, like the Start a bet link: back from the tally lands there.
+function renderFromHome(path) {
+  window.history.replaceState({}, '', '/');
+  window.history.pushState({}, '', path);
+  const type = path.split('/').pop();
+  navigation.pathname = path;
+  navigation.params = { type };
+  return render(<CreateForm />);
+}
+
+const popped = () => new Promise((resolve) => {
+  window.addEventListener('popstate', resolve, { once: true });
+});
+
+test('stake is the last step for a creator: optional, with closes, and Text friends makes the bet', async () => {
   renderForm('/new/money-line');
   await goToStake('Who is late');
+  expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/closes/i), {
     target: { value: '2026-10-02T18:30' },
   });
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
-  expect(screen.getByText('Ready to text')).toBeInTheDocument();
-  expect(screen.getByText('Who is late')).toBeInTheDocument();
-  expect(screen.getByText('Yes')).toBeInTheDocument();
-  expect(screen.getByText('No')).toBeInTheDocument();
-  expect(screen.getByText(/^closes /i)).toBeInTheDocument();
-  expect(screen.queryByText('Pizza')).not.toBeInTheDocument();
-  expect(saveBet).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
+    question: 'Who is late',
+    closesAt: expect.any(Number),
+  }));
+  expect(saveBet.mock.calls[0][1].stake || '').toBe('');
 });
 
-test('Text friends saves once and provides vote and live tally links', async () => {
+test('Text friends saves once, then replaces Create with the live tally', async () => {
   let finishSave;
   saveBet.mockImplementation(() => new Promise((resolve) => {
     finishSave = resolve;
   }));
-  renderForm('/new/money-line');
+  renderFromHome('/new/money-line');
+  const before = window.history.length;
   await goToStake('Who is late');
   await userEvent.type(screen.getByLabelText(/^stake$/i), 'a coffee');
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
 
-  expect(screen.getByRole('button', { name: 'Getting it ready…' })).toBeDisabled();
-  finishSave('abc123');
+  const busy = screen.getByRole('button', { name: 'Getting it ready…' });
+  expect(busy).toBeDisabled();
+  fireEvent.click(busy);
+  expect(saveBet).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    finishSave('abc123');
+  });
 
-  expect(await screen.findByRole('link', { name: /\/b\/abc123/ })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'View live tally' })).toHaveAttribute('href', '/t/abc123');
-  expect(screen.getByText('Copied — paste into a text.')).toBeInTheDocument();
-  expect(screen.getAllByRole('button', { name: /text friends/i })).toHaveLength(1);
+  await waitFor(() => expect(window.location.pathname).toBe('/t/abc123'));
+  expect(navigation.replace).toHaveBeenCalledWith('/t/abc123');
+  expect(navigation.push).not.toHaveBeenCalledWith(expect.stringMatching(/^\/t\//), expect.anything());
+  expect(navigation.push).not.toHaveBeenCalledWith('/t/abc123');
   expect(saveBet).toHaveBeenCalledTimes(1);
   expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
     type: 'money-line',
@@ -235,40 +263,46 @@ test('Text friends saves once and provides vote and live tally links', async () 
     stake: 'a coffee',
     createdByName: 'Sam',
   }));
-  expect(shareMessage).toHaveBeenCalledWith(
-    'FRIENDLY · You in?\nWho is late?\n1. Yes\n2. No\nAt stake: a coffee\nMake your call: http://localhost/b/abc123',
-  );
+  // Create sends no text itself; the tally offers the one invite.
+  expect(shareMessage).not.toHaveBeenCalled();
+  expect(window.sessionStorage.getItem('friendly.freshBet')).toBe('abc123');
+  // The tally took the details entry Create opened on, so one back is home.
+  // Only the spent stake entry is left, ahead of it, as a forward entry.
+  expect(window.history.length).toBe(before + 1);
+  const back = popped();
+  window.history.back();
+  await back;
+  expect(window.location.pathname).toBe('/');
 });
 
-test('suggested stakes remain editable and appear in the recap', async () => {
+test('suggested stakes remain editable and are what the bet saves', async () => {
   renderForm('/new/money-line');
   await goToStake('Will Alex break 90?');
-  expect(screen.getByText('Step 3 of 4')).toBeInTheDocument();
+  expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Coffee', exact: true }));
   expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Coffee');
   await userEvent.type(screen.getByLabelText(/^stake$/i), ' for the crew');
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByText('Step 4 of 4')).toBeInTheDocument();
-  expect(screen.getByText('Coffee for the crew')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({ stake: 'Coffee for the crew' })));
 });
 
-test('over-under still shares the same short vote text', async () => {
-  renderForm('/new/over-under');
-  await userEvent.type(screen.getByLabelText(/question/i), 'Rolls');
-  await userEvent.type(screen.getByLabelText(/line/i), '13.5');
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByText('Over 13.5')).toBeInTheDocument();
-  expect(screen.getByText('Under 13.5')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
-  expect(shareMessage).toHaveBeenCalledWith(
-    'FRIENDLY · You in?\nRolls?\n1. Over 13.5\n2. Under 13.5\nMake your call: http://localhost/b/abc123',
-  );
+test('a failed save stays on the stake step with the error and can try again', async () => {
+  saveBet.mockRejectedValueOnce(new Error('offline'));
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('offline');
+  expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+  expect(navigation.replace).not.toHaveBeenCalledWith('/t/abc123');
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(saveBet).toHaveBeenCalledTimes(2);
 });
 
 test('phone tabs hide after step 1 and return when the walkthrough is back on pick type', async () => {
   navigation.pathname = '/new';
   navigation.params = {};
+  window.history.replaceState({}, '', '/new');
   render(
     <CreateChromeProvider>
       <AppShell>
@@ -303,10 +337,6 @@ test('Friendly in the create nav returns home from every later step', async () =
   await userEvent.type(screen.getByLabelText(/option 2/i), 'Sam');
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
-  homeInNav();
-
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
   await userEvent.click(homeInNav());
   expect(document.querySelector('.create-pane.is-leaving')).toHaveClass('slide-back');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
@@ -314,7 +344,7 @@ test('Friendly in the create nav returns home from every later step', async () =
   expect(
     document.querySelector('.create-pane.is-entering .home-preview-header'),
   ).toBeInTheDocument();
-  expect(navigation.push).not.toHaveBeenCalled();
+  expect(navigation.push).not.toHaveBeenCalledWith('/');
   await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
   expect(navigation.push).not.toHaveBeenCalledWith('/bets');
   expect(saveBet).not.toHaveBeenCalled();
@@ -343,17 +373,15 @@ test('reduced motion skips the home slide', async () => {
 test('a signed-in creator skips the phone and code slides', async () => {
   renderForm('/new/money-line');
   await goToStake('Who is late');
-  await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
-  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
-  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '6');
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
   expect(screen.queryByText(AUTH_COPY.textLine)).not.toBeInTheDocument();
   expect(sendPhoneCode).not.toHaveBeenCalled();
 });
 
-test('create slides run type, details, stake, phone, code, then text friends', async () => {
+test('create slides run type, details, stake, phone, code, then the bet opens its tally', async () => {
   mockIdentity.user = {
     uid: 'anon-1',
     isAnonymous: true,
@@ -388,8 +416,10 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '3');
   expect(sendPhoneCode).not.toHaveBeenCalled();
 
+  expect(screen.getByText('Step 3 of 5')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+  expect(screen.getByText('Step 4 of 5')).toBeInTheDocument();
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '4');
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
@@ -401,7 +431,6 @@ test('create slides run type, details, stake, phone, code, then text friends', a
   expect(slot).not.toBeNull();
   expect(document.querySelector('.create-flow > .recaptcha-slot')).toBeNull();
   expect(phonePane.textContent).not.toContain('555-555-5555');
-  expect(screen.queryByRole('heading', { name: 'Text friends' })).not.toBeInTheDocument();
   expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
@@ -448,15 +477,14 @@ test('create slides run type, details, stake, phone, code, then text friends', a
     finishVerify();
   });
 
-  expect(await screen.findByRole('heading', { name: 'Text friends' })).toBeInTheDocument();
-  expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
-  expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '6');
-
-  await userEvent.click(screen.getByRole('button', { name: /text friends/i }));
+  // Verified: the bet saves on its own and the tally takes Create's place.
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(saveBet).toHaveBeenCalledTimes(1);
   expect(saveBet).toHaveBeenCalledWith(null, expect.objectContaining({
     createdByID: 'anon-1',
     question: 'Who is late',
   }));
+  expect(screen.queryByRole('heading', { name: 'Stake' })).not.toBeInTheDocument();
 });
 
 const anonCreator = {
@@ -631,7 +659,8 @@ test('send after a check does not reload or show the person sentence', async () 
   });
   expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
   expect(screen.queryByText(/Couldn\u2019t confirm you\u2019re a person/)).not.toBeInTheDocument();
-  expect(window.location.href).toBe(href);
+  // Only the code step's own history entry changed the URL.
+  expect(window.location.href).toBe(href.replace('#step-4', '#step-5'));
 });
 
 test('the person check slot is in the phone step and is not clipped shut', () => {
@@ -655,4 +684,212 @@ test('an unknown create route leaves the walkthrough', () => {
   navigation.params = { type: 'nope' };
   render(<CreateForm />);
   expect(navigation.replace).toHaveBeenCalledWith('/new');
+});
+
+describe('create steps are history entries', () => {
+  const activeStep = () => document.querySelector('.create-pane:not(.is-leaving)').dataset.step;
+
+  test('forward steps push one entry each and the first step adds none', async () => {
+    const before = window.history.length;
+    renderForm();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(window.history.length).toBe(before);
+
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    expect(window.location.hash).toBe('#step-2');
+    await goToStake('Who is late');
+    expect(window.location.hash).toBe('#step-3');
+    expect(navigation.push.mock.calls).toEqual([
+      ['/new#step-2', { scroll: false }],
+      ['/new#step-3', { scroll: false }],
+    ]);
+    expect(window.history.length).toBe(before + 2);
+  });
+
+  test('making the bet walks back past every step entry and replaces the first with the tally', async () => {
+    window.history.replaceState({}, '', '/bets');
+    window.history.pushState({}, '', '/new');
+    const before = window.history.length;
+    navigation.pathname = '/new';
+    navigation.params = {};
+    render(<CreateForm />);
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    await goToStake('Who is late');
+    expect(window.location.hash).toBe('#step-3');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/t/abc123'));
+    expect(window.location.hash).toBe('');
+    expect(navigation.replace.mock.calls).toEqual([['/t/abc123']]);
+    // The walk back is not a slide: Create never shows a step on its way out.
+    expect(activeStep()).toBe('3');
+    // Back from the tally (iOS swipe, Android back, browser back) is My bets.
+    const back = popped();
+    window.history.back();
+    await back;
+    expect(window.location.pathname).toBe('/bets');
+    expect(window.history.length).toBe(before + 2);
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('a swipe back slides back a step, keeps the draft, and forward returns', async () => {
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.type(screen.getByLabelText(/^stake$/i), 'Pizza');
+
+    act(() => window.history.back());
+    expect(await screen.findByRole('heading', { name: 'Money Line' })).toBeInTheDocument();
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+    expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
+    expect(navigation.back).not.toHaveBeenCalled();
+
+    act(() => window.history.forward());
+    expect(await screen.findByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
+    expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Pizza');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^stake$/i)).toHaveValue('Pizza');
+    expect(saveBet).not.toHaveBeenCalled();
+  });
+
+  test('on-screen back is a history back while a create entry is behind', async () => {
+    renderForm();
+    await userEvent.click(screen.getByRole('button', { name: /prop/i }));
+    expect(activeStep()).toBe('2');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(activeStep()).toBe('1'));
+    expect(window.location.hash).toBe('');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+
+    // Back on the first step leaves Create for home, exactly as before.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/'));
+  });
+
+  test('a deep link has nothing behind it, so back steps in place to pick type', async () => {
+    const before = window.history.length;
+    renderForm('/new/over-under');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(activeStep()).toBe('1');
+    expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-back');
+    expect(navigation.back).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(window.history.length).toBe(before);
+
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    expect(window.location.pathname + window.location.hash).toBe('/new/over-under#step-2');
+    act(() => window.history.back());
+    await waitFor(() => expect(activeStep()).toBe('1'));
+  });
+
+  test('a swipe off the first step leaves Create without touching it', async () => {
+    window.history.replaceState({}, '', '/');
+    window.history.pushState({}, '', '/new');
+    navigation.pathname = '/new';
+    navigation.params = {};
+    render(<CreateForm />);
+    act(() => window.history.back());
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(activeStep()).toBe('1');
+    expect(document.querySelector('.create-pane.is-leaving')).toBeNull();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  test('a refresh on a step hash starts over on the first step and drops the hash', () => {
+    navigation.pathname = '/new';
+    navigation.params = {};
+    window.history.replaceState({}, '', '/new#step-3');
+    render(<CreateForm />);
+    expect(activeStep()).toBe('1');
+    expect(navigation.replace).toHaveBeenCalledWith('/new', { scroll: false });
+    expect(window.location.hash).toBe('');
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  test('after phone sign-in the bet saves once and back from the tally skips every create step', async () => {
+    sendPhoneCode.mockResolvedValue('vid-1');
+    verifyPhoneCode.mockResolvedValue({
+      uid: 'anon-1',
+      phoneNumber: '+15551234567',
+      providerData: [{ providerId: 'phone' }],
+    });
+    mockIdentity.user = anonCreator;
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    fireEvent.change(screen.getByLabelText(/phone/i), { target: { value: '5551234567' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#step-5');
+
+    // Change number is the same history back as a swipe.
+    await userEvent.click(screen.getByRole('button', { name: 'Change number' }));
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('heading', { name: 'Phone' })).toBeInTheDocument();
+    act(() => window.history.forward());
+    expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+
+    '123456'.split('').forEach((digit, index) => {
+      fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), { target: { value: digit } });
+    });
+    await waitFor(() => expect(window.location.pathname).toBe('/t/abc123'));
+    expect(navigation.replace).toHaveBeenCalledWith('/t/abc123');
+    expect(saveBet).toHaveBeenCalledTimes(1);
+
+    const back = popped();
+    window.history.back();
+    await back;
+    expect(window.location.pathname).toBe('/');
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed save after sign-in waits on the stake slide to try again', async () => {
+    sendPhoneCode.mockResolvedValue('vid-1');
+    verifyPhoneCode.mockResolvedValue({
+      uid: 'anon-1',
+      phoneNumber: '+15551234567',
+      providerData: [{ providerId: 'phone' }],
+    });
+    saveBet.mockRejectedValueOnce(new Error('offline'));
+    await reachPhone();
+    await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+    '123456'.split('').forEach((digit, index) => {
+      fireEvent.change(screen.getByLabelText(`Digit ${index + 1}`), { target: { value: digit } });
+    });
+    expect(await screen.findByRole('heading', { name: 'Stake' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('offline');
+    expect(window.location.hash).toBe('#step-3');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+    expect(saveBet).toHaveBeenCalledTimes(2);
+  });
+
+  test('with reduced motion a swipe still moves the step', async () => {
+    const previous = window.matchMedia;
+    window.matchMedia = jest.fn((query) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    }));
+    try {
+      renderForm('/new/money-line');
+      await goToStake('Who is late');
+      act(() => window.history.back());
+      expect(await screen.findByRole('heading', { name: 'Money Line' })).toBeInTheDocument();
+      expect(screen.getByLabelText(/question/i)).toHaveValue('Who is late');
+    } finally {
+      if (previous) window.matchMedia = previous;
+      else delete window.matchMedia;
+    }
+  });
 });

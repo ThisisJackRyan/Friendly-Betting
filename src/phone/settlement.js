@@ -1,3 +1,4 @@
+import { isSettled } from './betStatus';
 import { optionVoteLabel, questionOf } from './model';
 
 // Snapshot the result in the same transaction that closes the bet. A later
@@ -21,8 +22,9 @@ export function buildSettlement(bet, winnerId) {
   };
 }
 
+// Null until settled with a winner, and always null for a called-off bet.
 export function settlementOf(bet) {
-  if (bet?.status !== 'closed' || !bet.winnerId) return null;
+  if (!isSettled(bet)) return null;
   if (bet.settlement?.version === 1) return bet.settlement;
   // Old settled links still show a result, without pretending they sent a ping.
   try {
