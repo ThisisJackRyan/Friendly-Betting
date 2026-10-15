@@ -18,8 +18,8 @@ export const REVEAL_COPY = {
   stake: (stake) => `Stakes: ${stake}`,
   startBet: 'Start a bet',
   others: (count) => (count === 1 ? '1 other' : `${count} others`),
-  // TODO_UX: every winner skipped their name. Placeholder until UX signs off.
-  friends: (count) => (count === 1 ? 'TODO_UX: 1 friend' : `TODO_UX: ${count} friends`),
+  // Every winner skipped their name.
+  friends: (count) => (count === 1 ? '1 friend' : `${count} friends`),
 };
 
 // Names shown before "& N others".

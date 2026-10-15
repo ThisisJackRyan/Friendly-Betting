@@ -10,7 +10,8 @@
 // up, tally-after-create.png, or dismissed, tally-after-create-dismissed.png,
 // and the creator's Wanna vote? link under the invite, creator-vote-link.png,
 // and a bet called off by status alone on /t/ and /b/, tally-called-off.png
-// and vote-called-off.png)
+// and vote-called-off.png, and a settled bet whose winners all skipped their
+// name, reveal-unnamed-winners.png)
 // only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
@@ -73,6 +74,16 @@ const CALLED_OFF_BET = {
   status: 'called-off',
   closesAt: Date.now() + 2 * 86400000,
   votes: OPEN_BET.votes.filter((vote) => vote.voterId !== 'jack'),
+};
+// Settled on side a, where every pick skipped their name: the reveal counts
+// friends instead of naming anyone.
+const UNNAMED_WINNERS_BET = {
+  ...OPEN_BET,
+  votes: [
+    ...['anon-1', 'anon-2', 'anon-3'].map((voterId) => ({ voterId, name: '', optionId: 'a' })),
+    { voterId: 'jake', name: 'Jake', optionId: 'b' },
+    { voterId: 'tyler', name: 'Tyler', optionId: 'b' },
+  ],
 };
 const CROWD_BET = {
   ...FULL_BET,
@@ -346,6 +357,19 @@ const SHOTS = [
     async run(page) {
       await page.goto(`/b/${CODE}`);
       await page.getByText('Nobody called it.').waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'reveal-unnamed-winners.png',
+    docs: false,
+    user: MAYA,
+    name: 'Maya',
+    bet: UNNAMED_WINNERS_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByText('3 friends won.').waitFor();
       await showBars(page, '.reveal');
     },
   },
