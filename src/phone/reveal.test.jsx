@@ -78,12 +78,18 @@ describe('buildReveal copy', () => {
   });
 
   test.each([
-    [1, 'TODO_UX: 1 friend won.', 'Called it solo. Bragging rights, secured.'],
-    [3, 'TODO_UX: 3 friends won.', 'Bragging rights, secured.'],
-  ])('all %i winners unnamed uses the TODO_UX count line', (count, headline, subline) => {
-    const winners = Array.from({ length: count }, (_, index) => [`u${index}`, '']);
+    [1, '1 friend called it.', 'Called it solo. Bragging rights, secured.'],
+    [3, '3 friends called it.', 'Bragging rights, secured.'],
+  ])('all %i winners unnamed get the friends count line', (count, headline, subline) => {
+    const winners = Array.from({ length: count }, (_, index) => [`u${index}`, index ? '' : '   ']);
     const reveal = buildReveal({ bet: settled({ winners }) });
-    expect([reveal.headline, reveal.subline]).toEqual([headline, subline]);
+    expect([reveal.kind, reveal.headline, reveal.subline]).toEqual(['winners', headline, subline]);
+  });
+
+  test('a viewer who lost to unnamed winners gets the count line and the nudge', () => {
+    const reveal = buildReveal({ bet: settled({ winners: [['u1', ''], ['u2', '']], losers: [['me', 'Pat']] }), viewerId: 'me' });
+    expect(lines(reveal)).toEqual(['Chiefs -3 won', '2 friends called it.', 'Not your day. Get ’em next time.', '$20']);
+    expect(reveal.startBet).toBe(true);
   });
 
   test('nobody picked the winning side', () => {
@@ -161,13 +167,11 @@ describe('buildReveal copy', () => {
     expect(winnerPhrase([{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }])).toBe('A, B & 2 others');
   });
 
-  test('new reveal strings have no em dashes, and only the all-unnamed line is TODO_UX', () => {
-    const strings = Object.values(REVEAL_COPY).map((value) => (typeof value === 'function' ? value('X') : value));
-    strings.forEach((text) => expect(text).not.toMatch(/—/));
-    expect(strings.filter((text) => text.includes('TODO_UX'))).toEqual([REVEAL_COPY.friends('X')]);
+  test('reveal strings have no em dashes and no TODO_UX', () => {
+    const strings = Object.values(REVEAL_COPY).flatMap((value) => (typeof value === 'function' ? [value('X'), value(1), value(2)] : [value]));
+    strings.forEach((text) => expect(text).not.toMatch(/—|TODO_UX/));
     const source = fs.readFileSync(path.join(__dirname, 'reveal.js'), 'utf8');
-    expect(source).not.toMatch(/—/);
-    expect(source.match(/TODO_UX/g)).toHaveLength(3); // comment + the two plural forms of one line
+    expect(source).not.toMatch(/—|TODO_UX/);
   });
 });
 

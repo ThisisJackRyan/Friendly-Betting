@@ -1,4 +1,4 @@
-// TODO_UX: send these to UX for final lines
+// Every on-screen string for the voter lists under the bars.
 export const VOTER_LIST_COPY = {
   friends: (count) => (count === 1 ? '1 friend' : `${count} friends`),
   more: (count) => `+${count} more`,
