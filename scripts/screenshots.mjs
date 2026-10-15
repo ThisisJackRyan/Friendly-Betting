@@ -369,7 +369,7 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/b/${CODE}`);
-      await page.getByText('3 friends called it.').waitFor();
+      await page.getByText('3 friends won.').waitFor();
       await showBars(page, '.reveal');
     },
   },

@@ -78,8 +78,8 @@ describe('buildReveal copy', () => {
   });
 
   test.each([
-    [1, '1 friend called it.', 'Called it solo. Bragging rights, secured.'],
-    [3, '3 friends called it.', 'Bragging rights, secured.'],
+    [1, '1 friend won.', 'Called it solo. Bragging rights, secured.'],
+    [3, '3 friends won.', 'Bragging rights, secured.'],
   ])('all %i winners unnamed get the friends count line', (count, headline, subline) => {
     const winners = Array.from({ length: count }, (_, index) => [`u${index}`, index ? '' : '   ']);
     const reveal = buildReveal({ bet: settled({ winners }) });
@@ -88,7 +88,7 @@ describe('buildReveal copy', () => {
 
   test('a viewer who lost to unnamed winners gets the count line and the nudge', () => {
     const reveal = buildReveal({ bet: settled({ winners: [['u1', ''], ['u2', '']], losers: [['me', 'Pat']] }), viewerId: 'me' });
-    expect(lines(reveal)).toEqual(['Chiefs -3 won', '2 friends called it.', 'Not your day. Get ’em next time.', '$20']);
+    expect(lines(reveal)).toEqual(['Chiefs -3 won', '2 friends won.', 'Not your day. Get ’em next time.', '$20']);
     expect(reveal.startBet).toBe(true);
   });
 
