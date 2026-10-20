@@ -41,6 +41,8 @@ async function mockBets(page, bets) {
       export const saveBet = async () => 'new123';
       export const castVote = async () => {};
       export const deleteBet = async () => {};
+      export const undoSettle = async () => {};
+      export const callOffBet = async () => {};
       export const settleBet = async () => bets[0];`,
   }));
 }

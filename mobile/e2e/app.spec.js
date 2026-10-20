@@ -77,7 +77,9 @@ test('browser back walks the create steps and keeps the draft', async ({ page })
   expect(errors).toEqual([]);
 });
 
-async function mockCrew(page, { votes, share, patch } = {}) {
+// `serverTime`: settles come back with settledAt null, as the real settleBet
+// returns them before the server time arrives, so the Undo countdown runs.
+async function mockCrew(page, { votes, share, patch, serverTime = false } = {}) {
   const bet = {
     id: 'crew123', code: 'crew123', schemaVersion: 2, type: 'money-line',
     question: 'Who takes the win?', stake: '$20 pot', status: 'open',
@@ -113,9 +115,23 @@ async function mockCrew(page, { votes, share, patch } = {}) {
       };
       export const deleteBet = async () => {};
       export const settleBet = async (code, winnerId) => {
-        bet = { ...bet, status: 'closed', winnerId, settledAt: 123, settlement: buildSettlement(bet, winnerId) };
+        bet = { ...bet, status: 'closed', winnerId, settledAt: ${serverTime ? 'null' : 123}, settlement: buildSettlement(bet, winnerId) };
         sessionStorage.setItem('crew-bet', JSON.stringify(bet));
         listeners.forEach(cb => cb(bet)); return bet;
+      };
+      const save = (next) => {
+        bet = next;
+        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
+        listeners.forEach(cb => cb(bet)); return bet;
+      };
+      export const undoSettle = async () => {
+        window.undoCalls = (window.undoCalls || 0) + 1;
+        const { settledAt, settlement, calledOff, ...rest } = bet;
+        return save({ ...rest, status: 'open', winnerId: null });
+      };
+      export const callOffBet = async () => {
+        window.callOffCalls = (window.callOffCalls || 0) + 1;
+        return save({ ...bet, status: 'closed', calledOff: true, settledAt: null });
       };`,
   }));
   if (share === 'none') {
@@ -478,6 +494,71 @@ test('settle with ads on: the house ad, then the thank-you, then the reveal once
   await page.getByRole('button', { name: 'Share the result', exact: true }).click();
   await expect.poll(() => crewShares(page)).toHaveLength(1);
   expect((await crewShares(page))[0]).toContain('Sam won the $20 pot');
+  expect(errors).toEqual([]);
+});
+
+test('after a settle the creator can Undo for 30s, back to the open tally', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.clock.install();
+  await mockCrew(page, { share: 'dismiss', serverTime: true });
+  await settleOnPackers(page);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  await expect(undo).toBeVisible();
+  await expect(page.locator('.undo-settle-count')).toHaveText('30s');
+  await page.screenshot({ path: testInfo.outputPath('undo-countdown.png'), animations: 'disabled', scale: 'css' });
+  await page.clock.runFor(10000);
+  await expect(page.locator('.undo-settle-count')).toHaveText('20s');
+
+  await undo.click();
+  await expect(settledRegion(page)).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Call off', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.undoCalls)).toBe(1);
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('crew-bet')))).toMatchObject({ status: 'open', winnerId: null });
+
+  // Settled again, the Undo runs out after 30s.
+  await settleOnPackers(page);
+  await expect(undo).toBeVisible();
+  await page.clock.runFor(30000);
+  await expect(undo).toHaveCount(0);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  expect(errors).toEqual([]);
+});
+
+test('Call off on an open bet: confirm, then the called-off result', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await page.goto('/t/crew123');
+  const callOff = page.getByRole('button', { name: 'Call off', exact: true });
+  await expect(callOff).toBeVisible();
+
+  await callOff.click();
+  const dialog = page.getByRole('dialog', { name: 'Call off this bet?' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Nobody won this one.');
+  await page.screenshot({ path: testInfo.outputPath('call-off-confirm.png'), animations: 'disabled', scale: 'css' });
+  await dialog.getByRole('button', { name: 'Keep it', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => window.callOffCalls)).toBeUndefined();
+
+  await callOff.click();
+  await dialog.getByRole('button', { name: 'Call off bet', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(settledRegion(page)).toContainText('This bet was called off.');
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+  await expect(callOff).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => window.callOffCalls)).toBe(1);
+
+  // The vote page shows it called off with no picks to make.
+  await page.goto('/b/crew123');
+  await expect(settledRegion(page)).toContainText('This bet was called off.');
+  await expect(page.getByRole('button', { name: 'Bears', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

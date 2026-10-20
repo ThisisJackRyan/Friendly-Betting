@@ -18,7 +18,10 @@
 // the paywall at /pro, paywall.png, a founder's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
 // tally-pro-no-ad.png, and Friends on My bets, friends.png, with Maya opened,
-// friends-open.png) only go to --copy-to.
+// friends-open.png, and F8: Call off on an open tally, f8-call-off-button.png,
+// its confirm, f8-call-off-confirm.png, the reveal with its Undo countdown,
+// f8-undo-countdown.png, and the tally once called off, f8-called-off.png)
+// only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
@@ -167,7 +170,10 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
-      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: Date.now(), settlement: buildSettlement(bet, id) });
+      // settledAt null, as the real settleBet returns before the server time.
+      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: null, settlement: buildSettlement(bet, id) });
+      export const undoSettle = async () => ({ ...bet, status: 'open', winnerId: null });
+      export const callOffBet = async () => ({ ...bet, status: 'closed', calledOff: true, settledAt: null });
       export const deleteBet = async () => {};`,
   }));
   await page.route('**/src/phone/routes.js*', (route) => route.fulfill({
@@ -265,7 +271,71 @@ async function settleAd(page) {
   await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
 }
 
+// Bring a control into view near the bottom of the tally.
+async function showControl(page, locator) {
+  await locator.evaluate((node) => {
+    const scroller = node.closest('.scroll');
+    scroller.scrollTop += node.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 24;
+  });
+}
+
+async function openCallOff(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  const button = page.getByRole('button', { name: 'Call off', exact: true });
+  await button.waitFor();
+  await showControl(page, button);
+  return button;
+}
+
 const SHOTS = [
+  {
+    file: 'f8-call-off-button.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    run: openCallOff,
+  },
+  {
+    file: 'f8-call-off-confirm.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('dialog', { name: 'Call off this bet?' }).waitFor();
+    },
+  },
+  {
+    file: 'f8-called-off.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('button', { name: 'Call off bet', exact: true }).click();
+      await page.getByText('This bet was called off.').waitFor();
+    },
+  },
+  {
+    file: 'f8-undo-countdown.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+      await page.getByRole('button', { name: 'Chiefs -3', exact: true }).click();
+      await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
+      const undo = page.getByRole('button', { name: 'Undo', exact: true });
+      await undo.waitFor();
+      await page.locator('.reveal-wrap').evaluate((node) => {
+        const scroller = node.closest('.scroll');
+        scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+      });
+    },
+  },
   {
     file: 'create-bet.png',
     user: JACK,
