@@ -4,7 +4,7 @@ import { showHouseAd } from './HouseAd';
 import { isPro } from './pro';
 import { AD_LIMITS, placementLimits } from './config';
 import { __resetAdsForTests, canShowInterstitial, showInterstitial } from './adService';
-import { capReason, recordShow } from './caps';
+import { capReason, notePause, noteResume, recordShow } from './caps';
 import { SETTLE_PLACEMENT, canTrySettleAd, runSettleAd } from './settleGate';
 import { INVITE_PLACEMENT } from './inviteGate';
 
@@ -98,6 +98,73 @@ test('after a shown invite ad the settle ad can still show (past the interval), 
     expect(reveal).toHaveBeenCalledTimes(1);
     clock += AD_LIMITS.minIntervalMs;
     expect(canTrySettleAd()).toBe(false);
+  } finally {
+    Date.now.mockRestore();
+  }
+});
+
+const stored = () => JSON.parse(localStorage.getItem('fb.ads.caps.v1'));
+const dayTotal = () => Object.values(stored().counts).reduce((sum, count) => sum + count, 0);
+
+test('the global daily cap holds settle back even when settle itself is at 0', async () => {
+  const start = new Date(2026, 9, 20, 9).getTime();
+  const { maxPerDay } = placementLimits(INVITE_PLACEMENT);
+  for (let i = 0; i < maxPerDay; i += 1) recordShow(INVITE_PLACEMENT, start + i * AD_LIMITS.minIntervalMs);
+  recordShow('other', start + maxPerDay * AD_LIMITS.minIntervalMs);
+  expect(stored().counts).toEqual({ invite: 3, other: 1 });
+  expect(dayTotal()).toBe(AD_LIMITS.maxPerDay);
+  const clock = start + 10 * AD_LIMITS.minIntervalMs;
+  jest.spyOn(Date, 'now').mockImplementation(() => clock);
+  try {
+    // Settle has no shows today and none this session, so only the global cap applies.
+    expect(capReason(SETTLE_PLACEMENT, clock)).toBe('capped');
+    expect(canTrySettleAd()).toBe(false);
+    const { reveal, showThanks, done } = gate();
+    expect(reveal).toHaveBeenCalledTimes(1);
+    await expect(done).resolves.toBe(true);
+    await flush();
+    expect(showThanks).not.toHaveBeenCalled();
+    expect(showHouseAd).not.toHaveBeenCalled();
+    expect(stored().counts).toEqual({ invite: 3, other: 1 });
+  } finally {
+    Date.now.mockRestore();
+  }
+});
+
+test('one under the global cap settle still shows past the interval, and then every placement is capped', async () => {
+  const start = new Date(2026, 9, 20, 9).getTime();
+  const { maxPerDay } = placementLimits(INVITE_PLACEMENT);
+  for (let i = 0; i < maxPerDay; i += 1) recordShow(INVITE_PLACEMENT, start + i * AD_LIMITS.minIntervalMs);
+  expect(dayTotal()).toBe(AD_LIMITS.maxPerDay - 1);
+  let clock = start + maxPerDay * AD_LIMITS.minIntervalMs;
+  jest.spyOn(Date, 'now').mockImplementation(() => clock);
+  try {
+    expect(capReason(SETTLE_PLACEMENT, clock - 1)).toBe('interval');
+    expect(canTrySettleAd()).toBe(true);
+    const { reveal, showThanks, done } = gate();
+    await flush();
+    expect(showHouseAd).toHaveBeenCalledTimes(1);
+    showThanks.mock.calls[0][0].proceed();
+    await expect(done).resolves.toBe(true);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(stored().counts).toEqual({ invite: 3, settle: 1 });
+    expect(dayTotal()).toBe(AD_LIMITS.maxPerDay);
+
+    // A long background gap clears the session caps; the day's total still holds.
+    notePause(clock);
+    clock += AD_LIMITS.sessionGapMs;
+    noteResume(clock);
+    [INVITE_PLACEMENT, SETTLE_PLACEMENT, 'other', 'default'].forEach((placement) => {
+      expect(capReason(placement, clock)).toBe('capped');
+    });
+    expect(canTrySettleAd()).toBe(false);
+    const after = gate();
+    expect(after.reveal).toHaveBeenCalledTimes(1);
+    await expect(after.done).resolves.toBe(true);
+    expect(showHouseAd).toHaveBeenCalledTimes(1);
+
+    // A new day starts the count over.
+    expect(capReason(SETTLE_PLACEMENT, new Date(2026, 9, 21, 9).getTime())).toBe('');
   } finally {
     Date.now.mockRestore();
   }
