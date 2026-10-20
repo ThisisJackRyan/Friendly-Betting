@@ -33,3 +33,19 @@ export function rematchFields(bet, creator, code) {
   if (creator.email) fields.createdByEmail = creator.email;
   return fields;
 }
+
+const PERMISSION_DENIED = ['permission-denied', 'firestore/permission-denied'];
+
+// Saves the rematch and returns its id. The live Firestore create rule may
+// not allow the rematchOf key yet, so a permission-denied save is tried once
+// more without it: the rematch still works, just without the link.
+export async function saveRematch(saveBet, bet, creator, code) {
+  const fields = rematchFields(bet, creator, code);
+  try {
+    return await saveBet(null, fields);
+  } catch (err) {
+    if (!PERMISSION_DENIED.includes(err?.code) || !('rematchOf' in fields)) throw err;
+    const { rematchOf, ...withoutLink } = fields;
+    return saveBet(null, withoutLink);
+  }
+}

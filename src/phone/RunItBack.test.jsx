@@ -213,6 +213,8 @@ test('a failed save shows Create’s error and lets the creator try again', asyn
   expect(navigation.push).not.toHaveBeenCalled();
   expect(takeFreshBet('new456')).toBe(false);
 
+  // Denied twice: the save without the rematch link is denied too.
+  saveBet.mockRejectedValueOnce({ code: 'permission-denied' });
   saveBet.mockRejectedValueOnce({ code: 'permission-denied' });
   await userEvent.click(runItBack());
   expect(screen.getByRole('alert')).toHaveTextContent('Saving was blocked. Try again in a moment.');

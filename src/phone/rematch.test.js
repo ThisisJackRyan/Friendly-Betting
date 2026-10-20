@@ -1,4 +1,4 @@
-import { canRunItBack, rematchFields } from './rematch';
+import { canRunItBack, rematchFields, saveRematch } from './rematch';
 import { buildDraft, DEFAULT_CLOSES, parseCloses } from './model';
 import { buildSettlement } from './settlement';
 
@@ -128,5 +128,45 @@ describe('rematchFields', () => {
     expect(fields.line).toBeNull();
     expect(fields.options).toEqual([{ id: 'a', label: 'Bulls' }, { id: 'b', label: 'Knicks' }]);
     expect(fields.rematchOf).toEqual({ code: 'route1' });
+  });
+});
+
+describe('saveRematch', () => {
+  test('saves with the rematch link on the first try', async () => {
+    const saveBet = jest.fn().mockResolvedValue('new456');
+    await expect(saveRematch(saveBet, settled, creator, 'old123')).resolves.toBe('new456');
+    expect(saveBet).toHaveBeenCalledTimes(1);
+    expect(saveBet).toHaveBeenCalledWith(null, rematchFields(settled, creator, 'old123'));
+    expect(saveBet.mock.calls[0][1]).toHaveProperty('rematchOf', { code: 'old123' });
+  });
+
+  test.each(['permission-denied', 'firestore/permission-denied'])(
+    'a %s save is tried once more without the link',
+    async (code) => {
+      const saveBet = jest.fn()
+        .mockRejectedValueOnce({ code })
+        .mockResolvedValueOnce('new789');
+      await expect(saveRematch(saveBet, settled, creator, 'old123')).resolves.toBe('new789');
+      expect(saveBet).toHaveBeenCalledTimes(2);
+      const { rematchOf, ...withoutLink } = rematchFields(settled, creator, 'old123');
+      expect(saveBet.mock.calls[1][0]).toBeNull();
+      expect(saveBet.mock.calls[1][1]).toEqual(withoutLink);
+      expect(saveBet.mock.calls[1][1]).not.toHaveProperty('rematchOf');
+    },
+  );
+
+  test('any other error is thrown without a retry', async () => {
+    const error = { code: 'unavailable' };
+    const saveBet = jest.fn().mockRejectedValue(error);
+    await expect(saveRematch(saveBet, settled, creator, 'old123')).rejects.toBe(error);
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('a denied retry is thrown, and there is no third try', async () => {
+    const first = { code: 'permission-denied' };
+    const second = { code: 'permission-denied' };
+    const saveBet = jest.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
+    await expect(saveRematch(saveBet, settled, creator, 'old123')).rejects.toBe(second);
+    expect(saveBet).toHaveBeenCalledTimes(2);
   });
 });

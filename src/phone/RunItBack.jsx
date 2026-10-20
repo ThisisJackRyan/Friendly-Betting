@@ -6,7 +6,7 @@ import { useRouter } from '../platform/navigation';
 import { saveBet } from './api';
 import { markFreshBet } from './freshBet';
 import { friendlyError } from './model';
-import { canRunItBack, rematchFields } from './rematch';
+import { canRunItBack, saveRematch } from './rematch';
 
 export const RUN_IT_BACK_COPY = {
   label: 'Run it back',
@@ -41,7 +41,7 @@ export default function RunItBack({ bet, code, user }) {
     setSaving(true);
     setError('');
     try {
-      const id = await saveBet(null, rematchFields(bet, user, code));
+      const id = await saveRematch(saveBet, bet, user, code);
       // Left mid-save: the bet is in My bets, and no tally opens.
       if (!mountedRef.current) return;
       markFreshBet(id);
