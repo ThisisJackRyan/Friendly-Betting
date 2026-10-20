@@ -512,11 +512,19 @@ test('after a settle the creator can Undo for 30s, back to the open tally', asyn
   await expect(undo).toBeVisible();
   await expect(page.locator('.undo-settle-count')).toHaveText('30s');
   await page.screenshot({ path: testInfo.outputPath('undo-countdown.png'), animations: 'disabled', scale: 'css' });
+  // Undo sits right under both share buttons.
+  const shareImage = page.getByRole('button', { name: 'Share as image', exact: true });
+  await expect(shareImage).toBeVisible();
+  const imageBox = await shareImage.boundingBox();
+  const undoBox = await undo.boundingBox();
+  expect(undoBox.y).toBeGreaterThan(imageBox.y + imageBox.height);
   await page.clock.runFor(10000);
   await expect(page.locator('.undo-settle-count')).toHaveText('20s');
 
   await undo.click();
   await expect(settledRegion(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share the result', exact: true })).toHaveCount(0);
+  await expect(shareImage).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Call off', exact: true })).toBeVisible();
@@ -557,11 +565,16 @@ test('Call off on an open bet: confirm, then the called-off result', async ({ pa
   await expect(callOff).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share the result', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share as image', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => window.callOffCalls)).toBe(1);
 
-  // The vote page shows it called off with no picks to make.
+  // The vote page shows it called off with no picks to make and nothing to share.
   await page.goto('/b/crew123');
   await expect(settledRegion(page)).toContainText('This bet was called off.');
+  await expect(page.locator('.invite-line')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share the result', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Share as image', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Bears', exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });

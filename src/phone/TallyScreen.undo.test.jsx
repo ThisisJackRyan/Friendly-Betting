@@ -5,6 +5,7 @@ import { requestResultTexts } from './resultTexts';
 import { canShowInterstitial, showInterstitial } from '../ads/adService';
 import { AD_THANKS_LINE } from '../ads/AdThanks';
 import { buildSettlement } from './settlement';
+import { renderWinnerCard } from './winnerCardImage';
 import { navigation } from 'next/navigation';
 
 // Undo after a settle, and Call off on an open bet. The api is the real one
@@ -95,6 +96,8 @@ const stamp = (ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000
 const revealRegion = () => screen.queryByRole('region', { name: 'Settled result' });
 const undoButton = () => screen.queryByRole('button', { name: 'Undo' });
 const callOffButton = () => screen.queryByRole('button', { name: 'Call off' });
+const shareTextButton = () => screen.queryByRole('button', { name: 'Share the result' });
+const shareImageButton = () => screen.queryByRole('button', { name: 'Share as image' });
 const dialog = () => screen.queryByRole('dialog', { name: 'Call off this bet?' });
 let stored;
 let writes;
@@ -132,6 +135,7 @@ beforeEach(() => {
   requestResultTexts.mockClear();
   canShowInterstitial.mockReset().mockReturnValue(false);
   showInterstitial.mockReset();
+  renderWinnerCard.mockClear();
 });
 
 afterEach(async () => {
@@ -189,6 +193,29 @@ describe('Undo after a settle', () => {
     expect(undoButton()).not.toBeInTheDocument();
     expect(screen.queryByText(/^\d+s$/)).not.toBeInTheDocument();
     expect(revealRegion()).toHaveTextContent('No won');
+  });
+
+  test('sits under Share the result and Share as image, above Run it back', async () => {
+    await renderTally();
+    await settleOnNo();
+    const order = [shareTextButton(), shareImageButton(), undoButton(), screen.getByRole('button', { name: 'Run it back' })];
+    order.forEach((node) => expect(node).toBeInTheDocument());
+    order.slice(1).forEach((node, i) => {
+      expect(order[i].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  test('Undo takes the share buttons with it, and no card is drawn after', async () => {
+    await renderTally();
+    await settleOnNo();
+    await pushStored();
+    await tap(undoButton());
+    await pushStored();
+    expect(shareTextButton()).not.toBeInTheDocument();
+    expect(shareImageButton()).not.toBeInTheDocument();
+    renderWinnerCard.mockClear();
+    await advance(2000);
+    expect(renderWinnerCard).not.toHaveBeenCalled();
   });
 
   test('Undo reopens the bet in one write, back to the open tally', async () => {
@@ -357,6 +384,11 @@ describe('Call off', () => {
     expect(callOffButton()).not.toBeInTheDocument();
     expect(undoButton()).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
+    // A called-off bet has nothing to share, as text or as an image.
+    expect(shareTextButton()).not.toBeInTheDocument();
+    expect(shareImageButton()).not.toBeInTheDocument();
+    await advance(2000);
+    expect(renderWinnerCard).not.toHaveBeenCalled();
   });
 
   test('a failed call-off keeps the dialog open with the error', async () => {
