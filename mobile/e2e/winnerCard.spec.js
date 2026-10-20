@@ -19,7 +19,8 @@ const crewBet = {
   ],
 };
 
-// `state`: 'settled', 'called-off' or 'open'.
+// `state`: 'settled', 'called-off' (by status), 'called-off-flag' (closed
+// with calledOff, as Call off writes it) or 'open'.
 async function mockBet(page, { state = 'settled', uid = 'jack' } = {}) {
   const user = uid === 'jack'
     ? { uid, providerData: [{ providerId: 'phone' }] }
@@ -40,7 +41,8 @@ async function mockBet(page, { state = 'settled', uid = 'jack' } = {}) {
       const state = ${JSON.stringify(state)};
       const bet = state === 'settled'
         ? { ...open, status: 'closed', winnerId: 'a', settledAt: 123, settlement: buildSettlement(open, 'a') }
-        : state === 'called-off' ? { ...open, status: 'called-off' } : open;
+        : state === 'called-off' ? { ...open, status: 'called-off' }
+        : state === 'called-off-flag' ? { ...open, status: 'closed', calledOff: true, settledAt: 123 } : open;
       export const subscribeBet = (code, cb) => { cb(bet); return () => {}; };
       export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
       export const hydrateBet = async b => b;
@@ -48,6 +50,8 @@ async function mockBet(page, { state = 'settled', uid = 'jack' } = {}) {
       export const saveBet = async () => 'crew123';
       export const castVote = async () => {};
       export const deleteBet = async () => {};
+      export const undoSettle = async () => open;
+      export const callOffBet = async () => bet;
       export const settleBet = async () => bet;`,
   }));
 }
@@ -131,9 +135,9 @@ test('in the app without a file share sheet, there is no Share as image', async 
   await expect(imageButton(page)).toHaveCount(0);
 });
 
-for (const route of ['/t/crew123', '/b/crew123']) {
-  test(`called off on ${route}: no Share as image`, async ({ page }) => {
-    await mockBet(page, { state: 'called-off', uid: route.startsWith('/t/') ? 'jack' : 'maya' });
+for (const [state, route] of ['called-off', 'called-off-flag'].flatMap((name) => [[name, '/t/crew123'], [name, '/b/crew123']])) {
+  test(`${state} on ${route}: no Share as image`, async ({ page }) => {
+    await mockBet(page, { state, uid: route.startsWith('/t/') ? 'jack' : 'maya' });
     await fileShareSheet(page);
     await page.goto(route);
     await expect(page.getByRole('region', { name: 'Settled result' })).toContainText('This bet was called off.');
