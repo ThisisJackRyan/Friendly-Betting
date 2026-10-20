@@ -1,8 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { useIdentity } from './identity';
+import { useSignedInUser } from './identity';
 import { subscribeEntitlement } from './entitlementApi';
 import { badgeFor, isProEntitlement } from './entitlement';
-import { setProEntitlement } from '../ads/pro';
+import { __resetProForTests, noteProKnown, setProEntitlement } from '../ads/pro';
 
 // One shared listener on entitlements/{uid} for the signed-in user, however
 // many components ask. EntitlementSync mounts it at the app root, so the ad
@@ -19,6 +19,7 @@ const listeners = new Set();
 function publish(next) {
   state = next;
   setProEntitlement(next.entitlement);
+  if (!next.loading) noteProKnown();
   listeners.forEach((listener) => listener());
 }
 
@@ -71,14 +72,20 @@ export function useProBadge(viewerUid) {
 }
 
 // Listens to the signed-in user's entitlement and returns
-// { entitlement, isPro, loading }. Device-only (local) users have none.
+// { entitlement, isPro, loading }. Never signs anyone in: it waits for a user
+// the page's own sign-in (or a restored session) already has, so mounting it
+// at the root starts nothing on pages that need no account. Device-only
+// (local) users have none.
 export function useEntitlement() {
-  const user = useIdentity();
+  const user = useSignedInUser();
   const uid = user && !user.isLocal ? user.uid : '';
-  const known = Boolean(user);
+  const known = user !== undefined;
   useEffect(() => {
     if (uid) return acquire(uid);
-    if (known && state.uid) publish(SIGNED_OUT);
+    if (known) {
+      if (state.uid) publish(SIGNED_OUT);
+      noteProKnown();
+    }
     return undefined;
   }, [uid, known]);
   const { entitlement, isPro, loading } = useEntitlementState();
@@ -90,6 +97,6 @@ export function __resetEntitlementForTests() {
   current?.stop?.();
   current = null;
   state = STARTING;
-  setProEntitlement(null);
+  __resetProForTests();
   listeners.forEach((listener) => listener());
 }

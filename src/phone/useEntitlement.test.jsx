@@ -1,6 +1,6 @@
 import { act, render, renderHook } from '@testing-library/react';
 import { onSnapshot } from 'firebase/firestore';
-import { useIdentity } from './identity';
+import { useSignedInUser } from './identity';
 import { __resetEntitlementForTests, useEntitlement, useEntitlementState, useProBadge } from './useEntitlement';
 import { isPro } from '../ads/pro';
 import { __resetAdsForTests, canShowInterstitial, showInterstitial } from '../ads/adService';
@@ -15,7 +15,7 @@ jest.mock('firebase/firestore', () => ({
   onSnapshot: jest.fn(),
 }));
 jest.mock('../Config/firebase-config', () => ({ auth: null, db: {} }));
-jest.mock('./identity', () => ({ useIdentity: jest.fn() }));
+jest.mock('./identity', () => ({ useSignedInUser: jest.fn() }));
 jest.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
 }));
@@ -44,8 +44,8 @@ beforeEach(() => {
     stops.push(stop);
     return stop;
   });
-  useIdentity.mockReset();
-  useIdentity.mockReturnValue(creator);
+  useSignedInUser.mockReset();
+  useSignedInUser.mockReturnValue(creator);
   __resetEntitlementForTests();
   __resetAdsForTests();
   localStorage.clear();
@@ -109,7 +109,7 @@ test('a new user swaps the listener and forgets the old plan', () => {
   const { result, rerender } = renderHook(() => useEntitlement());
   emit('entitlements/jack', { plan: 'pro' });
   expect(isPro()).toBe(true);
-  useIdentity.mockReturnValue({ uid: 'maya', isAnonymous: true, providerData: [] });
+  useSignedInUser.mockReturnValue({ uid: 'maya', isAnonymous: true, providerData: [] });
   rerender();
   expect(stops[0]).toHaveBeenCalled();
   expect(onSnapshot.mock.calls[1][0]).toEqual({ path: 'entitlements/maya' });
@@ -118,7 +118,7 @@ test('a new user swaps the listener and forgets the old plan', () => {
 });
 
 test('a device-only user has no entitlement and starts no listener', () => {
-  useIdentity.mockReturnValue({ uid: 'local-1', isLocal: true });
+  useSignedInUser.mockReturnValue({ uid: 'local-1', isLocal: true });
   const { result } = renderHook(() => useEntitlement());
   expect(onSnapshot).not.toHaveBeenCalled();
   expect(result.current).toEqual({ entitlement: null, isPro: false, loading: true });

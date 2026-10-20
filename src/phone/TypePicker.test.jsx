@@ -6,7 +6,10 @@ import { subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 
 jest.mock('next/navigation');
-jest.mock('./identity', () => ({ useIdentity: () => ({ uid: 'jack', providerData: [{ providerId: 'phone' }] }) }));
+jest.mock('./identity', () => {
+  const jack = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
+  return { useIdentity: () => jack, useSignedInUser: () => jack };
+});
 
 const FAKE = [{ id: 'fake-type', label: 'Fake Type', hint: 'Only in tests.' }];
 const flag = process.env.NEXT_PUBLIC_PRO_EARLY_TYPES;

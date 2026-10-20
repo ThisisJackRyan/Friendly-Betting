@@ -63,7 +63,11 @@ needs it), and client-unwritable. The rest of `meta` stays closed by default. Co
   current through `setProEntitlement`, so the ad service's synchronous `isPro()` is right on
   every screen. `useEntitlementState()` and `useProBadge(uid)` read it without listening.
 - `src/phone/EntitlementSync.jsx` mounts the listener once at the root: `app/layout.js` (web,
-  every page including `/b/`) and `mobile/App.jsx` (app). Device-only (local) users have none.
+  every page including `/b/`) and `mobile/App.jsx` (app). It never signs anyone in: it reads
+  the user auth already has (`useSignedInUser()` in `identity.js`, `onAuthStateChanged` only),
+  so pages without a sign-in of their own start nothing. Device-only (local) users have none.
+  Once the plan has loaded, or auth says nobody is signed in, it calls `noteProKnown()`, which
+  the native app's ad start waits on (`whenProKnown()` in `src/ads/pro.js`).
 - A failed snapshot keeps the last known plan; a new user swaps the listener and clears it.
 
 ### Badges

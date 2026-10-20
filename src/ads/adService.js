@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { AD_IDS, AD_LIMITS, GOOGLE_TEST_PUBLISHER, adsEnabled } from './config';
-import { capReason, recordShow, resetCaps } from './caps';
+import { capReason, notePause, noteResume, recordShow, resetCaps } from './caps';
 import { isPro } from './pro';
 
 // One entry point for interstitials, three backends:
@@ -14,6 +14,7 @@ const TIMEOUT = Symbol('timeout');
 
 let initPromise = null;
 let busy = false;
+let started = false;
 
 const result = (shown, reason) => ({ shown, skipped: !shown, reason });
 
@@ -73,6 +74,29 @@ export function initAds() {
   return initPromise;
 }
 
+// Native app start: runs initAds() (and so the iOS tracking prompt) as soon as
+// the app is active, not inside the first ad's timeoutMs. Also starts a new ad
+// session after a long background gap. Once per launch; does nothing on the
+// web or with the flag off, and never loads the SDK for Pro. Never rejects.
+export async function startAdsOnAppActive() {
+  if (started || platform() === 'web' || !adsEnabled()) return;
+  started = true;
+  try {
+    const { App } = await import('@capacitor/app');
+    // initAds() itself skips Pro, so the SDK never loads for a member.
+    const whenActive = () => initAds();
+    await App.addListener('pause', () => notePause());
+    await App.addListener('resume', () => noteResume());
+    await App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) whenActive();
+    });
+    const { isActive } = await App.getState();
+    if (isActive) whenActive();
+  } catch {
+    // showInterstitial still calls initAds() itself.
+  }
+}
+
 async function listen(AdMob, eventName, handler) {
   try {
     return await AdMob.addListener(eventName, handler);
@@ -85,7 +109,8 @@ async function showNative(os, placement, state) {
   const adId = AD_IDS[os]?.interstitial;
   if (!adId) return result(false, 'error');
   const AdMob = await loadAdMob();
-  // Init failing is not fatal: try the ad anyway, and skip it if that fails.
+  // Usually already done at app start (startAdsOnAppActive); this is the
+  // backstop. Init failing is not fatal: try the ad anyway, and skip it if that fails.
   await initAds();
   if (state.cancelled) return result(false, 'timeout');
   try {
@@ -192,5 +217,6 @@ export async function showInterstitial(options) {
 export function __resetAdsForTests() {
   initPromise = null;
   busy = false;
+  started = false;
   resetCaps();
 }

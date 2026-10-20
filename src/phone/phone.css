@@ -868,6 +868,10 @@ body {
   text-underline-offset: 3px;
 }
 
+.text-link.tally-vote-link[aria-disabled='true'] {
+  pointer-events: none;
+}
+
 .cta.cta-nudge {
   height: 60px;
   min-height: 60px;

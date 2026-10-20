@@ -4,7 +4,7 @@ import VoteScreen from './VoteScreen';
 import { MyBetsList } from './MyBets';
 import EntitlementSync from './EntitlementSync';
 import { subscribeBet, subscribeMyBets } from './api';
-import { useIdentity } from './identity';
+import { useIdentity, useSignedInUser } from './identity';
 import { subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { buildSettlement } from './settlement';
@@ -25,6 +25,7 @@ jest.mock('./api', () => ({
 }));
 jest.mock('./identity', () => ({
   useIdentity: jest.fn(),
+  useSignedInUser: jest.fn(),
   rememberName: jest.fn(),
   savedName: () => '',
   creatorName: () => 'Jack',
@@ -60,6 +61,7 @@ const PLANS = {
 
 function setup({ user, plan, bet }) {
   useIdentity.mockReturnValue(user);
+  useSignedInUser.mockReturnValue(user);
   subscribeEntitlement.mockImplementation((uid, onChange) => {
     onChange(uid === user.uid ? PLANS[plan] || null : null);
     return () => {};

@@ -49,7 +49,17 @@ const panel = {
   background: 'var(--wash, #e8efe3)',
 };
 
+// The page behind the ad: the mobile app's #root, or the Next app's frame.
+function appRoot(dialog) {
+  if (typeof document === 'undefined') return null;
+  const root = document.getElementById('root')
+    || document.getElementById('__next')
+    || document.querySelector('.app-frame');
+  return root && dialog && !root.contains(dialog) ? root : null;
+}
+
 export default function HouseAd({ onClose, autoCloseMs = 0 }) {
+  const dialog = useRef(null);
   const button = useRef(null);
   const done = useRef(false);
   const finish = useRef(onClose);
@@ -58,6 +68,23 @@ export default function HouseAd({ onClose, autoCloseMs = 0 }) {
     done.current = true;
     onClose?.();
   };
+
+  // While the ad is up the page behind it is inert; on close (or unmount)
+  // focus goes back where it was.
+  useEffect(() => {
+    const previous = document.activeElement;
+    const root = appRoot(dialog.current);
+    const madeInert = Boolean(root && !root.hasAttribute('inert'));
+    if (madeInert) root.setAttribute('inert', '');
+    return () => {
+      if (madeInert) root.removeAttribute('inert');
+      try {
+        if (previous && previous !== document.body && previous.isConnected) previous.focus?.();
+      } catch {
+        // Nowhere to go back to.
+      }
+    };
+  }, []);
 
   useEffect(() => {
     button.current?.focus();
@@ -73,7 +100,7 @@ export default function HouseAd({ onClose, autoCloseMs = 0 }) {
   }, [autoCloseMs]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Ad" style={layer} data-testid="house-ad">
+    <div ref={dialog} role="dialog" aria-modal="true" aria-label="Ad" style={layer} data-testid="house-ad">
       <span style={label}>Ad</span>
       <button ref={button} type="button" aria-label="Close ad" style={close} onClick={() => finish.current()}>
         <span aria-hidden="true">×</span>

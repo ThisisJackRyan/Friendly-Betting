@@ -8,7 +8,10 @@ import { navigation } from 'next/navigation';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
-jest.mock('./identity', () => ({ useIdentity: () => ({ uid: 'jack', providerData: [{ providerId: 'phone' }] }) }));
+jest.mock('./identity', () => {
+  const jack = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
+  return { useIdentity: () => jack, useSignedInUser: () => jack };
+});
 
 const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
