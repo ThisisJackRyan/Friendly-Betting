@@ -374,6 +374,22 @@ describe('Call off', () => {
     await tap(within(dialog()).getByRole('button', { name: 'Keep it' }));
     expect(dialog()).not.toBeInTheDocument();
     expect(runTransaction).not.toHaveBeenCalled();
+    // Focus goes back to the button that opened it.
+    expect(callOffButton()).toHaveFocus();
+  });
+
+  test('Escape and the backdrop also keep the bet and put focus back on Call off', async () => {
+    await renderTally();
+    await tap(callOffButton());
+    await act(async () => { fireEvent.keyDown(dialog(), { key: 'Escape' }); });
+    expect(dialog()).not.toBeInTheDocument();
+    expect(callOffButton()).toHaveFocus();
+    await tap(callOffButton());
+    expect(within(dialog()).getByRole('button', { name: 'Keep it' })).toHaveFocus();
+    await tap(document.querySelector('.dialog-backdrop'));
+    expect(dialog()).not.toBeInTheDocument();
+    expect(callOffButton()).toHaveFocus();
+    expect(runTransaction).not.toHaveBeenCalled();
   });
 
   test('confirming calls the bet off and shows the called-off result', async () => {

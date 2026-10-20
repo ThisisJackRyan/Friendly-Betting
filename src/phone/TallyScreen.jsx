@@ -105,6 +105,7 @@ const TallyScreen = () => {
   const [undoing, setUndoing] = useState(false);
   const [undoError, setUndoError] = useState('');
   const [callOff, setCallOff] = useState({ open: false, busy: false, error: '' });
+  const callOffTrigger = useRef(null);
   const resultRef = useRef(null);
   const revealSettlement = useRef(false);
   // Whether this tab just made this bet (see freshBet): undefined until the
@@ -191,6 +192,12 @@ const TallyScreen = () => {
     } finally {
       setUndoing(false);
     }
+  };
+
+  // Kept the bet: back to the Call off button, as My bets does for Delete.
+  const closeCallOff = () => {
+    setCallOff({ open: false, busy: false, error: '' });
+    callOffTrigger.current?.focus();
   };
 
   const confirmCallOff = async () => {
@@ -364,6 +371,7 @@ const TallyScreen = () => {
             )}
             {canCallOff && !settling && (
               <button
+                ref={callOffTrigger}
                 type="button"
                 className="text-link tally-call-off"
                 disabled={locked}
@@ -387,7 +395,7 @@ const TallyScreen = () => {
           busy={callOff.busy}
           error={callOff.error}
           onConfirm={confirmCallOff}
-          onCancel={() => setCallOff({ open: false, busy: false, error: '' })}
+          onCancel={closeCallOff}
         />
       )}
       {invite.thanks}
