@@ -45,9 +45,16 @@ describe('winnerCardText', () => {
     expect(winnerCardText(bet).headline).toBe('Maya & Sam won.');
   });
 
-  test('many winners keep the reveal\'s two names and a count', () => {
+  test('many winners keep the reveal\'s two names and a count, joined with no-break spaces', () => {
     const winners = [['jack', 'Jack'], ['maya', 'Maya'], ['sam', 'Sam'], ['kim', 'Kim'], ['lee', 'Lee']];
-    expect(winnerCardText(settled({ winners })).headline).toBe('Jack, Maya & 3 others won.');
+    const bet = settled({ winners });
+    expect(winnerCardText(bet).headline).toBe('Jack, Maya &\u00A03\u00A0others won.');
+    expect(buildReveal({ bet, viewerId: null }).headline).toBe('Jack, Maya & 3 others won.');
+  });
+
+  test('one other is kept with its count too', () => {
+    const winners = [['jack', 'Jack'], ['maya', 'Maya'], ['anon', '']];
+    expect(winnerCardText(settled({ winners })).headline).toBe('Jack, Maya &\u00A01\u00A0other won.');
   });
 
   test('nobody called it, and no stake line without a stake', () => {
@@ -119,7 +126,7 @@ describe('buildWinnerCard layout', () => {
     const card = buildWinnerCard(settled({ winners }), { measure });
     const headline = card.lines.filter((line) => line.key === 'headline');
     expect(headline[0].font).toMatch(/^800 (84|72)px /);
-    expect(headline.map((line) => line.text).join(' ')).toBe('Bartholomew Maximilian, Anastasia Konstantin & 2 others won.');
+    expect(headline.map((line) => line.text).join(' ')).toBe('Bartholomew Maximilian, Anastasia Konstantin &\u00A02\u00A0others won.');
   });
 
   test('then cuts each name, so the count and "won." always show', () => {
@@ -129,7 +136,20 @@ describe('buildWinnerCard layout', () => {
     const headline = card.lines.filter((line) => line.key === 'headline').map((line) => line.text);
     expect(headline.length).toBeLessThanOrEqual(3);
     const joined = headline.join(' ');
-    expect(joined).toMatch(/^Bartholomew.*…, Anastasia.*… & 4 others won\.$/);
+    expect(joined).toMatch(/^Bartholomew.*…, Anastasia.*… &\u00A04\u00A0others won\.$/);
+    expect(headline.some((line) => line.includes('&\u00A04\u00A0others'))).toBe(true);
+    const font = card.lines.find((line) => line.key === 'headline').font;
+    headline.forEach((line) => expect(measure(line, font)).toBeLessThanOrEqual(inner));
+  });
+
+  test('the count stays with "others": no "Sam & 2" ending a line', () => {
+    // At 100px a line holds 17 characters: plain spaces would wrap this as
+    // "Jo, Sam & 2" / "others won.".
+    const winners = [['jo', 'Jo'], ['sam', 'Sam'], ['kim', 'Kim'], ['lee', 'Lee']];
+    const card = buildWinnerCard(settled({ winners }), { measure });
+    expect(wrapText('Jo, Sam & 2 others won.', { width: inner, font: '800 100px x', maxLines: 3, measure }))
+      .toEqual(['Jo, Sam & 2', 'others won.']);
+    expect(textOf(card, 'headline')).toEqual(['Jo, Sam', '&\u00A02\u00A0others won.']);
   });
 
   test('a single unbroken name too long for any cut still clips inside the card', () => {
@@ -174,6 +194,25 @@ describe('wrapText', () => {
     expect(lines[1].endsWith('…')).toBe(true);
     lines.forEach((line) => expect(measure(line, opts.font)).toBeLessThanOrEqual(50));
     expect(lines).toEqual(['aaaa bbbb', 'cccc dddd…']);
+  });
+  test('never breaks at a no-break space', () => {
+    const nb = (text) => text.replace(/_/g, '\u00A0');
+    expect(wrapText(nb('Sam &_2_others won.'), { ...opts, width: 60, maxLines: 3 }))
+      .toEqual(['Sam', nb('&_2_others'), 'won.']);
+    expect(wrapText(nb('aa bb_cc dd'), { ...opts, width: 30, maxLines: 3 })).toEqual(['aa', nb('bb_cc'), 'dd']);
+  });
+  test('a no-break run wider than a line is still broken', () => {
+    const run = Array(5).fill('abc').join('\u00A0');
+    const lines = wrapText(run, { ...opts, maxLines: 3 });
+    expect(lines.join('')).toBe(run);
+    lines.forEach((line) => expect(measure(line, opts.font)).toBeLessThanOrEqual(50));
+  });
+  test('clipping keeps a no-break run whole up to the ellipsis', () => {
+    const lines = wrapText('aaaa bbbb &\u00A04\u00A0others won. more words', { ...opts, width: 60 });
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('aaaa bbbb');
+    expect(lines[1].startsWith('&\u00A04\u00A0others')).toBe(true);
+    expect(lines[1].endsWith('…')).toBe(true);
   });
   test('empty text has no lines', () => {
     expect(wrapText('   ', opts)).toEqual([]);

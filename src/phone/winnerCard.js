@@ -16,6 +16,13 @@ export const CARD_FILENAME = 'friendly-result.png';
 
 const font = (weight, size) => `${weight} ${size}px ${CARD_FONT_FAMILY}`;
 const ELLIPSIS = '…';
+const NBSP = '\u00A0';
+// Whitespace a line may break at: any but the no-break space.
+const BREAKS = /[^\S\u00A0]+/;
+
+// "& 2 others" joined with no-break spaces, so the count never ends a line
+// on its own ("Sam & 2" / "others won.").
+const keepCount = (headline) => headline.replace(/ & (\d+) (others?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`);
 
 // Each block: its font sizes, largest first, with line height as a multiple
 // of the size, how many lines it may take and the gap after it. The headline
@@ -36,10 +43,11 @@ function clip(text, width, fontSpec, measure) {
   return `${chars.join('').trimEnd()}${ELLIPSIS}`;
 }
 
-// Word wrap to at most `maxLines`; a word wider than a line is broken, and
-// whatever does not fit ends the last line with an ellipsis.
+// Word wrap to at most `maxLines`, never at a no-break space; a word wider
+// than a line is broken, and whatever does not fit ends the last line with an
+// ellipsis.
 export function wrapText(text, { width, font: fontSpec, maxLines, measure }) {
-  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const words = String(text || '').split(BREAKS).filter(Boolean);
   const lines = [];
   let line = '';
   let rest = words;
@@ -85,7 +93,7 @@ export function winnerCardText(bet) {
   return {
     question: result.question,
     eyebrow: reveal.eyebrow,
-    headline: reveal.headline,
+    headline: keepCount(reveal.headline),
     subline: reveal.subline,
     stake: reveal.stake ? REVEAL_COPY.stake(reveal.stake) : '',
   };
@@ -101,10 +109,10 @@ const cutName = (name, max) => {
 // The reveal's headline, then the same with each name cut shorter.
 function headlineVariants(bet, headline) {
   const result = settlementOf(bet);
-  return [headline, ...NAME_CUTS.map((max) => buildReveal({
+  return [headline, ...NAME_CUTS.map((max) => keepCount(buildReveal({
     bet: { ...bet, settlement: { ...result, winners: result.winners.map((winner) => ({ ...winner, name: cutName(winner.name, max) })) } },
     viewerId: null,
-  }).headline)];
+  }).headline))];
 }
 
 // The full layout: positioned lines plus the brand, rule and footer.
