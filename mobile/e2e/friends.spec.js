@@ -11,8 +11,10 @@ const options = [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Packers' }];
 const pick = (voterId, name, optionId) => ({ voterId, name, optionId });
 const base = { schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line', stake: '$20 pot', closesAt: null, createdByID: 'jack', createdByName: 'Jack', options };
 const BETS = [
-  { ...base, id: 'won123', code: 'won123', createdAt: 3, question: 'Bears win Sunday?', status: 'closed', winnerId: 'a', settledAt: 3,
-    votes: [pick('jack', 'Jack', 'a'), pick('uid-ana', 'Ana', 'a'), pick('uid-ben', 'Ben', 'b')] },
+  { ...base, id: 'won123', code: 'won123', createdAt: 4, question: 'Bears win Sunday?', status: 'closed', winnerId: 'a', settledAt: 4,
+    votes: [pick('jack', 'Jack', 'a'), pick('uid-ana', 'Ana', 'b'), pick('uid-ben', 'Ben', 'a')] },
+  { ...base, id: 'lost123', code: 'lost123', createdAt: 3, question: 'Over 40 points?', status: 'closed', winnerId: 'b', settledAt: 3,
+    votes: [pick('jack', 'Jack', 'a'), pick('uid-ana', 'Ana', 'b')] },
   { ...base, id: 'off123', code: 'off123', createdAt: 2, question: 'Rain delay?', status: 'called-off',
     votes: [pick('uid-ana', 'Ana', 'b')] },
   { ...base, id: 'live123', code: 'live123', createdAt: 1, question: 'Who takes the win?', status: 'open',
@@ -53,7 +55,7 @@ test('Friends on My bets shows each record, opens a friend, and a shared bet ope
 
   const section = page.getByRole('region', { name: 'Head to head' });
   const rows = section.getByRole('button');
-  await expect(rows).toHaveText([/^Ana1 W0 LBets together 3/, /^Ben0 W1 LBets together 1/]);
+  await expect(rows).toHaveText([/^Ana1 W1 LBets together 4/, /^Ben0 W0 LBets together 1/]);
   await expect(section).not.toContainText('Jack');
   const box = await rows.first().boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
@@ -62,8 +64,11 @@ test('Friends on My bets shows each record, opens a friend, and a shared bet ope
   await rows.first().click();
   await expect(rows.first()).toHaveAttribute('aria-expanded', 'true');
   const shared = section.getByRole('link');
-  await expect(shared).toHaveCount(3);
-  await expect(shared.nth(1)).toContainText('This bet was called off.');
+  await expect(shared).toHaveCount(4);
+  await expect(shared.nth(0).locator('.friend-pill.win')).toHaveText('W');
+  await expect(shared.nth(1).locator('.friend-pill.loss')).toHaveText('L');
+  await expect(shared.nth(2)).toContainText('This bet was called off.');
+  await expect(shared.nth(3).locator('.friend-pill')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('friends-open.png'), animations: 'disabled', scale: 'css' });
 

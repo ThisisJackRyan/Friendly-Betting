@@ -7,6 +7,7 @@ import { questionOf, statusLabel } from './model';
 import { REVEAL_COPY } from './reveal';
 import { BetFacts } from './ProductUI';
 
+// Open bets and settled ones with no W or L ('none') get no pill.
 const OUTCOME = { win: 'W', loss: 'L', 'called-off': REVEAL_COPY.calledOff };
 
 // My bets, Friends: each friend's record on the creator's bets (see

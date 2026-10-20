@@ -292,9 +292,13 @@ describe('Friends', () => {
   const pick = (voterId, name, optionId) => ({ voterId, name, optionId });
   const crewBets = [
     {
-      id: 'won', createdByID: 'creator', createdAt: 4, schemaVersion: 2, type: 'money-line', question: 'Bears win?',
+      id: 'won', createdByID: 'creator', createdAt: 5, schemaVersion: 2, type: 'money-line', question: 'Bears win?',
       status: 'closed', winnerId: 'a', options,
-      votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'a'), pick('uid-ben', 'Ben', 'b')],
+      votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b'), pick('uid-ben', 'Ben', 'a')],
+    },
+    {
+      id: 'lost', createdByID: 'creator', createdAt: 4, schemaVersion: 2, type: 'money-line', question: 'Over 40?',
+      status: 'closed', winnerId: 'b', options, votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b')],
     },
     {
       id: 'off', createdByID: 'creator', createdAt: 3, schemaVersion: 2, type: 'money-line', question: 'Rain delay?',
@@ -321,8 +325,8 @@ describe('Friends', () => {
     const section = screen.getByRole('region', { name: 'Head to head' });
     const rows = within(section).getAllByRole('button');
     expect(rows.map((row) => row.textContent)).toEqual([
-      'Ana1 W0 LBets together 3',
-      'Ben0 W1 LBets together 1',
+      'Ana1 W1 LBets together 4',
+      'Ben0 W0 LBets together 1',
     ]);
     expect(section).not.toHaveTextContent('Me');
     expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
@@ -331,19 +335,23 @@ describe('Friends', () => {
     expect(rows[0]).toHaveAttribute('aria-expanded', 'true');
     const history = document.getElementById(rows[0].getAttribute('aria-controls'));
     const links = within(history).getAllByRole('link');
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/t/won', '/t/off', '/t/live']);
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/t/won', '/t/lost', '/t/off', '/t/live']);
     expect(links[0]).toHaveTextContent('Settled');
     expect(within(links[0]).getByText('W')).toHaveClass('friend-pill', 'win');
-    expect(links[1]).toHaveTextContent('This bet was called off.');
-    expect(links[1]).not.toHaveTextContent(/\bW\b|\bL\b/);
-    expect(within(links[2]).getByText('Open')).toHaveClass('status', 'open');
-    expect(links[2]).toHaveTextContent('Coffee');
+    expect(within(links[1]).getByText('L')).toHaveClass('friend-pill', 'loss');
+    expect(links[2]).toHaveTextContent('This bet was called off.');
+    expect(links[2]).not.toHaveTextContent(/\bW\b|\bL\b/);
+    expect(within(links[3]).getByText('Open')).toHaveClass('status', 'open');
+    expect(links[3]).toHaveTextContent('Coffee');
+    expect(links[3].querySelector('.friend-pill')).toBeNull();
 
     await userEvent.click(rows[1]);
     expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
     const benLinks = within(document.getElementById(rows[1].getAttribute('aria-controls'))).getAllByRole('link');
+    // Same side as the creator: settled, but no W or L.
     expect(benLinks).toHaveLength(1);
-    expect(within(benLinks[0]).getByText('L')).toHaveClass('friend-pill', 'loss');
+    expect(benLinks[0]).toHaveTextContent('Settled');
+    expect(benLinks[0].querySelector('.friend-pill')).toBeNull();
     await userEvent.click(rows[1]);
     expect(screen.queryAllByRole('link', { name: /Bears win/ })).toHaveLength(0);
   });

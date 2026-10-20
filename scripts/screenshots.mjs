@@ -99,10 +99,14 @@ const CROWD_BET = {
   ],
 };
 
-// Jack's bets for Friends on My bets: one settled on each side, one called
-// off and one still open, so each friend has a mixed record.
+// Jack's bets for Friends on My bets. Jack picks on every settled one, so
+// Maya (opened in friends-open.png) has a W, an L, a same-side bet with no
+// pill, one called off and one still open.
 const FRIEND_BETS = [
-  { ...OPEN_BET, id: 'f1', code: 'f1', createdAt: 5, question: 'Chiefs cover -3?', status: 'closed', winnerId: 'a', settledAt: 5 },
+  { ...OPEN_BET, id: 'f1', code: 'f1', createdAt: 6, question: 'Chiefs cover -3?', status: 'closed', winnerId: 'a', settledAt: 6,
+    votes: [...OPEN_BET.votes, { voterId: 'maya', name: 'Maya', optionId: 'b' }] },
+  { ...OPEN_BET, id: 'f5', code: 'f5', createdAt: 5, question: 'First score a field goal?', stake: 'Coffee', status: 'closed', winnerId: 'b', settledAt: 5,
+    votes: [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'maya', name: 'Maya', optionId: 'b' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }] },
   { ...FULL_BET, id: 'f2', code: 'f2', createdAt: 4, question: 'Over 47.5 points?', stake: 'Loser buys wings', status: 'closed', winnerId: 'b', settledAt: 4 },
   { ...OPEN_BET, id: 'f3', code: 'f3', createdAt: 3, question: 'Game goes to overtime?', status: 'called-off',
     votes: [{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'jake', name: 'Jake', optionId: 'b' }] },
