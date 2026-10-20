@@ -19,7 +19,7 @@ None of these block merging the infrastructure. All of them block shipping ads.
   config. Update that test with the real IDs in the same change.
 - **TODO: ATT.** Review the `NSUserTrackingUsageDescription` text in `Info.plist` and the App
   Store privacy answers (tracking, identifiers, advertising data). Decide whether the prompt
-  should come from a deliberate moment (call `initAds()` there) instead of the first ad.
+  should come from a deliberate moment (call `initAds()` there) instead of app start.
 - **TODO: SKAdNetwork.** Re-check `SKAdNetworkItems` in `Info.plist` against Google's current
   list (developers.google.com/admob/ios/privacy/strategies) plus any mediation partners.
 - **TODO: app-ads.txt.** Publish `https://www.friendly-bets.com/app-ads.txt` with the AdMob
@@ -90,8 +90,10 @@ Callers should continue their flow on any result. Only `shown` means the person 
 `initAds()` initializes AdMob once, then on iOS checks the tracking status and asks for
 permission only if it is `notDetermined`. The promise is memoized; a failed init resolves
 `{ ok: false }` (it never rejects) and is retried on the next call. It does nothing on the web,
-with the flag off, or for Pro. `showInterstitial` calls it, so calling it ahead of time is
-optional (it moves the ATT prompt and SDK startup out of the first ad's 5 s budget).
+with the flag off, or for Pro. The native app calls `startAdsOnAppActive()` at boot
+(`mobile/main.jsx`), which runs `initAds()` once the app is active, so the ATT prompt and SDK
+startup stay out of the first ad's 5 s budget. `showInterstitial` still calls `initAds()` as a
+backstop.
 
 ## Invite interstitial
 
@@ -112,7 +114,8 @@ one-time share sheet right after Create. The result texts (`ResultShare`) do not
    only, never a fallback) for the share after Create. With no share sheet at all, the share
    after Create does nothing, as before, and no ad is tried.
 
-If the tally unmounts while the ad or thank-you is up, nothing is shared.
+If the tally unmounts while the ad or thank-you is up, nothing is shared, including after a
+skip or timeout that lands once the tally is gone.
 
 Caps: `placements.invite` is 1 per session, 3 per day, plus the global 3 minute interval.
 
@@ -125,12 +128,10 @@ ad spends the tap that started the share. So:
   `shareMessage` reaches `navigator.share` inside the original click. Nothing changes.
 - **Native app** (Capacitor Share): no gesture rule. The thank-you continues by itself after
   1.5 s (or on a tap) and the share opens.
-- **Web with `navigator.share`, ad shown**: the thank-you stays up until it is tapped (no
-  auto-continue), and the share runs synchronously inside that tap's click handler, so the
-  sheet has a fresh gesture.
-- **Web without `navigator.share`** (most desktop browsers): only fallbacks are left, so the
-  thank-you continues by itself after 1.5 s. A clipboard write that the browser refuses without
-  a gesture falls through to the manual copy, as it already does.
+- **Web, ad shown** (with or without `navigator.share`): the thank-you stays up until it is
+  tapped (no auto-continue), and the share runs synchronously inside that tap's click handler,
+  so the sheet, `sms:` or the clipboard write (which desktop Firefox and Safari refuse without
+  a gesture) has a fresh gesture.
 - **Ad tried but skipped on the web** (timeout, no fill, error): the share runs after the await.
   The browser may refuse `navigator.share` by then; `shareMessage` then falls back to `sms:`,
   the clipboard or the manual copy like any refused sheet, and `openShareSheet` (after Create)
@@ -180,7 +181,8 @@ Caps: `placements.settle` is 1 per session, 3 per day, counted apart from `invit
    to load the ad (fail open); a load failure is then `not-loaded`.
 3. **Web**: mounts `HouseAd` on its own React root at the end of `<body>`. Fixed position, so the
    page under it does not shift. Respects safe-area insets, a 44 pt close button, Escape closes.
-   Resolves `shown` when closed.
+   While it is up the app root (`#root`, `#__next` or `.app-frame`) is `inert`; on close focus
+   returns to where it was. Resolves `shown` when closed.
 
 ### Timeouts
 
@@ -201,7 +203,10 @@ Set in `AD_LIMITS` in `src/ads/config.js`:
 
 - `placements.<name>.maxPerSession` / `maxPerDay`. Unknown placements use `placements.default`
   (2 per session, 4 per day). Each placement is counted on its own.
+- `maxPerDay` (4) caps the sum of all placements' shows for the day, on top of the above.
 - `minIntervalMs` (3 min) applies across all placements.
+- `sessionGapMs` (30 min): the native app process lives for days, so a resume after at least
+  this long in the background starts a new session. A new calendar day does too.
 
 Only successful shows count. Per-day counts and the last show time live in localStorage under
 `fb.ads.caps.v1` (the local calendar day; a new day starts at zero). Session counts and a copy

@@ -6,6 +6,8 @@ const KEY = 'fb.ads.caps.v1';
 
 let sessionCounts = {};
 let lastShownThisSession = 0;
+let sessionDay = '';
+let pausedAt = 0;
 
 function storage() {
   try {
@@ -19,6 +21,29 @@ function today(now) {
   const date = new Date(now);
   const pad = (value) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function resetSession() {
+  sessionCounts = {};
+  lastShownThisSession = 0;
+}
+
+// A session that runs past midnight starts over.
+function rollSession(now) {
+  const day = today(now);
+  if (sessionDay && sessionDay !== day) resetSession();
+  sessionDay = day;
+}
+
+// The native app's pause and resume. A long enough gap starts a new session.
+export function notePause(now = Date.now()) {
+  pausedAt = now;
+}
+
+export function noteResume(now = Date.now()) {
+  if (pausedAt && now - pausedAt >= AD_LIMITS.sessionGapMs) resetSession();
+  pausedAt = 0;
+  rollSession(now);
 }
 
 function read() {
@@ -40,11 +65,14 @@ function write(state) {
 
 // Returns '' when the placement may show now, or the reason it may not.
 export function capReason(placement, now = Date.now()) {
+  rollSession(now);
   const limits = placementLimits(placement);
   if ((sessionCounts[placement] || 0) >= limits.maxPerSession) return 'capped';
   const state = read();
   const day = state.day === today(now) ? state.counts || {} : {};
   if ((day[placement] || 0) >= limits.maxPerDay) return 'capped';
+  const total = Object.values(day).reduce((sum, count) => sum + (Number(count) || 0), 0);
+  if (total >= AD_LIMITS.maxPerDay) return 'capped';
   // The in-memory time keeps the interval working when storage is unavailable.
   const last = Math.max(Number(state.lastShownAt) || 0, lastShownThisSession);
   if (last && now - last < AD_LIMITS.minIntervalMs) return 'interval';
@@ -52,6 +80,7 @@ export function capReason(placement, now = Date.now()) {
 }
 
 export function recordShow(placement, now = Date.now()) {
+  rollSession(now);
   sessionCounts = { ...sessionCounts, [placement]: (sessionCounts[placement] || 0) + 1 };
   lastShownThisSession = now;
   const state = read();
@@ -61,8 +90,9 @@ export function recordShow(placement, now = Date.now()) {
 }
 
 export function resetCaps() {
-  sessionCounts = {};
-  lastShownThisSession = 0;
+  resetSession();
+  sessionDay = '';
+  pausedAt = 0;
   try {
     storage()?.removeItem(KEY);
   } catch {

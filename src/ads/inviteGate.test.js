@@ -120,8 +120,8 @@ test('after one shown invite ad, the next invite is capped and shares synchronou
   expect(showHouseAd).toHaveBeenCalledTimes(1);
 });
 
-test('the web thank-you needs a tap only when navigator.share exists; native never does', async () => {
-  expect(thanksNeedsTap()).toBe(false);
+test('the web thank-you always needs a tap, with or without navigator.share; native never does', async () => {
+  expect(thanksNeedsTap()).toBe(true);
   setShare(jest.fn());
   expect(thanksNeedsTap()).toBe(true);
   const web = gate();

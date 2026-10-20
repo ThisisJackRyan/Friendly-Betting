@@ -52,3 +52,51 @@ test('closes by itself after autoCloseMs, so a flow never hangs on it', async ()
   await act(async () => { await jest.advanceTimersByTimeAsync(1); });
   expect(screen.queryByRole('dialog')).toBeNull();
 });
+
+test.each(['root', '__next'])('the app root #%s is inert while the ad is up, and focus returns on close', async (id) => {
+  const app = document.createElement('div');
+  app.id = id;
+  const opener = document.createElement('button');
+  app.appendChild(opener);
+  document.body.appendChild(app);
+  opener.focus();
+  const done = jest.fn();
+  await act(async () => {
+    showHouseAd().then(done);
+  });
+  const close = await screen.findByRole('button', { name: 'Close ad' });
+  expect(app).toHaveAttribute('inert');
+  expect(close).toHaveFocus();
+  await userEvent.click(close);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(done).toHaveBeenCalledTimes(1);
+  expect(app).not.toHaveAttribute('inert');
+  expect(opener).toHaveFocus();
+});
+
+test('the Next app frame is the fallback root, and unmount alone clears inert', () => {
+  const frame = document.createElement('div');
+  frame.className = 'app-frame';
+  document.body.appendChild(frame);
+  const { unmount } = render(<HouseAd onClose={() => {}} />);
+  expect(frame).toHaveAttribute('inert');
+  unmount();
+  expect(frame).not.toHaveAttribute('inert');
+});
+
+test('with no app root to find, the ad still works', () => {
+  const onClose = jest.fn();
+  const { unmount } = render(<HouseAd onClose={onClose} />);
+  expect(screen.getByRole('button', { name: 'Close ad' })).toHaveFocus();
+  expect(() => unmount()).not.toThrow();
+});
+
+test('a root that was already inert stays inert after the ad', () => {
+  const app = document.createElement('div');
+  app.id = 'root';
+  app.setAttribute('inert', '');
+  document.body.appendChild(app);
+  const { unmount } = render(<HouseAd onClose={() => {}} />);
+  unmount();
+  expect(app).toHaveAttribute('inert');
+});

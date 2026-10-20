@@ -7,16 +7,17 @@ import { canShowInterstitial, showInterstitial } from './adService';
 export const INVITE_PLACEMENT = 'invite';
 
 // On the web, navigator.share needs a fresh user tap, and waiting on an ad
-// spends the one that started it. So after an ad there, the thank-you waits
-// for a tap and the share runs inside that tap. The app's native sheet has no
-// such rule, and a web page with no navigator.share only has fallbacks.
+// spends the one that started it. The fallbacks need one too: desktop browsers
+// reject clipboard.writeText without it. So after an ad on any web page, the
+// thank-you waits for a tap and the share runs inside that tap. The app's
+// native sheet has no such rule.
 export function thanksNeedsTap() {
   try {
-    if (isNativeApp()) return false;
+    return !isNativeApp();
   } catch {
     // Treat as the web.
+    return true;
   }
-  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 }
 
 function canTryAd() {

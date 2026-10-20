@@ -147,7 +147,7 @@ const tap = (element) => act(async () => { fireEvent.click(element); });
 const settle = () => act(async () => {});
 
 describe('Text the crew', () => {
-  test('an ad shown: the thank-you, then the share with the invite text (web, no share sheet: auto-continues)', async () => {
+  test('an ad shown: the thank-you, then the share with the invite text (web, no share sheet: waits for a tap)', async () => {
     await renderTally();
     jest.useFakeTimers();
     await tap(inviteButton());
@@ -155,12 +155,11 @@ describe('Text the crew', () => {
     await settle();
     expect(thanks()).toBeInTheDocument();
     expect(screen.getByText('Thanks for watching. Ads keep this app free.')).toBeInTheDocument();
+    await act(async () => { jest.advanceTimersByTime(30000); });
     expect(shareMessage).not.toHaveBeenCalled();
-    await act(async () => { jest.advanceTimersByTime(1499); });
-    expect(shareMessage).not.toHaveBeenCalled();
-    await act(async () => { jest.advanceTimersByTime(1); });
-    expect(shareMessage).toHaveBeenCalledTimes(1);
-    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(thanks()).toBeInTheDocument();
+    await tap(within(thanks()).getByRole('button', { name: 'Text the crew' }));
+    expect(shareCalls).toEqual([{ kind: 'message', text: invite, inClick: true }]);
     expect(thanks()).not.toBeInTheDocument();
     await settle();
     expect(screen.getByText('Copied — paste into a text.')).toBeInTheDocument();
@@ -284,7 +283,10 @@ describe('the auto-open right after Create', () => {
     await act(async () => { close(shownResult); });
     expect(thanks()).toBeInTheDocument();
     expect(openShareSheet).not.toHaveBeenCalled();
-    await act(async () => { jest.advanceTimersByTime(1500); });
+    // The web waits for a tap, with or without navigator.share.
+    await act(async () => { jest.advanceTimersByTime(30000); });
+    expect(openShareSheet).not.toHaveBeenCalled();
+    await tap(within(thanks()).getByRole('button', { name: 'Text the crew' }));
     expect(openShareSheet).toHaveBeenCalledWith(invite);
     expect(shareMessage).not.toHaveBeenCalled();
     await settle();
