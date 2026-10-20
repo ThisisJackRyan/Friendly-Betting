@@ -147,16 +147,34 @@ async function present(placement) {
   return first.closed.catch(() => result(false, 'error'));
 }
 
+// The checks showInterstitial makes before it starts, in the same order.
+// '' when an ad may be tried now. Synchronous, so a caller can decide inside
+// a click handler and keep the browser's user activation.
+function skipReason(placement) {
+  if (!adsEnabled()) return 'disabled';
+  if (proMember()) return 'pro';
+  if (busy) return 'busy';
+  return capReason(placement);
+}
+
+// Synchronous precheck: false means showInterstitial would skip right away
+// (disabled, pro, busy, capped, interval). True does not promise an ad: the
+// load can still time out or fail. Never throws.
+export function canShowInterstitial(placement) {
+  try {
+    return !skipReason(String(placement || 'default'));
+  } catch {
+    return false;
+  }
+}
+
 // Shows one interstitial for `placement` if the flag, Pro status and caps
 // allow it. Resolves { shown, skipped, reason } once the ad is closed or skipped.
 export async function showInterstitial(options) {
   try {
     const placement = String(options?.placement || 'default');
-    if (!adsEnabled()) return result(false, 'disabled');
-    if (proMember()) return result(false, 'pro');
-    if (busy) return result(false, 'busy');
-    const capped = capReason(placement);
-    if (capped) return result(false, capped);
+    const skip = skipReason(placement);
+    if (skip) return result(false, skip);
     busy = true;
     try {
       const outcome = await present(placement);
