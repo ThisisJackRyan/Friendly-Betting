@@ -36,6 +36,7 @@ import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 import { useInviteShare } from '../ads/useInviteShare';
 import { useSettleAd } from '../ads/useSettleAd';
+import { useProBadge } from './useEntitlement';
 
 const INVITE_LABEL = 'Text the crew';
 
@@ -78,6 +79,7 @@ const TallyScreen = () => {
   const betId = params.code || params.id;
   const router = useRouter();
   const user = useIdentity();
+  const proBadge = useProBadge(user?.uid);
   const { bet: liveBet, setBet, failed } = useLiveBet(betId);
   // While a settle ad and its thank-you are up, the screen stays as it was at
   // the tap (the picker, Settling…) even after the live snapshot flips to
@@ -262,14 +264,14 @@ const TallyScreen = () => {
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
             {settled ? (
-              <div ref={resultRef} className="reveal-wrap"><SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} /></div>
+              <div ref={resultRef} className="reveal-wrap"><SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} badge={proBadge} /></div>
             ) : (
               <>
                 <div className="results-heading">
                   <h2>The group’s picks</h2>
                   <span>{statusLabel(bet) === 'Open' ? 'Updated live' : 'Final tally'}</span>
                 </div>
-                <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters />
+                <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters viewerId={user?.uid} viewerBadge={proBadge} />
               </>
             )}
             {settled && <RunItBack bet={bet} code={betId} user={user} />}

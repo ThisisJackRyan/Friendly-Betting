@@ -423,3 +423,92 @@ describe('private result texts', () => {
     await assertFails(creator().doc(numberPath).delete());
   });
 });
+
+describe('pro entitlements', () => {
+  const own = 'entitlements/creator-1';
+  const pro = { plan: 'pro', source: 'mock', since: 1, expiresAt: 4102444800000 };
+
+  beforeEach(async () => {
+    await seed({ [own]: pro, 'entitlements/creator-9': { plan: 'founder', source: 'admin', since: 1, founderNumber: 7, expiresAt: null } });
+  });
+
+  test('a member reads their own entitlement, and a missing one reads as missing', async () => {
+    await assertSucceeds(creator().doc(own).get());
+    await assertSucceeds(anon('anon-5').doc('entitlements/anon-5').get());
+  });
+
+  test('another user cannot read it', async () => {
+    await assertFails(otherPhone().doc(own).get());
+    await assertFails(anon().doc(own).get());
+  });
+
+  test('a signed-out user cannot read it', async () => {
+    await assertFails(guest().doc(own).get());
+  });
+
+  test('nobody can list entitlements, even signed in', async () => {
+    await assertFails(creator().collection('entitlements').get());
+    await assertFails(otherPhone().collection('entitlements').get());
+    await assertFails(anon('anon-5').collection('entitlements').get());
+    await assertFails(guest().collection('entitlements').get());
+  });
+
+  test('a query for only their own entitlement is still a list, and denied', async () => {
+    await assertFails(creator().collection('entitlements').where('plan', '==', 'pro').get());
+    await assertFails(creator().collection('entitlements').limit(1).get());
+  });
+
+  test('a member cannot grant themselves Pro or a founder spot', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(own).set({ plan: 'pro', source: 'mock', since: 1, expiresAt: null }));
+    await assertFails(creator().doc(own).set({ plan: 'founder', source: 'mock', since: 1, founderNumber: 1, expiresAt: null }));
+    await assertFails(anon().doc('entitlements/anon-1').set({ plan: 'pro', source: 'admin', since: 1 }));
+  });
+
+  test('a member cannot change or remove their own entitlement', async () => {
+    await assertFails(creator().doc(own).update({ expiresAt: null }));
+    await assertFails(creator().doc(own).update({ expiresAt: 4102444800001 }));
+    await assertFails(creator().doc(own).update({ plan: 'founder', founderNumber: 1 }));
+    await assertFails(creator().doc(own).set({ ...pro, plan: 'founder' }));
+    await assertFails(creator().doc(own).delete());
+  });
+
+  test('other users cannot write anyone else’s entitlement', async () => {
+    for (const db of [otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc(own).set(pro));
+      await assertFails(db.doc(own).update({ expiresAt: null }));
+      await assertFails(db.doc(own).delete());
+      await assertFails(db.doc('entitlements/someone-new').set(pro));
+    }
+  });
+});
+
+describe('founder counter', () => {
+  const founders = 'meta/founders';
+
+  beforeEach(async () => {
+    await seed({ [founders]: { count: 42 }, 'meta/other': { secret: true } });
+  });
+
+  test('anyone can read the founder count, signed in or not', async () => {
+    for (const db of [guest(), anon(), creator()]) {
+      await assertSucceeds(db.doc(founders).get());
+    }
+  });
+
+  test('no client can change, create or delete it', async () => {
+    for (const db of [guest(), anon(), creator(), otherPhone()]) {
+      await assertFails(db.doc(founders).update({ count: 0 }));
+      await assertFails(db.doc(founders).set({ count: 600 }));
+      await assertFails(db.doc(founders).delete());
+    }
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(founders).set({ count: 0 }));
+  });
+
+  test('the rest of meta stays closed', async () => {
+    await assertFails(guest().collection('meta').get());
+    await assertFails(creator().doc('meta/other').get());
+    await assertFails(creator().doc('meta/other').set({ secret: false }));
+  });
+});

@@ -3520,3 +3520,42 @@ html[data-arrive='home'] .landing-body.screen-fade {
 @media (min-width: 768px) {
   .toast-region { bottom: 24px; }
 }
+
+/* Pro: the badge after a member's own name, and the paywall at /pro. */
+.pro-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.pro-badge-founder { background: var(--ink); }
+.screen-title .pro-badge,
+.reveal-headline .pro-badge { font-size: 12px; }
+.pro-link { display: inline-block; margin-top: 6px; }
+.paywall { display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; }
+.paywall .screen-title { margin: 8px 0 0; }
+.paywall-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.paywall-actions { display: flex; flex-direction: column; gap: 10px; }
+.paywall-soon { margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
+.paywall-owned { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+.paywall-owned .pro-badge { margin: 0 8px 0 0; }
+.paywall-actions .secondary:disabled { opacity: 0.55; }
