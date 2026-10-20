@@ -19,7 +19,7 @@ import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
 import { AUTH_COPY, CREATE_STEP, adjacentCreateStep, isCreator } from './creatorSession';
 import { creatorName, useIdentity } from './identity';
-import { buildDraft, friendlyError, parseCloses, TYPE_META } from './model';
+import { buildDraft, DEFAULT_CLOSES, friendlyError, parseCloses, TYPE_META } from './model';
 import { markFreshBet } from './freshBet';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
@@ -95,7 +95,7 @@ const CreateForm = () => {
   const [type, setType] = useState(routeType);
   const [question, setQuestion] = useState('');
   const [stake, setStake] = useState('');
-  const [closes, setCloses] = useState('');
+  const [closes, setCloses] = useState(DEFAULT_CLOSES);
   const [optionA, setOptionA] = useState('Yes');
   const [optionB, setOptionB] = useState('No');
   const [line, setLine] = useState('');

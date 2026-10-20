@@ -90,6 +90,10 @@ export function choiceLabels(bet) {
   return (bet?.options || []).map((option) => optionVoteLabel(bet, option));
 }
 
+// Create's close-time field starts empty, so a new bet has no close time
+// until its creator picks one.
+export const DEFAULT_CLOSES = '';
+
 export function parseCloses(value) {
   if (!value) return null;
   const time = new Date(value).getTime();
