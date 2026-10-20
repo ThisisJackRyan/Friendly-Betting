@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AdThanks from './AdThanks';
 import { runInviteShare } from './inviteGate';
 
-// How long the thank-you stays up before the share opens by itself (native,
-// or a web page with no share sheet).
+// How long the thank-you stays up before the share opens by itself (native
+// only: the web always waits for a tap).
 export const THANKS_AUTO_CONTINUE_MS = 1500;
 
 // The tally's one invite share flow. share(open) runs open() through the ad
@@ -23,8 +23,10 @@ export function useInviteShare({ continueLabel } = {}) {
     };
   }, []);
 
+  // A skip or timeout can land after the tally is gone: never open the share
+  // over another screen.
   const share = useCallback((open) => runInviteShare({
-    share: open,
+    share: () => (mounted.current ? open() : null),
     showThanks: (thanks) => {
       if (!mounted.current) {
         thanks.cancel();
@@ -38,6 +40,10 @@ export function useInviteShare({ continueLabel } = {}) {
   const onContinue = useCallback(() => {
     const thanks = current.current;
     current.current = null;
+    if (!mounted.current) {
+      thanks?.cancel();
+      return;
+    }
     setPending(null);
     // Synchronous, inside the tap when there was one.
     thanks?.proceed();

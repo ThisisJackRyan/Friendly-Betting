@@ -32,8 +32,13 @@ export const AD_LIMITS = {
     // Before the tally's invite share. Light: inviting the crew is the core flow.
     invite: { maxPerSession: 1, maxPerDay: 3 },
   },
+  // Across all placements: at most this many interstitials a day.
+  maxPerDay: 4,
   // Across all placements: no interstitial within this long of the last one.
   minIntervalMs: 3 * 60 * 1000,
+  // The native app lives for days: back from the background after this long,
+  // or on a new day, starts a new ad session.
+  sessionGapMs: 30 * 60 * 1000,
   // Longest wait for an ad to get on screen (init, load and present).
   timeoutMs: 5000,
   // Once a native ad is up, stop waiting for its dismiss event after this.

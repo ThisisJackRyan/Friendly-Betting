@@ -3,7 +3,8 @@ import { AdMob } from '@capacitor-community/admob';
 import { showHouseAd } from './HouseAd';
 import { isPro } from './pro';
 import { AD_LIMITS, placementLimits } from './config';
-import { __resetAdsForTests, canShowInterstitial, initAds, showInterstitial } from './adService';
+import { App } from '@capacitor/app';
+import { __resetAdsForTests, canShowInterstitial, initAds, showInterstitial, startAdsOnAppActive } from './adService';
 
 jest.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: jest.fn(() => false), getPlatform: jest.fn(() => 'web') },
@@ -20,6 +21,20 @@ jest.mock('@capacitor-community/admob', () => {
       prepareInterstitial: jest.fn(),
       showInterstitial: jest.fn(),
       addListener: jest.fn(),
+    },
+  };
+});
+
+jest.mock('@capacitor/app', () => {
+  const listeners = {};
+  return {
+    App: {
+      listeners,
+      addListener: jest.fn(async (eventName, handler) => {
+        listeners[eventName] = handler;
+        return { remove: jest.fn() };
+      }),
+      getState: jest.fn(async () => ({ isActive: true })),
     },
   };
 });
@@ -68,6 +83,9 @@ beforeEach(() => {
     return { remove: jest.fn(async () => { delete AdMob.listeners[eventName]; }) };
   });
   nativeAdCloses();
+  Object.keys(App.listeners).forEach((key) => delete App.listeners[key]);
+  App.addListener.mockClear();
+  App.getState.mockReset().mockResolvedValue({ isActive: true });
 });
 
 afterEach(() => {
@@ -270,8 +288,70 @@ describe('frequency caps', () => {
       // A fresh module is a fresh session: only the stored day count remains.
       const later = require('./caps');
       expect(later.capReason('settle', day + 10 * AD_LIMITS.minIntervalMs)).toBe('capped');
-      expect(later.capReason('other', day + 10 * AD_LIMITS.minIntervalMs)).toBe('');
+      // Another placement is only held back once the day's total hits the global cap.
+      expect(later.capReason('other', day + 10 * AD_LIMITS.minIntervalMs))
+        .toBe(maxPerDay >= AD_LIMITS.maxPerDay ? 'capped' : '');
       expect(later.capReason('settle', new Date(2026, 9, 21, 9).getTime())).toBe('');
+    });
+  });
+
+  test('a global daily cap across all placements, on top of each placement cap', () => {
+    const day = new Date(2026, 9, 20, 9).getTime();
+    expect(AD_LIMITS.maxPerDay).toBe(4);
+    jest.isolateModules(() => {
+      const caps = require('./caps');
+      ['a', 'b', 'c'].forEach((placement, i) => caps.recordShow(placement, day + i * AD_LIMITS.minIntervalMs));
+    });
+    jest.isolateModules(() => {
+      const caps = require('./caps');
+      const at = day + 10 * AD_LIMITS.minIntervalMs;
+      expect(caps.capReason('d', at)).toBe('');
+      caps.recordShow('d', at);
+      // Each of e and f is far under its own cap, but the day's total is 4.
+      expect(caps.capReason('e', at + AD_LIMITS.minIntervalMs)).toBe('capped');
+      expect(caps.capReason('e', new Date(2026, 9, 21, 9).getTime())).toBe('');
+    });
+  });
+
+  test('a resume after 30 min in the background starts a new session; a short one does not', () => {
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => null);
+    jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+    const start = new Date(2026, 9, 20, 9).getTime();
+    jest.isolateModules(() => {
+      const caps = require('./caps');
+      const { maxPerSession } = placementLimits('settle');
+      let at = start;
+      for (let i = 0; i < maxPerSession; i += 1) {
+        caps.recordShow('settle', at);
+        at += AD_LIMITS.minIntervalMs;
+      }
+      expect(caps.capReason('settle', at)).toBe('capped');
+      caps.notePause(at);
+      caps.noteResume(at + AD_LIMITS.sessionGapMs - 1);
+      expect(caps.capReason('settle', at + AD_LIMITS.sessionGapMs)).toBe('capped');
+      caps.notePause(at);
+      caps.noteResume(at + AD_LIMITS.sessionGapMs);
+      expect(caps.capReason('settle', at + AD_LIMITS.sessionGapMs)).toBe('');
+      // A resume with no pause seen is not a gap.
+      caps.recordShow('settle', at + AD_LIMITS.sessionGapMs);
+      caps.recordShow('settle', at + AD_LIMITS.sessionGapMs + AD_LIMITS.minIntervalMs);
+      caps.noteResume(at + 2 * AD_LIMITS.sessionGapMs);
+      expect(caps.capReason('settle', at + 2 * AD_LIMITS.sessionGapMs)).toBe('capped');
+    });
+  });
+
+  test('a new calendar day starts a new session, with no pause at all', () => {
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => null);
+    jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+    jest.isolateModules(() => {
+      const caps = require('./caps');
+      const late = new Date(2026, 9, 20, 23, 50).getTime();
+      for (let i = 0; i < placementLimits('settle').maxPerSession; i += 1) {
+        caps.recordShow('settle', late + i * 1000);
+      }
+      expect(caps.capReason('settle', late + AD_LIMITS.minIntervalMs)).toBe('capped');
+      const nextDay = new Date(2026, 9, 21, 0, 10).getTime();
+      expect(caps.capReason('settle', nextDay)).toBe('');
     });
   });
 
@@ -352,5 +432,76 @@ describe('canShowInterstitial, the synchronous precheck', () => {
     expect(canShowInterstitial()).toBe(true);
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
     expect(typeof canShowInterstitial('invite')).toBe('boolean');
+  });
+});
+
+describe('startAdsOnAppActive, at native app start', () => {
+  test('inits once the app is active, so the first ad is not waiting on the tracking prompt', async () => {
+    onPlatform('ios');
+    let answer;
+    AdMob.requestTrackingAuthorization.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    await startAdsOnAppActive();
+    await flush();
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+    expect(AdMob.requestTrackingAuthorization).toHaveBeenCalledTimes(1);
+    answer();
+    await flush();
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+    // Once per launch.
+    await startAdsOnAppActive();
+    expect(App.getState).toHaveBeenCalledTimes(1);
+  });
+
+  test('not active yet: waits for the app to become active', async () => {
+    onPlatform('ios');
+    App.getState.mockResolvedValue({ isActive: false });
+    await startAdsOnAppActive();
+    await flush();
+    expect(AdMob.initialize).not.toHaveBeenCalled();
+    App.listeners.appStateChange({ isActive: false });
+    await flush();
+    expect(AdMob.initialize).not.toHaveBeenCalled();
+    App.listeners.appStateChange({ isActive: true });
+    await flush();
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  test('pause and resume reach the session caps', async () => {
+    onPlatform('android');
+    await startAdsOnAppActive();
+    const { maxPerSession } = placementLimits('settle');
+    for (let i = 0; i < maxPerSession; i += 1) {
+      nextSlot();
+      await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    }
+    localStorage.clear();
+    nextSlot();
+    expect(canShowInterstitial('settle')).toBe(false);
+    App.listeners.pause();
+    clock += AD_LIMITS.sessionGapMs;
+    App.listeners.resume();
+    expect(canShowInterstitial('settle')).toBe(true);
+  });
+
+  test.each([
+    ['web', () => onPlatform('web')],
+    ['flag off', () => { onPlatform('ios'); delete process.env.NEXT_PUBLIC_ADS_ENABLED; }],
+    ['Pro', () => { onPlatform('ios'); isPro.mockReturnValue(true); }],
+  ])('%s: never loads the ad SDK', async (_case, arrange) => {
+    arrange();
+    await startAdsOnAppActive();
+    await flush();
+    App.listeners.appStateChange?.({ isActive: true });
+    await flush();
+    Object.values(AdMob).forEach((fn) => {
+      if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled();
+    });
+  });
+
+  test('never rejects when the App plugin fails', async () => {
+    onPlatform('ios');
+    App.getState.mockRejectedValue(new Error('no plugin'));
+    await expect(startAdsOnAppActive()).resolves.toBeUndefined();
   });
 });
