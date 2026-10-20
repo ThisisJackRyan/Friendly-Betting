@@ -156,7 +156,7 @@ test('anyone can share the text-friends message from the tally', async () => {
   expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
   await userEvent.click(share);
   expect(shareMessage).toHaveBeenCalledWith(textFriendsMessage);
-  expect(await screen.findByText('Copied — paste into a text.')).toBeInTheDocument();
+  expect(await screen.findByText('Copied. Paste it into a text.')).toBeInTheDocument();
 });
 
 test('a manual share shows the message under the tally', async () => {
@@ -563,6 +563,8 @@ describe('text me who won', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
+    // A settled bet that wasn't called off keeps the creator's caption.
+    expect(document.querySelector('.invite-line')).toHaveTextContent('Mayasettled this friendly wager');
   });
 
   test.each([
@@ -824,6 +826,12 @@ describe.each([
     const region = await screen.findByRole('region', { name: 'Settled result' });
     expect(region).toHaveTextContent('This bet was called off.');
     expect(region).toHaveTextContent('Nobody won this one.');
+    // The invite line matches the reveal instead of naming the creator.
+    const caption = document.querySelector('.invite-line');
+    expect(caption.querySelector('.inviter')).toHaveTextContent('This bet was called off.');
+    expect(caption.querySelector('.invite-caption')).toHaveTextContent('Nobody won this one.');
+    expect(caption).not.toHaveTextContent('settled this friendly wager');
+    expect(caption).not.toHaveTextContent('Maya');
     expect(screen.getByText('Closed')).toBeInTheDocument();
     // No options, no name field, nothing to submit.
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();

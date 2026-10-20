@@ -26,7 +26,7 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { isFinished } from './betStatus';
 import { rememberBet } from './notificationStore';
 import SettledReveal from './SettledReveal';
-import { buildReveal } from './reveal';
+import { REVEAL_COPY, buildReveal } from './reveal';
 import ResultsMenu from './ResultsMenu';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
@@ -140,13 +140,20 @@ const VoteScreen = () => {
               <span className="invite-avatar" aria-hidden="true">
                 {(bet.createdByName || 'F').charAt(0).toUpperCase()}
               </span>
-              <p>
-                <span className="inviter">
-                  {bet.createdByName || 'A friend'}
-                  {Boolean(bet.createdByID) && bet.createdByID === user?.uid && <ProBadge badge={proBadge} />}
-                </span>
-                <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
-              </p>
+              {settled?.kind === 'called-off' ? (
+                <p>
+                  <span className="inviter">{REVEAL_COPY.calledOff}</span>
+                  <span className="invite-caption">{REVEAL_COPY.calledOffSub}</span>
+                </p>
+              ) : (
+                <p>
+                  <span className="inviter">
+                    {bet.createdByName || 'A friend'}
+                    {Boolean(bet.createdByID) && bet.createdByID === user?.uid && <ProBadge badge={proBadge} />}
+                  </span>
+                  <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
+                </p>
+              )}
             </div>
             <h1 className="question-xl">{questionOf(bet)}</h1>
             <div className="vote-meta">

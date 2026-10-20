@@ -147,13 +147,13 @@ describe('rendered screens never show TODO_UX', () => {
     await renderAt('/b/abc123', <VoteScreen />);
     const card = screen.getByRole('region', { name: 'Settled result' });
     expect([...card.children].map((node) => node.textContent)).toEqual([
-      'Chiefs -3 won', '1 friend won.', 'Called it solo. Bragging rights, secured.', 'Stakes: $20',
+      'Chiefs -3 won', 'One friend called it.', 'Called it solo. Bragging rights, secured.', 'Stakes: $20',
     ]);
     cleanup();
     feed(BETS['several unnamed winners']);
     as('jack', true);
     await renderAt('/t/abc123', <TallyScreen />);
-    expect(screen.getByRole('heading', { name: '4 friends won.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '4 friends called it.' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Bragging rights, secured.');
   });
 
@@ -227,8 +227,8 @@ describe('copy modules never hold TODO_UX', () => {
 
   test('reveal helpers for unnamed winners', () => {
     expect(winnerPhrase([{ name: '' }, { name: ' ' }])).toBe('');
-    expect(REVEAL_COPY.friends(1)).toBe('1 friend');
-    expect(REVEAL_COPY.friends(2)).toBe('2 friends');
+    expect(REVEAL_COPY.friends(1)).toBe('One friend called it.');
+    expect(REVEAL_COPY.friends(2)).toBe('2 friends called it.');
     expect(voters.voterListLabel(['Jake'], 2, 1)).not.toContain(MARKER);
   });
 });

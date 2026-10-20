@@ -309,6 +309,7 @@ describe('frequency caps', () => {
       caps.recordShow('d', at);
       // Each of e and f is far under its own cap, but the day's total is 4.
       expect(caps.capReason('e', at + AD_LIMITS.minIntervalMs)).toBe('capped');
+      expect(caps.capReason('f', at + AD_LIMITS.minIntervalMs)).toBe('capped');
       expect(caps.capReason('e', new Date(2026, 9, 21, 9).getTime())).toBe('');
     });
   });
