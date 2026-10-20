@@ -136,18 +136,22 @@ const VoteScreen = () => {
               <span className="chip">{typeLabelOf(bet)}</span>
               <span className={`status ${statusLabel(bet).toLowerCase()}`}>{statusLabel(bet)}</span>
             </div>
-            <div className="invite-line">
-              <span className="invite-avatar" aria-hidden="true">
-                {(bet.createdByName || 'F').charAt(0).toUpperCase()}
-              </span>
-              <p>
-                <span className="inviter">
-                  {bet.createdByName || 'A friend'}
-                  {Boolean(bet.createdByID) && bet.createdByID === user?.uid && <ProBadge badge={proBadge} />}
+            {/* A called-off bet has no invite header; the result card below
+                says it all. */}
+            {settled?.kind !== 'called-off' && (
+              <div className="invite-line">
+                <span className="invite-avatar" aria-hidden="true">
+                  {(bet.createdByName || 'F').charAt(0).toUpperCase()}
                 </span>
-                <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
-              </p>
-            </div>
+                <p>
+                  <span className="inviter">
+                    {bet.createdByName || 'A friend'}
+                    {Boolean(bet.createdByID) && bet.createdByID === user?.uid && <ProBadge badge={proBadge} />}
+                  </span>
+                  <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
+                </p>
+              </div>
+            )}
             <h1 className="question-xl">{questionOf(bet)}</h1>
             <div className="vote-meta">
               {bet.closesAt && open ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}

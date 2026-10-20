@@ -35,9 +35,9 @@ test('a missing or junk count prices the first spot', () => {
 });
 
 test('the copy is built from the pricing', () => {
-  expect(PRO_COPY.free).toBe('3 free bets, then $3/mo.');
-  expect(PRO_COPY.founder(founderOffer(0))).toBe('Founder: $40 lifetime for the first 100.');
-  expect(PRO_COPY.founder(founderOffer(150))).toBe('Founder: $80 lifetime for the next 500.');
+  expect(PRO_COPY.free).toBe('Start 3 bets free, then $3/mo.');
+  expect(PRO_COPY.founder(founderOffer(0))).toBe('Founder: $40 once, Pro for life. First 100 only.');
+  expect(PRO_COPY.founder(founderOffer(150))).toBe('Founder: $80 once, Pro for life. Next 500 only.');
   expect(PRO_COPY.founderNumber(7)).toBe('Founder #7');
 });
 

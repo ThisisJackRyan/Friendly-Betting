@@ -154,7 +154,7 @@ describe('Text the crew', () => {
     expect(showInterstitial).toHaveBeenCalledWith({ placement: 'invite' });
     await settle();
     expect(thanks()).toBeInTheDocument();
-    expect(screen.getByText('Thanks for watching. Ads keep this app free.')).toBeInTheDocument();
+    expect(screen.getByText('Thanks for watching. That keeps Friendly free.')).toBeInTheDocument();
     await act(async () => { jest.advanceTimersByTime(30000); });
     expect(shareMessage).not.toHaveBeenCalled();
     expect(thanks()).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe('Text the crew', () => {
     expect(shareCalls).toEqual([{ kind: 'message', text: invite, inClick: true }]);
     expect(thanks()).not.toBeInTheDocument();
     await settle();
-    expect(screen.getByText('Copied — paste into a text.')).toBeInTheDocument();
+    expect(screen.getByText('Copied. Paste it into a text.')).toBeInTheDocument();
     expect(inviteButton()).toBeEnabled();
   });
 

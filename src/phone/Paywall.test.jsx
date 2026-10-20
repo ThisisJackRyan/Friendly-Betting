@@ -57,9 +57,9 @@ test('flag on: the pricing lines, with the first founder tier', async () => {
   process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
   await open();
   expect(screen.getByRole('heading', { level: 2, name: 'Go Pro' })).toBeInTheDocument();
-  expect(screen.getByText('3 free bets, then $3/mo.')).toBeInTheDocument();
+  expect(screen.getByText('Start 3 bets free, then $3/mo.')).toBeInTheDocument();
   expect(screen.getByText('No ads.')).toBeInTheDocument();
-  expect(screen.getByText('Founder: $40 lifetime for the first 100.')).toBeInTheDocument();
+  expect(screen.getByText('Founder: $40 once, Pro for life. First 100 only.')).toBeInTheDocument();
   expect(screen.getByText('Picking a side is always free.')).toBeInTheDocument();
   expect(document.title).toBe('Go Pro · Friendly');
 });
@@ -69,13 +69,13 @@ test('founder price follows the count, and sold out hides the founder button', a
   fetchFounderCount.mockResolvedValue(100);
   const { unmount } = render(<><EntitlementSync /><Paywall /></>);
   await act(async () => {});
-  expect(screen.getByText('Founder: $80 lifetime for the next 500.')).toBeInTheDocument();
+  expect(screen.getByText('Founder: $80 once, Pro for life. Next 500 only.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Get Founder' })).toBeInTheDocument();
   unmount();
 
   fetchFounderCount.mockResolvedValue(600);
   await open();
-  expect(screen.getByText('Founder spots are sold out.')).toBeInTheDocument();
+  expect(screen.getByText('Founder spots are gone. Pro is still $3/mo.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Get Founder' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Get Pro' })).toBeInTheDocument();
 });
@@ -109,13 +109,25 @@ test('with the mock purchase flag the buttons buy through the route', async () =
   requestMockPurchase.mockResolvedValue({ ok: true, plan: 'founder', founderNumber: 100, founderCount: 100 });
   await userEvent.click(screen.getByRole('button', { name: 'Get Founder' }));
   expect(requestMockPurchase).toHaveBeenLastCalledWith('founder');
-  expect(screen.getByText('Founder: $80 lifetime for the next 500.')).toBeInTheDocument();
+  expect(screen.getByText('Founder: $80 once, Pro for life. Next 500 only.')).toBeInTheDocument();
 
   // The new plan arrives through the entitlement listener.
   emitPlan({ plan: 'founder', founderNumber: 100, expiresAt: null });
   expect(screen.getByText('Founder #100')).toBeInTheDocument();
-  expect(screen.getByText('You’re all set. No ads.')).toBeInTheDocument();
+  expect(screen.getByText('You’re Founder #100. No more ads.')).toBeInTheDocument();
+  expect(screen.queryByText('You’re Pro. No more ads.')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Get Pro' })).toBeNull();
+});
+
+test.each([
+  ['Pro', { plan: 'pro', expiresAt: null }],
+  ['a Founder with no number', { plan: 'founder', expiresAt: null }],
+])('owned line for %s', async (_label, plan) => {
+  process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+  await open();
+  emitPlan(plan);
+  expect(screen.getByText('You’re Pro. No more ads.')).toBeInTheDocument();
+  expect(screen.queryByText(/You’re Founder #/)).toBeNull();
 });
 
 test('a failed purchase says so', async () => {

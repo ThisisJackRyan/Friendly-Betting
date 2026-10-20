@@ -67,6 +67,18 @@ describe('buildReveal copy', () => {
     expect(reveal.startBet).toBe(false);
   });
 
+  test('a single unnamed winner gets the plain bragging line, not "Called it solo"', () => {
+    for (const name of ['', '   ']) {
+      const reveal = buildReveal({ bet: settled({ winners: [['u1', name]], losers: [['zed', 'Zed']] }), viewerId: 'outsider' });
+      expect(lines(reveal)).toEqual(['Chiefs -3 won', 'One friend called it.', 'Bragging rights, secured.', '$20']);
+    }
+  });
+
+  test('a single named winner keeps "Called it solo"', () => {
+    const reveal = buildReveal({ bet: settled({ winners: [['maya', 'Maya']] }), viewerId: 'outsider' });
+    expect([reveal.kind, reveal.headline, reveal.subline]).toEqual(['winners', 'Maya won.', 'Called it solo. Bragging rights, secured.']);
+  });
+
   test.each([
     [[['jack', 'Jack'], ['u1', '']], 'Jack & 1 other won.'],
     [[['jack', 'Jack'], ['u1', ''], ['u2', '']], 'Jack & 2 others won.'],
@@ -78,8 +90,8 @@ describe('buildReveal copy', () => {
   });
 
   test.each([
-    [1, '1 friend won.', 'Called it solo. Bragging rights, secured.'],
-    [3, '3 friends won.', 'Bragging rights, secured.'],
+    [1, 'One friend called it.', 'Bragging rights, secured.'],
+    [3, '3 friends called it.', 'Bragging rights, secured.'],
   ])('all %i winners unnamed get the friends count line', (count, headline, subline) => {
     const winners = Array.from({ length: count }, (_, index) => [`u${index}`, index ? '' : '   ']);
     const reveal = buildReveal({ bet: settled({ winners }) });
@@ -88,7 +100,7 @@ describe('buildReveal copy', () => {
 
   test('a viewer who lost to unnamed winners gets the count line and the nudge', () => {
     const reveal = buildReveal({ bet: settled({ winners: [['u1', ''], ['u2', '']], losers: [['me', 'Pat']] }), viewerId: 'me' });
-    expect(lines(reveal)).toEqual(['Chiefs -3 won', '2 friends won.', 'Not your day. Get ’em next time.', '$20']);
+    expect(lines(reveal)).toEqual(['Chiefs -3 won', '2 friends called it.', 'Not your day. Get ’em next time.', '$20']);
     expect(reveal.startBet).toBe(true);
   });
 

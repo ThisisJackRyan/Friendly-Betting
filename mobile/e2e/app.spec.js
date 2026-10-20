@@ -268,6 +268,10 @@ test('a bet called off by status alone shows the reveal on the tally and blocks 
 
   await page.goto('/b/crew123');
   await expect(page.getByRole('region', { name: 'Settled result' })).toContainText('This bet was called off.');
+  // No invite header: no creator avatar and no repeat of the result lines.
+  await expect(page.locator('.invite-line, .invite-avatar')).toHaveCount(0);
+  await expect(page.getByText('This bet was called off.')).toHaveCount(1);
+  await expect(page.getByText('Nobody won this one.')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'What’s your call?' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Bears', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Packers', exact: true })).toHaveCount(0);
@@ -332,7 +336,7 @@ async function enableAds(page, { lastShownAt, cappedToday } = {}) {
 
 const crewInvite = 'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123';
 const crewShares = (page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
-const thanksLine = 'Thanks for watching. Ads keep this app free.';
+const thanksLine = 'Thanks for watching. That keeps Friendly free.';
 
 test('with ads off (the default), Text the crew shares directly as before', async ({ page }) => {
   const errors = [];
@@ -729,9 +733,9 @@ test('the paywall at /pro: a 404 with the flag off, the offer with it on', async
   await enablePaywall(page);
   await page.goto('/pro');
   await expect(page.getByRole('heading', { level: 2, name: 'Go Pro' })).toBeVisible();
-  await expect(page.getByText('3 free bets, then $3/mo.')).toBeVisible();
+  await expect(page.getByText('Start 3 bets free, then $3/mo.')).toBeVisible();
   await expect(page.getByText('No ads.')).toBeVisible();
-  await expect(page.getByText('Founder: $40 lifetime for the first 100.')).toBeVisible();
+  await expect(page.getByText('Founder: $40 once, Pro for life. First 100 only.')).toBeVisible();
   // No mock purchase in this build: the buttons wait.
   await expect(page.getByRole('button', { name: 'Get Pro' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Get Founder' })).toBeDisabled();

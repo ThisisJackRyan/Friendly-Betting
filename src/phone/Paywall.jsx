@@ -42,6 +42,7 @@ export default function Paywall() {
   if (!enabled) return <NotFound />;
 
   const offer = typeof founders === 'number' ? founderOffer(founders) : null;
+  const badge = badgeFor(entitlement);
 
   const buy = async (plan) => {
     if (busy || !purchasable) return;
@@ -81,8 +82,8 @@ export default function Paywall() {
           </ul>
           {isPro ? (
             <p className="paywall-owned">
-              <ProBadge badge={badgeFor(entitlement)} />
-              {PRO_COPY.owned}
+              <ProBadge badge={badge} />
+              {badge?.number ? PRO_COPY.ownedFounder(badge.number) : PRO_COPY.owned}
             </p>
           ) : (
             <div className="paywall-actions">

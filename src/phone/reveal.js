@@ -19,7 +19,7 @@ export const REVEAL_COPY = {
   startBet: 'Start a bet',
   others: (count) => (count === 1 ? '1 other' : `${count} others`),
   // Every winner skipped their name.
-  friends: (count) => (count === 1 ? '1 friend' : `${count} friends`),
+  friends: (count) => (count === 1 ? 'One friend called it.' : `${count} friends called it.`),
 };
 
 // Names shown before "& N others".
@@ -80,9 +80,11 @@ export function buildReveal({ bet, viewerId }) {
 
   if (!winners.length) return { ...base, kind: 'nobody', headline: REVEAL_COPY.nobody, subline: REVEAL_COPY.nobodySub };
 
-  const names = winnerPhrase(winners) || REVEAL_COPY.friends(winners.length);
-  const headline = REVEAL_COPY.won(names);
+  const names = winnerPhrase(winners);
+  const headline = names ? REVEAL_COPY.won(names) : REVEAL_COPY.friends(winners.length);
   if (recipient) return { ...base, kind: 'you-lost', headline, subline: REVEAL_COPY.youLost, startBet: true };
-  const subline = winners.length === 1 ? REVEAL_COPY.solo : REVEAL_COPY.bragging;
+  // "Called it solo" only follows a name; a lone unnamed winner gets the
+  // plain line.
+  const subline = names && winners.length === 1 ? REVEAL_COPY.solo : REVEAL_COPY.bragging;
   return { ...base, kind: 'winners', headline, subline };
 }

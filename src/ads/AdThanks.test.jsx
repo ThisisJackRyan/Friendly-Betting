@@ -9,7 +9,7 @@ const dialog = () => screen.getByTestId('ad-thanks');
 
 test('the exact thank-you line, as a fixed full-screen dialog on body with safe-area insets', () => {
   const { container } = render(<AdThanks onContinue={() => {}} label="Text the crew" />);
-  expect(AD_THANKS_LINE).toBe('Thanks for watching. Ads keep this app free.');
+  expect(AD_THANKS_LINE).toBe('Thanks for watching. That keeps Friendly free.');
   expect(screen.getByRole('dialog', { name: AD_THANKS_LINE })).toBe(dialog());
   // Portaled to body, so nothing in the screen under it moves.
   expect(container).toBeEmptyDOMElement();
