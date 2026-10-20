@@ -24,6 +24,7 @@ async function mockRematch(page, { uid = 'jack', patch } = {}) {
     contentType: 'application/javascript',
     body: `const user = ${JSON.stringify(user)};
       export const useIdentity = () => user;
+      export const useSignedInUser = () => user;
       export const savedName = () => 'Jack';
       export const rememberName = () => {};
       export const creatorName = () => 'Jack';`,
