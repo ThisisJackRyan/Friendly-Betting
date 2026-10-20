@@ -39,8 +39,8 @@ The server route uses the same `founderOffer`, so the paywall and the counter ag
 
 ```
 match /entitlements/{uid} {
-  allow read: if request.auth != null && request.auth.uid == uid;
-  allow create, update, delete: if false;
+  allow get: if request.auth != null && request.auth.uid == uid;
+  allow list, create, update, delete: if false;
 }
 match /meta/founders {
   allow get: if true;
@@ -48,7 +48,7 @@ match /meta/founders {
 }
 ```
 
-A member reads only their own entitlement; no client can grant, extend, edit or delete one,
+A member gets only their own entitlement, one doc at a time (no query can list them); no client can grant, extend, edit or delete one,
 founder numbers included. The founder count is public (it is not sensitive and the paywall
 needs it), and client-unwritable. The rest of `meta` stays closed by default. Covered in
 `rules/firestore.rules.test.js` (`pro entitlements`, `founder counter`).
@@ -115,13 +115,20 @@ rules or a server route if it should be more than a prompt.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro` and the My bets link. |
+| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro` and the My bets link. Web only: always off in the native app (see below). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | off | Early-access types for Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | off | Paywall buttons call the mock route. Previews only. |
 | `PRO_MOCK_PURCHASE` | off | Server: the mock route answers at all. |
+| `PRO_MOCK_UIDS` | empty | Server: testers' uids allowed to use the mock route, comma separated. Empty or unset means nobody. |
 
 The `NEXT_PUBLIC_*` flags are inlined by Next for the web and defined by `mobile/vite.config.mjs`
 for the app, like `NEXT_PUBLIC_ADS_ENABLED`. Only `1` turns a flag on.
+
+`NEXT_PUBLIC_PRO_PAYWALL` must stay off in the native store builds (Capacitor iOS and Android,
+`mobile/`) until store In-App Purchase is wired: the stores do not allow selling digital goods any
+other way. `mobile/vite.config.mjs` enforces it by always defining the flag as off, whatever the
+build env says (tested in `mobile/viteConfig.test.js`). Turn it back on there only together with
+StoreKit and Play Billing.
 
 ## Mock purchase
 
@@ -136,11 +143,22 @@ Guards, in order:
    `NODE_ENV=production`, so `VERCEL_ENV` decides there), or, off Vercel,
    `NODE_ENV !== 'production'`. `VERCEL_ENV=production` is always a 404, as is any other
    `VERCEL_ENV`. OPTIONS is a 404 too. Nothing is read before this check.
-2. **401** without a bearer token or with one the Admin SDK can't verify. The uid always comes
+2. **401** without a bearer token, or with one the Admin SDK can't verify. The token is checked
+   with `verifyIdToken(token, true)`, so a revoked token is a 401 too. The uid always comes
    from the token; a `uid` in the body is ignored.
-3. **400** `invalid-plan` for anything but `pro` or `founder`.
-4. **409** `sold-out` for founder once 600 spots are taken.
-5. **503** without `FIREBASE_SERVICE_ACCOUNT`.
+3. **403** `forbidden` for an anonymous session (`firebase.sign_in_provider === 'anonymous'`), a
+   token without a `phone_number` claim, or a uid not listed in `PRO_MOCK_UIDS`. Empty or unset
+   `PRO_MOCK_UIDS` means everyone gets a 403.
+4. **400** `invalid-plan` for anything but `pro` or `founder`.
+5. **409** `sold-out` for founder once 600 spots are taken.
+6. **503** without `FIREBASE_SERVICE_ACCOUNT`.
+
+Why the allowlist: there is only one Firebase project, so a mock purchase on a preview writes a
+real `entitlements/{uid}` and takes a real founder number from `meta/founders`. Without it, any
+bettor (an anonymous session) on a preview could make itself Pro or a Founder. The checks live
+in `authorizeMockBuyer` and `mockBuyerAllowed` (`src/server/proPurchase.js`), which never log
+tokens, phone numbers or uids. To add a tester, put their uid in `PRO_MOCK_UIDS` on the preview
+deploy.
 
 Writes (one transaction): Pro is `{ plan: 'pro', source: 'mock', since: serverTimestamp,
 expiresAt: now + 30 days }`. Founder reads `meta/founders`, takes `count + 1` as
@@ -148,8 +166,8 @@ expiresAt: now + 30 days }`. Founder reads `meta/founders`, takes `count + 1` as
 founderNumber, expiresAt: null }`. A founder buying again changes nothing. CORS is the same
 allowlist as the other routes (`src/server/http.js`).
 
-The native app calls the production origin (`apiUrl`), where this route is a 404, so mock
-purchases only work on the web preview (or a native build pointed at a preview).
+The native app calls the production origin (`apiUrl`), where this route is a 404, and its
+paywall is always off, so mock purchases only work on the web preview.
 
 ## TODOs for real billing
 
@@ -172,9 +190,36 @@ purchases only work on the web preview (or a native build pointed at a preview).
 - **Paid-bet gating.** The 4th-bet prompt above, and server or rules enforcement if the free limit
   should be hard.
 - **Mock removal.** Before launch, delete the mock route and `NEXT_PUBLIC_PRO_MOCK_PURCHASE`, or
-  keep them strictly preview-only.
+  keep them strictly preview-only. Either way, do the [pre-launch cleanup](#pre-launch-cleanup).
 - **App Store review notes.** Digital goods inside the iOS app must use In-App Purchase (no
   Stripe links in the app, unless a permitted external-purchase entitlement applies). Show price,
   period and auto-renew terms on the paywall, link the Terms of Use and Privacy Policy, include
   Restore Purchases, and give App Review a test account. Founder must be clearly described as a
   one-time lifetime purchase. Play has the equivalent rules for Play Billing.
+
+## Pre-launch cleanup
+
+Mock purchases write to the one production Firebase project, so testers' mock plans and founder
+numbers are real data. Before real billing launches, by hand (nothing does this automatically):
+
+1. **Turn the mock off.** Unset `PRO_MOCK_PURCHASE`, `PRO_MOCK_UIDS` and
+   `NEXT_PUBLIC_PRO_MOCK_PURCHASE` in every Vercel environment, and redeploy.
+2. **Delete every mock entitlement.** Every `entitlements` doc with `source == 'mock'`. In the
+   Firebase console, filter the `entitlements` collection on `source == mock` and delete the
+   results, or run a one-off Admin SDK script from a trusted machine with the service account:
+
+   ```js
+   const snap = await db.collection('entitlements').where('source', '==', 'mock').get();
+   const batch = db.batch();
+   snap.docs.forEach((doc) => batch.delete(doc.ref));
+   await batch.commit(); // over 500 docs: commit in chunks of 500
+   ```
+
+   Count the docs first and check that none has another `source`.
+3. **Reset the founder counter.** Set `meta/founders` back to `{ count: 0 }`, or delete the doc
+   (a missing doc reads as 0). Do this after step 2, and only while no real founder has been
+   sold, so no real buyer loses a number.
+4. **Check.** `entitlements` has no `source == 'mock'` docs, `meta/founders` is missing or 0, and
+   `POST /api/pro/mock-purchase` is a 404 on every deploy.
+
+Do not commit the script or wire it into a build or deploy step.

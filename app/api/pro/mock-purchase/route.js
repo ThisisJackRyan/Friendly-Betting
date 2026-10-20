@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminAuth, adminDb } from '../../../../src/server/firebaseAdmin';
 import { json, preflight, withCors } from '../../../../src/server/http';
-import { grantMockEntitlement, mockPurchaseAllowed, validPlan } from '../../../../src/server/proPurchase';
+import { authorizeMockBuyer, grantMockEntitlement, mockPurchaseAllowed, validPlan } from '../../../../src/server/proPurchase';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,20 +18,17 @@ export async function POST(request) {
   return withCors(request, await purchase(request));
 }
 
-// Preview only (docs/PRO.md): grants the caller Pro or a founder spot with no
-// payment. The uid always comes from the verified ID token, never the body.
+// Preview only (docs/PRO.md): grants an allowlisted tester Pro or a founder
+// spot with no payment. The uid always comes from the verified ID token, never
+// the body.
 async function purchase(request) {
   const header = request.headers.get('authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) return json({ error: 'unauthorized' }, 401);
   try {
-    let uid;
-    try {
-      ({ uid } = await adminAuth().verifyIdToken(token));
-    } catch (err) {
-      if (err?.code === 'admin-not-configured') throw err;
-      return json({ error: 'unauthorized' }, 401);
-    }
+    const buyer = await authorizeMockBuyer({ token, auth: adminAuth() });
+    if (!buyer.ok) return json({ error: buyer.error }, buyer.status);
+    const { uid } = buyer;
     const body = await request.json().catch(() => ({}));
     const plan = body?.plan;
     if (!validPlan(plan)) return json({ error: 'invalid-plan' }, 400);

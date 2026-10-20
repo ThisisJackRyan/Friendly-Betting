@@ -148,10 +148,11 @@ service cloud.firestore {
     // Pro entitlements (docs/PRO.md). A member reads their own plan; nobody
     // else can. Only the Admin SDK writes them (the mock purchase route on
     // previews today, store billing later), so no client can grant, extend or
-    // remove Pro, founder numbers included.
+    // remove Pro, founder numbers included. Single-doc get only: no query
+    // can list entitlements, not even a member's own.
     match /entitlements/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update, delete: if false;
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
     }
 
     // How many founder spots are taken ({ count }). Public so the paywall can

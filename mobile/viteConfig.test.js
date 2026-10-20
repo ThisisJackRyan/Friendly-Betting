@@ -32,8 +32,18 @@ function expected(...on) {
   return Object.fromEntries(FLAGS.map((flag) => [`process.env.${flag}`, on.includes(flag) ? '"1"' : '""']));
 }
 
-test.each(FLAGS)('the mobile build turns %s on from the build env', (flag) => {
+// Off in the native app until store IAP is wired (docs/PRO.md).
+const NATIVE_OFF = ['NEXT_PUBLIC_PRO_PAYWALL'];
+
+test.each(FLAGS.filter((flag) => !NATIVE_OFF.includes(flag)))('the mobile build turns %s on from the build env', (flag) => {
   expect(defined({ [flag]: '1' })).toEqual(expected(flag));
+});
+
+test('the mobile build keeps the Pro paywall off even when the build env sets it', () => {
+  expect(defined({ NEXT_PUBLIC_PRO_PAYWALL: '1' })).toEqual(expected());
+  expect(defined(Object.fromEntries(FLAGS.map((flag) => [flag, '1'])))).toEqual(
+    expected(...FLAGS.filter((flag) => !NATIVE_OFF.includes(flag))),
+  );
 });
 
 test('the mobile build leaves every flag off by default and exposes nothing else', () => {

@@ -22,6 +22,42 @@ export function mockPurchaseAllowed(env = process.env) {
   return env.NODE_ENV !== 'production';
 }
 
+// Testers allowed to use the mock purchase: uids in PRO_MOCK_UIDS, comma
+// separated. Empty or unset means nobody.
+export function mockPurchaseUids(env = process.env) {
+  return String(env.PRO_MOCK_UIDS || '')
+    .split(',')
+    .map((uid) => uid.trim())
+    .filter(Boolean);
+}
+
+const FORBIDDEN = { ok: false, status: 403, error: 'forbidden' };
+
+// There is one Firebase project, so a preview grant is a real entitlement
+// (and a real founder number). Only a phone-verified, allowlisted tester may
+// buy: never an anonymous bettor session.
+export function mockBuyerAllowed(decoded, env = process.env) {
+  if (!decoded?.uid) return FORBIDDEN;
+  if (decoded.firebase?.sign_in_provider === 'anonymous') return FORBIDDEN;
+  if (!decoded.phone_number) return FORBIDDEN;
+  if (!mockPurchaseUids(env).includes(decoded.uid)) return FORBIDDEN;
+  return { ok: true, uid: decoded.uid };
+}
+
+// Verifies the ID token (revoked tokens fail too) and checks the buyer.
+// Returns { ok: true, uid } or { ok: false, status, error }. Logs nothing.
+export async function authorizeMockBuyer({ token, auth, env = process.env }) {
+  if (!token) return { ok: false, status: 401, error: 'unauthorized' };
+  let decoded;
+  try {
+    decoded = await auth.verifyIdToken(token, true);
+  } catch (err) {
+    if (err?.code === 'admin-not-configured') throw err;
+    return { ok: false, status: 401, error: 'unauthorized' };
+  }
+  return mockBuyerAllowed(decoded, env);
+}
+
 export function validPlan(plan) {
   return PLANS.includes(plan);
 }

@@ -446,9 +446,16 @@ describe('pro entitlements', () => {
     await assertFails(guest().doc(own).get());
   });
 
-  test('nobody can list entitlements', async () => {
+  test('nobody can list entitlements, even signed in', async () => {
     await assertFails(creator().collection('entitlements').get());
+    await assertFails(otherPhone().collection('entitlements').get());
+    await assertFails(anon('anon-5').collection('entitlements').get());
     await assertFails(guest().collection('entitlements').get());
+  });
+
+  test('a query for only their own entitlement is still a list, and denied', async () => {
+    await assertFails(creator().collection('entitlements').where('plan', '==', 'pro').get());
+    await assertFails(creator().collection('entitlements').limit(1).get());
   });
 
   test('a member cannot grant themselves Pro or a founder spot', async () => {

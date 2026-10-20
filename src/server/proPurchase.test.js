@@ -1,7 +1,13 @@
 /** @jest-environment node */
 import { adminAuth, adminDb } from './firebaseAdmin';
 import { fakeDb } from './testing/fakeDb';
-import { grantMockEntitlement, mockPurchaseAllowed } from './proPurchase';
+import {
+  authorizeMockBuyer,
+  grantMockEntitlement,
+  mockBuyerAllowed,
+  mockPurchaseAllowed,
+  mockPurchaseUids,
+} from './proPurchase';
 import * as route from '../../app/api/pro/mock-purchase/route';
 
 jest.mock('firebase-admin/app', () => ({}));
@@ -13,10 +19,15 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('./firebaseAdmin', () => ({ adminAuth: jest.fn(), adminDb: jest.fn() }));
 
 const DAY = 24 * 60 * 60 * 1000;
-const ENV_KEYS = ['PRO_MOCK_PURCHASE', 'VERCEL_ENV', 'NODE_ENV'];
+const ENV_KEYS = ['PRO_MOCK_PURCHASE', 'PRO_MOCK_UIDS', 'VERCEL_ENV', 'NODE_ENV'];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const verifyIdToken = jest.fn();
 let db;
+
+// A phone-verified user. The claim's value is never a real number.
+function phoneUser(uid) {
+  return { uid, phone_number: 'present', firebase: { sign_in_provider: 'phone' } };
+}
 
 function setEnv(env) {
   ENV_KEYS.forEach((key) => {
@@ -26,11 +37,15 @@ function setEnv(env) {
 }
 
 beforeEach(() => {
-  setEnv({ PRO_MOCK_PURCHASE: '1', VERCEL_ENV: 'preview', NODE_ENV: 'production' });
+  setEnv({ PRO_MOCK_PURCHASE: '1', PRO_MOCK_UIDS: 'jack,maya', VERCEL_ENV: 'preview', NODE_ENV: 'production' });
   verifyIdToken.mockReset();
   verifyIdToken.mockImplementation(async (token) => {
-    if (token === 'jack-token') return { uid: 'jack' };
-    if (token === 'maya-token') return { uid: 'maya' };
+    if (token === 'jack-token') return phoneUser('jack');
+    if (token === 'maya-token') return phoneUser('maya');
+    if (token === 'sam-token') return phoneUser('sam');
+    if (token === 'anon-token') return { uid: 'jack', firebase: { sign_in_provider: 'anonymous' } };
+    if (token === 'nophone-token') return { uid: 'jack', firebase: { sign_in_provider: 'custom' } };
+    if (token === 'revoked-token') throw Object.assign(new Error('revoked'), { code: 'auth/id-token-revoked' });
     throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' });
   });
   adminAuth.mockReset();
@@ -117,6 +132,102 @@ describe('guards', () => {
     const pre = route.OPTIONS(new Request('http://localhost/x', { method: 'OPTIONS', headers: { Origin: 'https://localhost' } }));
     expect(pre.status).toBe(204);
     expect(pre.headers.get('Access-Control-Allow-Methods')).toBe('POST, OPTIONS');
+  });
+});
+
+describe('who may buy', () => {
+  test.each([
+    ['an anonymous session', 'anon-token'],
+    ['a token without a phone number', 'nophone-token'],
+    ['a phone user not on the allowlist', 'sam-token'],
+  ])('403 for %s, with no write', async (_name, token) => {
+    const res = await buy({ plan: 'founder' }, { token });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(db.writes).toEqual([]);
+  });
+
+  test.each([['unset', undefined], ['empty', ''], ['only commas and spaces', ' , ,']])(
+    '403 for everyone when PRO_MOCK_UIDS is %s',
+    async (_name, uids) => {
+      setEnv({ PRO_MOCK_PURCHASE: '1', PRO_MOCK_UIDS: uids, VERCEL_ENV: 'preview', NODE_ENV: 'production' });
+      const res = await buy({ plan: 'pro' }, { token: 'jack-token' });
+      expect(res.status).toBe(403);
+      expect(db.writes).toEqual([]);
+    },
+  );
+
+  test('401 for a revoked token, checked with checkRevoked', async () => {
+    const res = await buy({ plan: 'pro' }, { token: 'revoked-token' });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+    expect(verifyIdToken).toHaveBeenCalledWith('revoked-token', true);
+    expect(db.writes).toEqual([]);
+  });
+
+  test('an allowlisted phone user buys, and the token is verified with checkRevoked', async () => {
+    const res = await buy({ plan: 'pro' }, { token: 'jack-token' });
+    expect(res.status).toBe(200);
+    expect(verifyIdToken).toHaveBeenCalledWith('jack-token', true);
+    expect(db.data('entitlements/jack').plan).toBe('pro');
+  });
+
+  test('PRO_MOCK_UIDS: comma separated, trimmed, empty entries ignored', () => {
+    expect(mockPurchaseUids({ PRO_MOCK_UIDS: ' jack , ,maya,, ' })).toEqual(['jack', 'maya']);
+    expect(mockPurchaseUids({ PRO_MOCK_UIDS: 'jack' })).toEqual(['jack']);
+    expect(mockPurchaseUids({ PRO_MOCK_UIDS: '' })).toEqual([]);
+    expect(mockPurchaseUids({ PRO_MOCK_UIDS: ' , ' })).toEqual([]);
+    expect(mockPurchaseUids({})).toEqual([]);
+  });
+
+  test('mockBuyerAllowed', () => {
+    const env = { PRO_MOCK_UIDS: 'jack' };
+    const forbidden = { ok: false, status: 403, error: 'forbidden' };
+    expect(mockBuyerAllowed(phoneUser('jack'), env)).toEqual({ ok: true, uid: 'jack' });
+    expect(mockBuyerAllowed({ ...phoneUser('jack'), firebase: { sign_in_provider: 'anonymous' } }, env)).toEqual(forbidden);
+    expect(mockBuyerAllowed({ uid: 'jack' }, env)).toEqual(forbidden);
+    expect(mockBuyerAllowed({ ...phoneUser('jack'), phone_number: '' }, env)).toEqual(forbidden);
+    expect(mockBuyerAllowed(phoneUser('maya'), env)).toEqual(forbidden);
+    expect(mockBuyerAllowed(phoneUser('jack'), {})).toEqual(forbidden);
+    expect(mockBuyerAllowed(null, env)).toEqual(forbidden);
+  });
+
+  describe('authorizeMockBuyer', () => {
+    const env = { PRO_MOCK_UIDS: 'jack' };
+    const authWith = (impl) => ({ verifyIdToken: jest.fn(impl) });
+
+    test('allows an allowlisted phone user', async () => {
+      const auth = authWith(async () => phoneUser('jack'));
+      expect(await authorizeMockBuyer({ token: 't', auth, env })).toEqual({ ok: true, uid: 'jack' });
+      expect(auth.verifyIdToken).toHaveBeenCalledWith('t', true);
+    });
+
+    test('401 without a token, for a revoked token and for an invalid one', async () => {
+      const unauthorized = { ok: false, status: 401, error: 'unauthorized' };
+      const auth = authWith(async () => phoneUser('jack'));
+      expect(await authorizeMockBuyer({ token: '', auth, env })).toEqual(unauthorized);
+      expect(auth.verifyIdToken).not.toHaveBeenCalled();
+      for (const code of ['auth/id-token-revoked', 'auth/argument-error', undefined]) {
+        const failing = authWith(async () => { throw Object.assign(new Error('no'), { code }); });
+        expect(await authorizeMockBuyer({ token: 't', auth: failing, env })).toEqual(unauthorized);
+      }
+    });
+
+    test('403 for anonymous, no phone, or not allowlisted', async () => {
+      for (const decoded of [
+        { uid: 'jack', phone_number: 'present', firebase: { sign_in_provider: 'anonymous' } },
+        { uid: 'jack' },
+        phoneUser('maya'),
+      ]) {
+        const result = await authorizeMockBuyer({ token: 't', auth: authWith(async () => decoded), env });
+        expect(result).toEqual({ ok: false, status: 403, error: 'forbidden' });
+      }
+    });
+
+    test('rethrows admin-not-configured', async () => {
+      const auth = authWith(async () => { throw Object.assign(new Error('missing'), { code: 'admin-not-configured' }); });
+      await expect(authorizeMockBuyer({ token: 't', auth, env })).rejects.toMatchObject({ code: 'admin-not-configured' });
+    });
   });
 });
 
