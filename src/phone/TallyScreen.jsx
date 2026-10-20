@@ -160,8 +160,9 @@ const TallyScreen = () => {
 
   // Not async: with no ad to try, shareMessage starts inside this click, so
   // the browser still sees the tap navigator.share needs.
+  // Never while a settle is saving or its ad is up: the bet only looks open.
   const onShare = () => {
-    if (!bet || sharing) return;
+    if (!bet || sharing || saving || held) return;
     const text = inviteText();
     setMessage(text);
     setSharing(true);
@@ -175,7 +176,7 @@ const TallyScreen = () => {
   // Right after Create, the share sheet opens by itself, once. Only a real
   // sheet: with none (or if the browser refuses it) the invite button waits.
   useEffect(() => {
-    if (!bet || !fresh.current || !votingOpen(bet)) return;
+    if (!bet || held || !fresh.current || !votingOpen(bet)) return;
     fresh.current = false;
     if (!hasShareSheet()) return;
     const text = inviteText();
@@ -205,6 +206,9 @@ const TallyScreen = () => {
   useEffect(() => {
     if (bet?.votes?.some((vote) => vote.voterId === user?.uid)) rememberBet(user.uid, betId);
   }, [bet, user?.uid, betId]);
+
+  // While a settle is held, the open-bet actions stay in place but are inert.
+  const locked = saving || Boolean(held);
 
   const final = Boolean(settled);
   useEffect(() => {
@@ -275,12 +279,18 @@ const TallyScreen = () => {
             {votingOpen(bet) && <div className={nudge ? 'tally-share is-nudge' : 'tally-share'}>
               {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
-              <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing} onClick={onShare}>
+              <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing || locked} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
                 {INVITE_LABEL}
               </button>
               {offerVote && (
-                <Link className="text-link tally-vote-link" href={`/b/${encodeURIComponent(bet.code || betId)}`}>
+                <Link
+                  className="text-link tally-vote-link"
+                  href={`/b/${encodeURIComponent(bet.code || betId)}`}
+                  aria-disabled={locked ? 'true' : undefined}
+                  tabIndex={locked ? -1 : undefined}
+                  onClick={locked ? (event) => event.preventDefault() : undefined}
+                >
                   Wanna vote?
                 </Link>
               )}

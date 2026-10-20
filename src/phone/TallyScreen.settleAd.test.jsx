@@ -61,12 +61,12 @@ const openBet = {
   ],
 };
 
-const mockSnapshot = { push: null };
+const mockSnapshot = { push: null, first: null };
 jest.mock('./api', () => ({
   ...jest.requireActual('./api'),
   subscribeBet: jest.fn((_code, onChange) => {
     mockSnapshot.push = onChange;
-    onChange(openBet);
+    onChange(mockSnapshot.first || openBet);
     return () => {
       mockSnapshot.push = null;
     };
@@ -106,6 +106,7 @@ beforeEach(() => {
   mockLog.length = 0;
   shareCalls.length = 0;
   stored = JSON.parse(JSON.stringify(openBet));
+  mockSnapshot.first = null;
   runTransaction.mockReset().mockImplementation(async (_db, run) => {
     const tx = {
       get: jest.fn(async () => ({ exists: () => true, data: () => JSON.parse(JSON.stringify(stored)) })),
@@ -369,4 +370,37 @@ test('leaving while the save is in flight: the save still lands, and no ad start
   expect(stored).toMatchObject({ status: 'closed', winnerId: 'b' });
   expect(requestResultTexts).toHaveBeenCalledWith('abc123');
   expect(showInterstitial).not.toHaveBeenCalled();
+});
+
+test('while the ad is loading, Text the crew is disabled and shares nothing', async () => {
+  showInterstitial.mockImplementation(() => new Promise(() => {}));
+  await renderTally();
+  await settleOnNo();
+  await settle();
+  expect(showInterstitial).toHaveBeenCalledWith({ placement: 'settle' });
+  const invite = screen.getByRole('button', { name: 'Text the crew' });
+  expect(invite).toBeDisabled();
+  await tap(invite);
+  // Even a tap the disabled attribute misses goes nowhere.
+  await act(async () => { invite.disabled = false; fireEvent.click(invite); });
+  expect(shareMessage).not.toHaveBeenCalled();
+  expect(shareCalls).toHaveLength(0);
+});
+
+test('while the ad is loading, Wanna vote? stays in place but is inert', async () => {
+  mockSnapshot.first = { ...openBet, votes: [{ voterId: 'sam', name: 'Sam', optionId: 'b' }] };
+  stored = JSON.parse(JSON.stringify(mockSnapshot.first));
+  showInterstitial.mockImplementation(() => new Promise(() => {}));
+  await renderTally();
+  const link = () => screen.getByRole('link', { name: 'Wanna vote?' });
+  expect(link()).not.toHaveAttribute('aria-disabled');
+  await settleOnNo();
+  await settle();
+  expect(showInterstitial).toHaveBeenCalledWith({ placement: 'settle' });
+  expect(link()).toHaveAttribute('aria-disabled', 'true');
+  expect(link()).toHaveAttribute('tabindex', '-1');
+  expect(link()).toHaveTextContent(/^Wanna vote\?$/);
+  const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+  await act(async () => { link().dispatchEvent(click); });
+  expect(click.defaultPrevented).toBe(true);
 });
