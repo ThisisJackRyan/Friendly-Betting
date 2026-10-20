@@ -67,3 +67,19 @@ test('with no autoContinueMs it waits for a tap', () => {
   act(() => { jest.advanceTimersByTime(60000); });
   expect(onContinue).not.toHaveBeenCalled();
 });
+
+test('with no label: no visible button text; the whole layer is one control named by the line', () => {
+  const onContinue = jest.fn();
+  render(<AdThanks onContinue={onContinue} />);
+  const buttons = screen.getAllByRole('button');
+  expect(buttons).toHaveLength(1);
+  const [cover] = buttons;
+  expect(cover).toHaveAccessibleName(AD_THANKS_LINE);
+  expect(cover).toHaveTextContent('');
+  expect(cover).toHaveFocus();
+  expect(cover.style.position).toBe('absolute');
+  expect(cover.getAttribute('style')).toContain('inset: 0');
+  fireEvent.click(cover);
+  fireEvent.click(dialog());
+  expect(onContinue).toHaveBeenCalledTimes(1);
+});

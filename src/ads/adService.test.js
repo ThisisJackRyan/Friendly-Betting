@@ -364,20 +364,21 @@ describe('frequency caps', () => {
   });
 
   test('broken or missing storage never throws, and caps still hold for the session', async () => {
+    // An unlisted placement, so the default caps apply.
     localStorage.setItem('fb.ads.caps.v1', '{not json');
-    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    await expect(showInterstitial({ placement: 'storage-check' })).resolves.toEqual(shown);
     __resetAdsForTests();
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
     jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
     jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied'); });
-    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
-    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('interval'));
-    for (let i = 1; i < placementLimits('settle').maxPerSession; i += 1) {
+    await expect(showInterstitial({ placement: 'storage-check' })).resolves.toEqual(shown);
+    await expect(showInterstitial({ placement: 'storage-check' })).resolves.toEqual(skipped('interval'));
+    for (let i = 1; i < placementLimits('storage-check').maxPerSession; i += 1) {
       nextSlot();
-      await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+      await expect(showInterstitial({ placement: 'storage-check' })).resolves.toEqual(shown);
     }
     nextSlot();
-    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('capped'));
+    await expect(showInterstitial({ placement: 'storage-check' })).resolves.toEqual(skipped('capped'));
     expect(() => __resetAdsForTests()).not.toThrow();
   });
 

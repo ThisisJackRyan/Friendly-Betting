@@ -6,7 +6,9 @@ export const AD_THANKS_LINE = 'Thanks for watching. Ads keep this app free.';
 // The thank-you after an interstitial. A fixed full-screen layer on
 // document.body, so nothing under it moves. A tap anywhere continues; with
 // autoContinueMs it also continues by itself. onContinue runs inside the tap's
-// click handler, so a caller can open navigator.share from it.
+// click handler, so a caller can open navigator.share from it. With no label
+// there is no visible button: a transparent control covers the layer, named
+// by the thank-you line, so it still takes focus and Enter or Space.
 export const thanksLayerStyle = {
   position: 'fixed',
   inset: 0,
@@ -41,6 +43,18 @@ export const continueButtonStyle = {
   gap: 8,
 };
 
+export const coverButtonStyle = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  margin: 0,
+  padding: 0,
+  border: 0,
+  background: 'transparent',
+  cursor: 'pointer',
+};
+
 export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
   const button = useRef(null);
   const done = useRef(false);
@@ -70,9 +84,13 @@ export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
     >
       <p id="ad-thanks-line" style={line}>{AD_THANKS_LINE}</p>
       {/* The button's click bubbles to the layer, which continues once. */}
-      <button ref={button} type="button" className="cta press" style={continueButtonStyle}>
-        {label}
-      </button>
+      {label ? (
+        <button ref={button} type="button" className="cta press" style={continueButtonStyle}>
+          {label}
+        </button>
+      ) : (
+        <button ref={button} type="button" aria-label={AD_THANKS_LINE} style={coverButtonStyle} />
+      )}
     </div>
   );
   return typeof document === 'undefined' ? view : createPortal(view, document.body);
