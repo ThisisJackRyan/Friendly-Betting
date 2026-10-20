@@ -65,6 +65,10 @@ then texts:
 - undone and settled again: this call stands down and the new settle's own call sends;
 - call-off, or an older number settledAt: no wait, sent right away.
 
+Only one call per settle (bet code and `settledAt`) waits and sends on a server instance;
+a repeat while it runs returns at once (`skipped: 'in-flight'`). Across instances, each
+number is still claimed by deleting it before its text goes out, so nobody is texted twice.
+
 The app still calls the send route right after the settle, as before, so nothing waits on
 the creator keeping the screen open. Voters can't save a number during the window
 (the bet is finished); after an undo they can again.
