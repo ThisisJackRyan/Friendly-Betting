@@ -18,8 +18,13 @@
 // the paywall at /pro, paywall.png, a founder's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
 // tally-pro-no-ad.png, and Friends on My bets, friends.png, with Maya opened,
-// friends-open.png) only go to --copy-to.
+// friends-open.png, and the settled reveal with Share as image under Share
+// the result, winner-card-reveal.png, and the winner card PNG that button
+// makes, winner-card.png, and the same for long text and many winners,
+// winner-card-long.png) only go to --copy-to.
 //
+// SCREENSHOTS_BASE points at an app preview already running elsewhere, for
+// when another checkout holds port 5173.
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
 // modules (src/phone/identity.js, src/phone/api.js) are swapped for fixtures
@@ -35,7 +40,7 @@ import sharp from 'sharp';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = fileURLToPath(new URL('../docs/screenshots/', import.meta.url));
-const BASE = 'http://127.0.0.1:5173';
+const BASE = process.env.SCREENSHOTS_BASE || 'http://127.0.0.1:5173';
 const CODE = 'k7q2xm';
 
 const JACK = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
@@ -98,6 +103,32 @@ const CROWD_BET = {
     ...['Kim', 'Lee', 'Ana', 'Ravi', 'Zoe', 'Omar'].map((name) => ({ voterId: name.toLowerCase(), name, optionId: 'a' })),
   ],
 };
+// The winner card at its limits: a question past three lines, long names
+// and more winners than the reveal names.
+const LONG_CARD_BET = {
+  ...OPEN_BET,
+  question: 'Will the whole crew make it to the cabin before midnight on Friday, with the snacks, '
+    + 'the playlist sorted, and nobody taking the scenic route again this year?',
+  stake: 'Loser buys the whole table brunch and does the dishes all weekend long',
+  options: [{ id: 'a', label: 'Everyone there before midnight' }, { id: 'b', label: 'Somebody gets lost' }],
+  votes: [
+    { voterId: 'bart', name: 'Bartholomew Maximilian Fitzgerald-Worthington', optionId: 'a' },
+    { voterId: 'anastasia', name: 'Anastasia Konstantinopoulou', optionId: 'a' },
+    ...['Kim', 'Lee', 'Ana', 'Ravi'].map((name) => ({ voterId: name.toLowerCase(), name, optionId: 'a' })),
+    { voterId: 'jake', name: 'Jake', optionId: 'b' },
+  ],
+};
+
+// Taps Share as image with no share sheet (Chromium on Linux has none) and
+// returns the PNG it downloads.
+async function winnerCardPng(page) {
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Share as image', exact: true }).click();
+  const stream = await (await download).createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
 
 // Jack's bets for Friends on My bets. Jack picks on every settled one, so
 // Maya (opened in friends-open.png) has a W, an L, a same-side bet with no
@@ -580,6 +611,45 @@ const SHOTS = [
       await showBars(page, '.friend-row[aria-expanded="true"]');
     },
   },
+  {
+    file: 'winner-card-reveal.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: SAT_OUT_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'winner-card.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: SAT_OUT_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+    },
+    capture: winnerCardPng,
+  },
+  {
+    file: 'winner-card-long.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: LONG_CARD_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+    },
+    capture: winnerCardPng,
+  },
 ];
 
 const args = process.argv.slice(2);
@@ -609,8 +679,9 @@ try {
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);
-    const png = await page.screenshot({ animations: 'disabled' });
-    const optimized = await sharp(png).png({ palette: true, quality: 90, effort: 10, compressionLevel: 9 }).toBuffer();
+    // A shot with `capture` saves the image the app made, as it made it.
+    const png = shot.capture ? await shot.capture(page) : await page.screenshot({ animations: 'disabled' });
+    const optimized = shot.capture ? png : await sharp(png).png({ palette: true, quality: 90, effort: 10, compressionLevel: 9 }).toBuffer();
     if (shot.docs !== false) await writeFile(`${OUT}${shot.file}`, optimized);
     if (copyTo) await writeFile(join(copyTo, shot.file), optimized);
     console.log(`${shot.file}  ${(optimized.length / 1024).toFixed(0)} KB`);

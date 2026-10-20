@@ -12,3 +12,9 @@ jest.mock('./phone/entitlementApi', () => ({
   fetchFounderCount: jest.fn(() => new Promise(() => {})),
   requestMockPurchase: jest.fn(async () => ({ ok: true })),
 }));
+
+// jsdom has no canvas, so the winner card is never drawn here: the image is
+// always still on its way. winnerCardImage.test.js tests the real one.
+jest.mock('./phone/winnerCardImage', () => ({
+  renderWinnerCard: jest.fn(() => new Promise(() => {})),
+}));
