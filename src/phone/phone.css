@@ -2343,6 +2343,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
   gap: 10px;
   margin: 30px 0 20px;
 }
+.vote-screen .bet-card-top + .question-xl {
+  /* No invite line (a called-off bet): keep its top spacing. */
+  margin-top: 30px;
+}
 .invite-avatar {
   display: flex;
   align-items: center;

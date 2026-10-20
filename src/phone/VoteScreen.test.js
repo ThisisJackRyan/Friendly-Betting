@@ -563,8 +563,11 @@ describe('text me who won', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
-    // A settled bet that wasn't called off keeps the creator's caption.
-    expect(document.querySelector('.invite-line')).toHaveTextContent('Mayasettled this friendly wager');
+    // A settled bet that wasn't called off keeps the creator's avatar and caption.
+    const header = document.querySelector('.invite-line');
+    expect(header.querySelector('.invite-avatar')).toHaveTextContent('M');
+    expect(header.querySelector('.inviter')).toHaveTextContent('Maya');
+    expect(header.querySelector('.invite-caption')).toHaveTextContent('settled this friendly wager');
   });
 
   test.each([
@@ -575,6 +578,16 @@ describe('text me who won', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
     expect(card()).not.toBeInTheDocument();
+  });
+
+  test('an open bet keeps the creator avatar and caption', async () => {
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    const header = document.querySelector('.invite-line');
+    expect(header.querySelector('.invite-avatar')).toHaveTextContent('M');
+    expect(header.querySelector('.inviter')).toHaveTextContent('Maya');
+    expect(header.querySelector('.invite-caption')).toHaveTextContent('has a friendly wager for you');
   });
 
   test('the tally never renders a saved number', async () => {
@@ -826,12 +839,13 @@ describe.each([
     const region = await screen.findByRole('region', { name: 'Settled result' });
     expect(region).toHaveTextContent('This bet was called off.');
     expect(region).toHaveTextContent('Nobody won this one.');
-    // The invite line matches the reveal instead of naming the creator.
-    const caption = document.querySelector('.invite-line');
-    expect(caption.querySelector('.inviter')).toHaveTextContent('This bet was called off.');
-    expect(caption.querySelector('.invite-caption')).toHaveTextContent('Nobody won this one.');
-    expect(caption).not.toHaveTextContent('settled this friendly wager');
-    expect(caption).not.toHaveTextContent('Maya');
+    // No invite header at all: the result card alone carries the message.
+    expect(document.querySelector('.invite-line')).toBeNull();
+    expect(document.querySelector('.invite-avatar')).toBeNull();
+    expect(screen.getAllByText('This bet was called off.')).toHaveLength(1);
+    expect(screen.getAllByText('Nobody won this one.')).toHaveLength(1);
+    expect(screen.queryByText('settled this friendly wager')).not.toBeInTheDocument();
+    expect(screen.queryByText('Maya')).not.toBeInTheDocument();
     expect(screen.getByText('Closed')).toBeInTheDocument();
     // No options, no name field, nothing to submit.
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();

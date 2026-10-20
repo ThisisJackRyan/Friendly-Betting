@@ -9,6 +9,9 @@ import { BetFacts } from './ProductUI';
 
 // Open bets and settled ones with no W or L ('none') get no pill.
 const OUTCOME = { win: 'W', loss: 'L', 'called-off': REVEAL_COPY.calledOff };
+const OUTCOME_LABEL = { win: 'Won', loss: 'Lost' };
+
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // My bets, Friends: each friend's record on the creator's bets (see
 // friendStats.js), and a tap opens the bets they picked on.
@@ -40,8 +43,12 @@ export default function FriendsView({ friends }) {
               >
                 <span className="friend-name">{friend.name}</span>
                 <span className="friend-record">
-                  <span className="friend-pill win"><strong>{friend.wins}</strong> <span role="img" aria-label="wins">W</span></span>
-                  <span className="friend-pill loss"><strong>{friend.losses}</strong> <span role="img" aria-label="losses">L</span></span>
+                  <span className="friend-pill win" role="img" aria-label={count(friend.wins, 'win', 'wins')}>
+                    <strong aria-hidden="true">{friend.wins}</strong> <span aria-hidden="true">W</span>
+                  </span>
+                  <span className="friend-pill loss" role="img" aria-label={count(friend.losses, 'loss', 'losses')}>
+                    <strong aria-hidden="true">{friend.losses}</strong> <span aria-hidden="true">L</span>
+                  </span>
                 </span>
                 <span className="friend-together">
                   Bets together <strong>{friend.betsTogether}</strong>
@@ -58,7 +65,12 @@ export default function FriendsView({ friends }) {
                           <span className="bet-card-top">
                             <span className={`status ${status.toLowerCase()}`}>{status}</span>
                             {OUTCOME[outcome] && (
-                              <span className={`friend-pill ${outcome}`}>{OUTCOME[outcome]}</span>
+                              <span
+                                className={`friend-pill ${outcome}`}
+                                {...(OUTCOME_LABEL[outcome] && { role: 'img', 'aria-label': OUTCOME_LABEL[outcome] })}
+                              >
+                                {OUTCOME[outcome]}
+                              </span>
                             )}
                           </span>
                           <span className="friend-bet-question">{questionOf(bet) || 'Untitled bet'}</span>

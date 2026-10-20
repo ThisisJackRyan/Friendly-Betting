@@ -268,6 +268,10 @@ test('a bet called off by status alone shows the reveal on the tally and blocks 
 
   await page.goto('/b/crew123');
   await expect(page.getByRole('region', { name: 'Settled result' })).toContainText('This bet was called off.');
+  // No invite header: no creator avatar and no repeat of the result lines.
+  await expect(page.locator('.invite-line, .invite-avatar')).toHaveCount(0);
+  await expect(page.getByText('This bet was called off.')).toHaveCount(1);
+  await expect(page.getByText('Nobody won this one.')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'What’s your call?' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Bears', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Packers', exact: true })).toHaveCount(0);
