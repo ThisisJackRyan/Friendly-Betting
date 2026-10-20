@@ -1,4 +1,4 @@
-import { buildWinnerCard } from './winnerCard';
+import { buildWinnerCard, textDirection } from './winnerCard';
 
 // Draws the winner card (winnerCard.js) on a canvas and returns a PNG Blob.
 // Manrope is already on the page (app/layout.js on the web, @fontsource in
@@ -59,13 +59,23 @@ function drawBrand(ctx, brand) {
 export function drawWinnerCard(ctx, card) {
   ctx.fillStyle = card.background;
   ctx.fillRect(0, 0, card.width, card.height);
+  ctx.direction = 'ltr';
   ctx.textAlign = 'left';
   drawBrand(ctx, card.brand);
   const { footer, rule } = card;
   card.lines.forEach((line) => {
     ctx.font = line.font;
     ctx.fillStyle = line.color;
-    ctx.fillText(line.text, line.x, line.y);
+    // A right-to-left line sets from the right edge, the same pad in.
+    if (textDirection(line.text) === 'rtl') {
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.fillText(line.text, card.width - line.x, line.y);
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillText(line.text, line.x, line.y);
+    }
   });
   if (rule) {
     ctx.fillStyle = rule.color;

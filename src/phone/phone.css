@@ -3351,14 +3351,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   color: #deecd5;
 }
 .result-share:has(+ .reveal-start) { margin-bottom: 12px; }
-/* The winner card preview, for the app when its share sheet can't take a file. */
-.result-share-preview {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 20px;
-  -webkit-touch-callout: default;
-}
 .reveal-start { margin-bottom: 28px; }
 .choice[aria-pressed='true'] { background: var(--wash); box-shadow: inset 0 0 0 2px var(--accent); }
 .choice[aria-pressed='true']::after { background: var(--accent); border-color: var(--accent); }

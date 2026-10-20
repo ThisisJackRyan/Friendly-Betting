@@ -1,4 +1,4 @@
-import { CARD, CARD_BRAND, CARD_COLORS, buildWinnerCard, winnerCardText, wrapText } from './winnerCard';
+import { CARD, CARD_BRAND, CARD_COLORS, buildWinnerCard, graphemes, textDirection, winnerCardText, wrapText } from './winnerCard';
 import { buildReveal } from './reveal';
 import { buildSettlement } from './settlement';
 
@@ -216,5 +216,68 @@ describe('wrapText', () => {
   });
   test('empty text has no lines', () => {
     expect(wrapText('   ', opts)).toEqual([]);
+  });
+});
+
+describe('graphemes', () => {
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+  const flag = '\u{1F1FA}\u{1F1F8}';
+  const thumbs = '\u{1F44D}\u{1F3FD}';
+  const accent = 'e\u0301';
+
+  test('keeps emoji, ZWJ sequences, flags and accents whole', () => {
+    expect(graphemes(`a${family}${flag}${thumbs}${accent}`)).toEqual(['a', family, flag, thumbs, accent]);
+  });
+
+  test('falls back to code points without Intl.Segmenter', () => {
+    const { Segmenter } = Intl;
+    try {
+      delete Intl.Segmenter;
+      expect(graphemes(`a${flag}`)).toEqual(['a', '\u{1F1FA}', '\u{1F1F8}']);
+    } finally {
+      Intl.Segmenter = Segmenter;
+    }
+  });
+
+  // Each grapheme 10 units wide, the measure the layout sees on a canvas.
+  const byGrapheme = (text) => graphemes(text).length * 10;
+  const opts = { width: 50, font: '400 10px x', maxLines: 2, measure: byGrapheme };
+
+  test('a hard break never splits an emoji sequence', () => {
+    const word = Array(7).fill(family).join('');
+    const lines = wrapText(word, { ...opts, maxLines: 3 });
+    expect(lines.join('')).toBe(word);
+    lines.forEach((line) => expect(graphemes(line).every((g) => g === family)).toBe(true));
+  });
+
+  test('clipping never splits an emoji sequence, and keeps no-break runs', () => {
+    const lines = wrapText(`aa bb ${Array(8).fill(family).join('')} c`, opts);
+    expect(lines).toEqual(['aa bb', `${Array(4).fill(family).join('')}…`]);
+    const nb = wrapText(`aa bb &\u00A04\u00A0${flag}${flag} more`, { ...opts, width: 60 });
+    expect(nb[0]).toBe('aa bb');
+    expect(nb[1]).toBe(`&\u00A04\u00A0${flag}…`);
+  });
+
+  test('cut names keep their emoji whole', () => {
+    const name = `${'Bartholomew'}${family}${family}${family}${family}${family}${family}${family}${family}`;
+    const card = buildWinnerCard(settled({ winners: [['m', name], ['z', `Zed ${'x'.repeat(40)}`]] }), { measure });
+    const headline = card.lines.filter((line) => line.key === 'headline').map((line) => line.text).join(' ');
+    expect(headline).toContain('…');
+    // Whatever is left once whole families are taken out has no piece of one.
+    expect(headline.split(family).join('')).not.toMatch(/[\u200D\u{1F466}-\u{1F469}]/u);
+  });
+});
+
+describe('textDirection', () => {
+  test.each([
+    ['Maya won.', 'ltr'],
+    ['Stakes: $20', 'ltr'],
+    ['\u05DE\u05D0\u05D9\u05D4 won.', 'rtl'],
+    ['$20 \u0645\u0631\u062D\u0628\u0627', 'rtl'],
+    ['Chiefs vs \u05DE\u05DB\u05D1\u05D9?', 'ltr'],
+    ['123 ?', 'ltr'],
+    ['', 'ltr'],
+  ])('%s is %s', (text, dir) => {
+    expect(textDirection(text)).toBe(dir);
   });
 });

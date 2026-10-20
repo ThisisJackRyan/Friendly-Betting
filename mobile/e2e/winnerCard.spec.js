@@ -122,16 +122,13 @@ test('settled with no share sheet: Share as image downloads the PNG', async ({ p
   await expect(page.getByRole('status').filter({ hasText: 'Image saved. Drop it in the group chat.' })).toBeVisible();
 });
 
-test('in the app without a file share sheet, the card shows to press and hold', async ({ page }) => {
+test('in the app without a file share sheet, there is no Share as image', async ({ page }) => {
   await page.addInitScript(() => { window.CapacitorCustomPlatform = { name: 'android' }; });
   await mockBet(page);
   await noShareSheet(page);
   await page.goto('/t/crew123');
-  await imageButton(page).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Press and hold the card to save it.' })).toBeVisible();
-  const preview = page.locator('img.result-share-preview');
-  await expect(preview).toBeVisible();
-  expect(await preview.evaluate((img) => [img.naturalWidth, img.naturalHeight])).toEqual([1080, 1350]);
+  await expect(page.getByRole('button', { name: 'Share the result', exact: true })).toBeVisible();
+  await expect(imageButton(page)).toHaveCount(0);
 });
 
 for (const route of ['/t/crew123', '/b/crew123']) {

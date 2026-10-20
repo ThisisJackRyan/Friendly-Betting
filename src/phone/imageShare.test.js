@@ -1,4 +1,4 @@
-import { downloadImage, shareImage } from './imageShare';
+import { canShareImageFiles, downloadImage, shareImage } from './imageShare';
 import { isNativeApp } from '../platform/runtime';
 
 jest.mock('../platform/runtime', () => ({ isNativeApp: jest.fn(() => false) }));
@@ -81,11 +81,52 @@ test('in the app, the file share sheet is used where the web view has one', asyn
   await expect(shareImage(png())).resolves.toBe('shared');
 });
 
-test('in the app without a file share sheet, the screen shows the card instead of a download', async () => {
+test('in the app without a file share sheet, it fails: there is no download to fall back on', async () => {
   isNativeApp.mockReturnValue(true);
   shareSheet({ canShare: false });
-  await expect(shareImage(png())).resolves.toBe('preview');
+  await expect(shareImage(png())).resolves.toBe('failed');
+  delete navigator.share;
+  delete navigator.canShare;
+  await expect(shareImage(png())).resolves.toBe('failed');
   expect(clicked).toEqual([]);
+});
+
+describe('canShareImageFiles', () => {
+  const asked = () => navigator.canShare.mock.calls[0][0].files[0];
+
+  test('asks with a probe PNG file when there is no card yet', () => {
+    shareSheet();
+    expect(canShareImageFiles()).toBe(true);
+    expect(asked()).toBeInstanceOf(File);
+    expect(asked().type).toBe('image/png');
+    expect(asked().name).toBe('friendly-result.png');
+    expect(asked().size).toBeGreaterThan(0);
+  });
+
+  test('asks with the card when there is one', () => {
+    shareSheet({ canShare: false });
+    expect(canShareImageFiles(png())).toBe(false);
+    expect(asked().size).toBe(3);
+  });
+
+  test('false without canShare, share or File, and when canShare throws', () => {
+    delete navigator.canShare;
+    navigator.share = jest.fn();
+    expect(canShareImageFiles()).toBe(false);
+    shareSheet();
+    delete navigator.share;
+    expect(canShareImageFiles()).toBe(false);
+    shareSheet();
+    const RealFile = global.File;
+    try {
+      delete global.File;
+      expect(canShareImageFiles()).toBe(false);
+    } finally {
+      global.File = RealFile;
+    }
+    navigator.canShare = jest.fn(() => { throw new TypeError('bad'); });
+    expect(canShareImageFiles()).toBe(false);
+  });
 });
 
 test('no image, or no way to download it, fails quietly', async () => {

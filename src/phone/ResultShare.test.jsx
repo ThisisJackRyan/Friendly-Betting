@@ -5,9 +5,13 @@ import { shareMessage } from './share';
 import { shareImage } from './imageShare';
 import { renderWinnerCard } from './winnerCardImage';
 import { buildSettlement } from './settlement';
+import { isNativeApp } from '../platform/runtime';
 
 jest.mock('./share', () => ({ shareMessage: jest.fn(async () => 'shared') }));
-jest.mock('./imageShare', () => ({ shareImage: jest.fn(async () => 'shared') }));
+// canShareImageFiles stays real; the native tests run shareImage for real too.
+jest.mock('./imageShare', () => ({ ...jest.requireActual('./imageShare'), shareImage: jest.fn(async () => 'shared') }));
+jest.mock('../platform/runtime', () => ({ ...jest.requireActual('../platform/runtime'), isNativeApp: jest.fn(() => false) }));
+const realShareImage = jest.requireActual('./imageShare').shareImage;
 
 const OPTIONS = [{ id: 'a', label: 'Chiefs -3' }, { id: 'b', label: 'Bills +3' }];
 const open = {
@@ -24,18 +28,54 @@ beforeEach(() => {
   shareImage.mockResolvedValue('shared');
   renderWinnerCard.mockReset();
   renderWinnerCard.mockResolvedValue(png);
-  URL.createObjectURL = jest.fn(() => 'blob:preview');
-  URL.revokeObjectURL = jest.fn();
+  isNativeApp.mockReturnValue(false);
+});
+afterEach(() => {
+  delete navigator.share;
+  delete navigator.canShare;
+  delete window.requestIdleCallback;
+  delete window.cancelIdleCallback;
+  jest.useRealTimers();
 });
 
 const imageButton = () => screen.getByRole('button', { name: 'Share as image' });
 
-test('a settled bet offers Share as image under Share the result, and draws the card up front', async () => {
-  render(<ResultShare bet={settledBet} code="abc123" />);
+test('a settled bet offers Share as image under Share the result, and draws the card once idle', async () => {
+  let idle;
+  window.requestIdleCallback = jest.fn((work) => { idle = work; return 7; });
+  window.cancelIdleCallback = jest.fn();
+  const { unmount } = render(<ResultShare bet={settledBet} code="abc123" />);
   expect(screen.getByRole('button', { name: 'Share the result' }).nextElementSibling).toBe(imageButton());
+  expect(renderWinnerCard).not.toHaveBeenCalled();
+  await act(async () => idle());
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
   expect(renderWinnerCard).toHaveBeenCalledWith(settledBet);
-  await act(async () => {});
+  unmount();
+  expect(window.cancelIdleCallback).toHaveBeenCalledWith(7);
+});
+
+test('without requestIdleCallback the card is drawn shortly after, and tapping shares that one', async () => {
+  jest.useFakeTimers();
+  render(<ResultShare bet={settledBet} code="abc123" />);
+  expect(renderWinnerCard).not.toHaveBeenCalled();
+  await act(async () => jest.advanceTimersByTime(200));
+  expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+  jest.useRealTimers();
+  await userEvent.click(imageButton());
+  expect(shareImage).toHaveBeenCalledWith(png);
+  expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+});
+
+test('a tap before the card is drawn draws it then, and only once', async () => {
+  window.requestIdleCallback = jest.fn(() => 1);
+  window.cancelIdleCallback = jest.fn();
+  render(<ResultShare bet={settledBet} code="abc123" />);
+  await userEvent.click(imageButton());
+  expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+  expect(shareImage).toHaveBeenCalledWith(png);
+  const [[idle]] = window.requestIdleCallback.mock.calls;
+  idle();
+  expect(renderWinnerCard).toHaveBeenCalledTimes(1);
 });
 
 test.each([
@@ -67,18 +107,6 @@ test.each([
   render(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(imageButton());
   expect(screen.getByRole('status')).toHaveTextContent(note);
-  expect(screen.queryByRole('img')).not.toBeInTheDocument();
-});
-
-test('in the app without a file share sheet, the card shows to press and hold', async () => {
-  shareImage.mockResolvedValue('preview');
-  const { unmount } = render(<ResultShare bet={settledBet} code="abc123" />);
-  await userEvent.click(imageButton());
-  expect(screen.getByRole('status')).toHaveTextContent('Press and hold the card to save it.');
-  expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:preview');
-  expect(URL.createObjectURL).toHaveBeenCalledWith(png);
-  unmount();
-  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
 });
 
 test('a card that could not be drawn hands nothing on, and ends in the failed note', async () => {
@@ -115,4 +143,77 @@ test('Share the result still sends the text', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
   expect(shareMessage).toHaveBeenCalledWith(expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/));
   expect(shareImage).not.toHaveBeenCalled();
+});
+
+describe('in the app', () => {
+  beforeEach(() => {
+    isNativeApp.mockReturnValue(true);
+    shareImage.mockImplementation(realShareImage);
+  });
+
+  test('with a share sheet that takes a PNG file: Share as image, and a tap shares the file', async () => {
+    navigator.canShare = jest.fn(() => true);
+    navigator.share = jest.fn(async () => {});
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    // Asked once, on mount, with a probe PNG since the card is not drawn yet.
+    expect(navigator.canShare).toHaveBeenCalledTimes(1);
+    expect(navigator.canShare.mock.calls[0][0].files[0].type).toBe('image/png');
+    await userEvent.click(imageButton());
+    const [{ files }] = navigator.share.mock.calls[0];
+    expect(files).toHaveLength(1);
+    expect(files[0]).toBeInstanceOf(File);
+    expect(files[0].name).toBe('friendly-result.png');
+    expect(files[0].type).toBe('image/png');
+    expect(files[0].size).toBe(png.size);
+    expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');
+  });
+
+  test.each([
+    ['refuses a PNG file', () => { navigator.canShare = jest.fn(() => false); navigator.share = jest.fn(); }],
+    ['has no canShare', () => { navigator.share = jest.fn(); }],
+    ['throws from canShare', () => { navigator.canShare = jest.fn(() => { throw new TypeError('bad'); }); navigator.share = jest.fn(); }],
+  ])('a share sheet that %s: no Share as image, and no card drawn', async (_label, setUp) => {
+    jest.useFakeTimers();
+    setUp();
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    await act(async () => jest.advanceTimersByTime(1000));
+    expect(screen.getByRole('button', { name: 'Share the result' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+    expect(renderWinnerCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('on the web, unchanged', () => {
+  beforeEach(() => {
+    shareImage.mockImplementation(realShareImage);
+    URL.createObjectURL = jest.fn(() => 'blob:card');
+    URL.revokeObjectURL = jest.fn();
+  });
+
+  test('shares the PNG file where the browser can', async () => {
+    navigator.canShare = jest.fn(() => true);
+    navigator.share = jest.fn(async () => {});
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    await userEvent.click(imageButton());
+    expect(navigator.share.mock.calls[0][0].files[0].name).toBe('friendly-result.png');
+    expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');
+  });
+
+  test('downloads the PNG where it cannot share files, or has no canShare at all', async () => {
+    const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      navigator.canShare = jest.fn(() => false);
+      navigator.share = jest.fn();
+      render(<ResultShare bet={settledBet} code="abc123" />);
+      await userEvent.click(imageButton());
+      expect(navigator.share).not.toHaveBeenCalled();
+      expect(screen.getByRole('status')).toHaveTextContent('Image saved. Drop it in the group chat.');
+      delete navigator.canShare;
+      await userEvent.click(imageButton());
+      expect(click).toHaveBeenCalledTimes(2);
+      expect(URL.createObjectURL).toHaveBeenCalledWith(png);
+    } finally {
+      click.mockRestore();
+    }
+  });
 });

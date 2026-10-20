@@ -113,3 +113,31 @@ test('drawWinnerCard draws the rule only when there is one', () => {
   drawWinnerCard(ctx, { ...card, rule: { x: 1, y: 2, width: 3, color: '#fff' } });
   expect(calls.at(-1)).toEqual([1, 2, 3, 2]);
 });
+
+test('a right-to-left line is set rtl from the right edge; left-to-right lines stay as they were', () => {
+  const calls = [];
+  const noop = () => {};
+  const ctx = {
+    direction: 'inherit', textAlign: 'start',
+    measureText: () => ({ width: 10 }), fillRect: noop,
+    fillText: (text, x, y) => calls.push([text, x, y, ctx.direction, ctx.textAlign]),
+    beginPath: noop, closePath: noop, moveTo: noop, lineTo: noop, arc: noop, fill: noop, roundRect: noop,
+  };
+  const hebrew = '\u05DE\u05D0\u05D9\u05D4 won.';
+  const card = {
+    width: 1080, height: 10, background: '#000', rule: null,
+    lines: [
+      { text: 'Chiefs cover?', x: 96, y: 300, font: 'x', color: '#fff' },
+      { text: hebrew, x: 96, y: 400, font: 'x', color: '#fff' },
+      { text: 'Stakes: $20', x: 96, y: 500, font: 'x', color: '#fff' },
+    ],
+    brand: { text: 'f', period: '.', font: 'x', color: '#fff', letter: '#000', periodColor: '#fff', x: 0, y: 0, symbol: 32, spacing: 1 },
+    footer: { text: 'friendly-bets.com', font: 'x', color: '#fff', x: 96, y: 1254 },
+  };
+  drawWinnerCard(ctx, card);
+  const line = (text) => calls.find(([drawnText]) => drawnText === text);
+  expect(line('Chiefs cover?')).toEqual(['Chiefs cover?', 96, 300, 'ltr', 'left']);
+  expect(line(hebrew)).toEqual([hebrew, 984, 400, 'rtl', 'right']);
+  expect(line('Stakes: $20')).toEqual(['Stakes: $20', 96, 500, 'ltr', 'left']);
+  expect(line('friendly-bets.com')).toEqual(['friendly-bets.com', 96, 1254, 'ltr', 'left']);
+});

@@ -4,32 +4,51 @@ import { useEffect, useRef, useState } from 'react';
 import { FiImage, FiShare2 } from 'react-icons/fi';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
-import { shareImage } from './imageShare';
+import { canShareImageFiles, shareImage } from './imageShare';
 import { formatResultMessage } from './settlement';
 import { winnerCardText } from './winnerCard';
 import { renderWinnerCard } from './winnerCardImage';
+import { isNativeApp } from '../platform/runtime';
+
+// Draws the card when the page is idle, or shortly after where there is no
+// requestIdleCallback (Safari). Returns the cancel.
+function whenIdle(work) {
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    const id = window.requestIdleCallback(work, { timeout: 1000 });
+    return () => window.cancelIdleCallback?.(id);
+  }
+  const id = setTimeout(work, 200);
+  return () => clearTimeout(id);
+}
 
 // Share the result as text, and for a settled bet with a known result, as
-// the winner card image too. The card is drawn as soon as the screen shows,
-// so a tap can open the share sheet straight away.
+// the winner card image too. The card is drawn once the screen is idle, so a
+// tap can usually open the share sheet straight away; a tap before that
+// draws it first. In the app the image is only offered when its share sheet
+// takes a PNG file: the app has no download to fall back on.
 export default function ResultShare({ bet, code }) {
   const [state, setState] = useState('');
   const [busy, setBusy] = useState('');
-  const [preview, setPreview] = useState('');
+  const [imageShareable, setImageShareable] = useState(() => !isNativeApp());
   const card = useRef(null);
   const message = formatResultMessage(bet, voteUrl(bet.code || code));
   const cardText = winnerCardText(bet);
   const cardKey = cardText ? JSON.stringify(cardText) : '';
+  const drawCard = () => {
+    if (!card.current) card.current = renderWinnerCard(bet).catch(() => null);
+    return card.current;
+  };
 
   useEffect(() => {
-    card.current = cardKey ? renderWinnerCard(bet).catch(() => null) : null;
-    setPreview('');
-    // The card only changes when its text does.
-  }, [cardKey]);
+    if (isNativeApp()) setImageShareable(canShareImageFiles());
+  }, []);
 
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
+  useEffect(() => {
+    card.current = null;
+    if (!cardKey || !imageShareable) return undefined;
+    return whenIdle(drawCard);
+    // The card only changes when its text does.
+  }, [cardKey, imageShareable]);
 
   const share = async () => {
     if (busy) return;
@@ -46,9 +65,7 @@ export default function ResultShare({ bet, code }) {
     if (busy) return;
     setBusy('image');
     try {
-      const blob = await (card.current || renderWinnerCard(bet));
-      const outcome = await shareImage(blob);
-      if (outcome === 'preview') setPreview(URL.createObjectURL(blob));
+      const outcome = await shareImage(await drawCard());
       setState(`image-${outcome}`);
     } catch {
       setState('image-failed');
@@ -63,7 +80,6 @@ export default function ResultShare({ bet, code }) {
     aborted: 'All good. The result’s here when you’re ready.',
     manual: 'Copy this into the group chat.',
     'image-downloaded': 'Image saved. Drop it in the group chat.',
-    'image-preview': 'Press and hold the card to save it.',
     'image-failed': 'Couldn’t make the image. Share the result instead.',
   };
   notes['image-shared'] = notes.shared;
@@ -74,7 +90,7 @@ export default function ResultShare({ bet, code }) {
         <FiShare2 size={18} aria-hidden="true" />
         {busy === 'text' ? 'Getting it ready…' : 'Share the result'}
       </button>
-      {cardText && (
+      {cardText && imageShareable && (
         <button type="button" className="secondary press result-share-image" disabled={Boolean(busy)} onClick={shareCard}>
           <FiImage size={18} aria-hidden="true" />
           {busy === 'image' ? 'Getting it ready…' : 'Share as image'}
@@ -82,9 +98,6 @@ export default function ResultShare({ bet, code }) {
       )}
       {state && <p className="share-note" role="status">{notes[state]}</p>}
       {state === 'manual' && <p className="manual-message">{message}</p>}
-      {state === 'image-preview' && preview && (
-        <img className="result-share-preview" src={preview} alt={`${cardText?.headline || ''} ${cardText?.question || ''}`.trim()} />
-      )}
     </div>
   );
 }

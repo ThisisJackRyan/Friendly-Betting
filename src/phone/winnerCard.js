@@ -20,6 +20,25 @@ const NBSP = '\u00A0';
 // Whitespace a line may break at: any but the no-break space.
 const BREAKS = /[^\S\u00A0]+/;
 
+// User-perceived characters, so a cut never splits an emoji, a ZWJ sequence
+// or an accent from its letter. Code points where Intl.Segmenter is missing.
+let segmenter;
+export function graphemes(text) {
+  const value = String(text);
+  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return Array.from(value);
+  segmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  return Array.from(segmenter.segment(value), ({ segment }) => segment);
+}
+
+// A line's direction from its first strongly directional character, as
+// dir="auto" does: 'rtl' for Hebrew, Arabic and the like, else 'ltr'.
+const STRONG_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+const STRONG = /\p{L}/u;
+export function textDirection(text) {
+  const first = STRONG.exec(String(text || ''));
+  return first && STRONG_RTL.test(first[0]) ? 'rtl' : 'ltr';
+}
+
 // "& 2 others" joined with no-break spaces, so the count never ends a line
 // on its own ("Sam & 2" / "others won.").
 const keepCount = (headline) => headline.replace(/ & (\d+) (others?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`);
@@ -38,7 +57,7 @@ const BLOCKS = {
 // Cut `text` to fit `width`, ending in an ellipsis.
 function clip(text, width, fontSpec, measure) {
   if (measure(text, fontSpec) <= width) return text;
-  let chars = Array.from(text);
+  let chars = graphemes(text);
   while (chars.length && measure(`${chars.join('').trimEnd()}${ELLIPSIS}`, fontSpec) > width) chars = chars.slice(0, -1);
   return `${chars.join('').trimEnd()}${ELLIPSIS}`;
 }
@@ -62,7 +81,7 @@ export function wrapText(text, { width, font: fontSpec, maxLines, measure }) {
       line = '';
     } else {
       // One word wider than the line: break it.
-      const chars = Array.from(word);
+      const chars = graphemes(word);
       let cut = chars.length - 1;
       while (cut > 1 && measure(chars.slice(0, cut).join(''), fontSpec) > width) cut -= 1;
       lines.push(chars.slice(0, cut).join(''));
@@ -75,7 +94,7 @@ export function wrapText(text, { width, font: fontSpec, maxLines, measure }) {
   }
   if (rest.length || line) {
     // Only a line's worth of the overflow is needed to clip it.
-    const tail = [lines.pop(), line, ...rest].filter(Boolean).join(' ').slice(0, 200);
+    const tail = graphemes([lines.pop(), line, ...rest].filter(Boolean).join(' ')).slice(0, 200).join('');
     lines.push(clip(`${tail}${ELLIPSIS}`, width, fontSpec, measure));
   }
   return lines;
@@ -102,7 +121,7 @@ export function winnerCardText(bet) {
 // Names cut to `max` characters, for a headline too long for the card.
 const NAME_CUTS = [18, 12];
 const cutName = (name, max) => {
-  const chars = Array.from(String(name || '').trim());
+  const chars = graphemes(String(name || '').trim());
   return chars.length > max ? `${chars.slice(0, max - 1).join('').trimEnd()}${ELLIPSIS}` : chars.join('');
 };
 
