@@ -149,8 +149,12 @@ Preflight never touches auth or the database.
 | `FIREBASE_SERVICE_ACCOUNT` | Vercel, server only | Service-account JSON (or base64 of it) for the API routes. Optional; without it the routes return 503 and the app uses its client fallbacks. |
 | `NEXT_PUBLIC_RESULT_TEXTS` | Vercel and native builds | `1` shows the optional result-text field and fires the send call after settling. Leave unset until an SMS provider is wired into `src/server/sms.js` and the service account is set. |
 | `NEXT_PUBLIC_ADS_ENABLED` | Vercel and native builds | `1` lets `showInterstitial` show ads (house ad on web, AdMob test ads in the app). No flow calls it yet. See [docs/ADS.md](ADS.md). |
+| `NEXT_PUBLIC_PRO_PAYWALL` | Vercel and native builds | `1` turns on the paywall at `/pro` and the Go Pro link on My bets. See [docs/PRO.md](PRO.md). |
+| `NEXT_PUBLIC_PRO_EARLY_TYPES` | Vercel and native builds | `1` shows early-access bet types (none yet) to Pro members. |
+| `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | Preview and native preview builds | `1` enables the paywall buttons, which call the mock purchase route. Never in production. |
+| `PRO_MOCK_PURCHASE` | Vercel preview, server only | `1` lets `POST /api/pro/mock-purchase` grant Pro with no payment. The route also refuses `VERCEL_ENV=production`. |
 
-`NEXT_PUBLIC_RESULT_TEXTS` and `NEXT_PUBLIC_ADS_ENABLED` are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
+`NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED` and the three `NEXT_PUBLIC_PRO_*` flags are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 
 ## Screenshots
 

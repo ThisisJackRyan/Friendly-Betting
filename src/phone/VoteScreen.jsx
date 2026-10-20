@@ -30,6 +30,8 @@ import { buildReveal } from './reveal';
 import ResultsMenu from './ResultsMenu';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
+import ProBadge from './ProBadge';
+import { useProBadge } from './useEntitlement';
 
 const LOAD_ERROR = 'Could not open this bet.';
 
@@ -37,6 +39,7 @@ const VoteScreen = () => {
   const params = useParams();
   const code = params?.code;
   const user = useIdentity();
+  const proBadge = useProBadge(user?.uid);
   const { bet, failed } = useLiveBet(code);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
@@ -138,7 +141,10 @@ const VoteScreen = () => {
                 {(bet.createdByName || 'F').charAt(0).toUpperCase()}
               </span>
               <p>
-                <span className="inviter">{bet.createdByName || 'A friend'}</span>
+                <span className="inviter">
+                  {bet.createdByName || 'A friend'}
+                  {Boolean(bet.createdByID) && bet.createdByID === user?.uid && <ProBadge badge={proBadge} />}
+                </span>
                 <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
               </p>
             </div>
@@ -149,7 +155,7 @@ const VoteScreen = () => {
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
 
-            {settled && <SettledReveal bet={bet} code={code} reveal={settled} voterId={user?.uid} />}
+            {settled && <SettledReveal bet={bet} code={code} reveal={settled} voterId={user?.uid} badge={proBadge} />}
 
             {showVoted && !settled && (
               <div className="voted-in">

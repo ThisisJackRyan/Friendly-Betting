@@ -12,8 +12,10 @@
 // and a bet called off by status alone on /t/ and /b/, tally-called-off.png
 // and vote-called-off.png, and a settled bet whose winners all skipped their
 // name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
-// tally, house-ad.png, and the thank-you after it, thank-you.png)
-// only go to --copy-to.
+// tally, house-ad.png, and the thank-you after it, thank-you.png, and Pro:
+// the paywall at /pro, paywall.png, a founder's own badge on the tally,
+// pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
+// tally-pro-no-ad.png) only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
@@ -119,7 +121,9 @@ async function startServer() {
 // page a navigator.share (Chromium on Linux has none): 'open' never closes,
 // like a sheet still on screen, and 'dismiss' is closed without sending.
 // `ads` swaps in src/ads/config.js with the ads flag on, as the e2e does.
-async function fixtures(page, { user, name, bet, settled = false, shareSheet = null, ads = false }) {
+// `plan` is the signed-in user's entitlement (src/phone/entitlementApi.js is
+// swapped too), and `paywall` turns the paywall flag on in proConfig.js.
+async function fixtures(page, { user, name, bet, settled = false, shareSheet = null, ads = false, plan = null, paywall = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -150,6 +154,23 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
     contentType: 'application/javascript',
     body: `export function voteUrl(code) { return 'https://www.friendly-bets.com/b/' + encodeURIComponent(code); }`,
   }));
+  await page.route('**/src/phone/entitlementApi.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `const plan = ${JSON.stringify(plan)};
+      export const subscribeEntitlement = (uid, cb) => { cb(plan); return () => {}; };
+      export const fetchFounderCount = async () => 12;
+      export const requestMockPurchase = async () => ({ ok: true });`,
+  }));
+  if (paywall) {
+    await page.route('**/src/phone/proConfig.js*', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(
+        /export function proPaywallEnabled\(\) \{[\s\S]*?\n\}/,
+        'export function proPaywallEnabled() { return true; }',
+      );
+      await route.fulfill({ response, body });
+    });
+  }
   if (ads) {
     await page.route('**/src/ads/config.js*', async (route) => {
       const response = await route.fetch();
@@ -428,6 +449,45 @@ const SHOTS = [
       await page.getByRole('dialog', { name: 'The final word' }).waitFor();
     },
   },
+  {
+    file: 'paywall.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    paywall: true,
+    async run(page) {
+      await page.goto('/pro');
+      await page.getByText('Founder: $40 lifetime for the first 100.').waitFor();
+    },
+  },
+  {
+    file: 'pro-badge.png',
+    docs: false,
+    user: JACK,
+    bet: FULL_BET,
+    plan: { plan: 'founder', source: 'mock', founderNumber: 12, expiresAt: null },
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.locator('.voter-name .pro-badge').waitFor();
+      await showBars(page);
+    },
+  },
+  {
+    file: 'tally-pro-no-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'dismiss',
+    ads: true,
+    plan: { plan: 'pro', source: 'mock', expiresAt: null },
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+      await page.getByText('Saved. Text when you’re ready.').waitFor();
+      if (await page.getByRole('dialog').count()) throw new Error('an ad showed for a Pro member');
+    },
+  },
 ];
 
 const args = process.argv.slice(2);
@@ -453,7 +513,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

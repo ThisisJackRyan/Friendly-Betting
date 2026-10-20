@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.NEXT_PUBLIC_RESULT_TEXTS': JSON.stringify(env.NEXT_PUBLIC_RESULT_TEXTS ?? ''),
       'process.env.NEXT_PUBLIC_ADS_ENABLED': JSON.stringify(env.NEXT_PUBLIC_ADS_ENABLED ?? ''),
+      'process.env.NEXT_PUBLIC_PRO_PAYWALL': JSON.stringify(env.NEXT_PUBLIC_PRO_PAYWALL ?? ''),
+      'process.env.NEXT_PUBLIC_PRO_EARLY_TYPES': JSON.stringify(env.NEXT_PUBLIC_PRO_EARLY_TYPES ?? ''),
+      'process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE': JSON.stringify(env.NEXT_PUBLIC_PRO_MOCK_PURCHASE ?? ''),
     },
     resolve: {
       alias: [

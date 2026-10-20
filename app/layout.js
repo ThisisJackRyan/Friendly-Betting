@@ -1,5 +1,6 @@
 import '../src/App.css';
 import '../src/phone/phone.css';
+import EntitlementSync from '../src/phone/EntitlementSync';
 
 export const metadata = {
   title: 'Friendly Bets',
@@ -42,6 +43,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
+        <EntitlementSync />
         <div className="app-frame">{children}</div>
       </body>
     </html>

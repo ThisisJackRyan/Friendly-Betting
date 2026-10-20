@@ -28,7 +28,9 @@ None of these block merging the infrastructure. All of them block shipping ads.
   (`requestConsentInfo` / `showConsentForm`) before `initialize`, and only request ads when
   consent allows. Not wired yet.
 - **TODO: Play data safety** form and the Play Console "Contains ads" declaration.
-- **TODO: Pro.** `src/ads/pro.js` `isPro()` always returns `false`. Feature 4 replaces it.
+- **Pro is wired.** `src/ads/pro.js` `isPro()` reads a cache that `src/phone/useEntitlement.js`
+  fills from the signed-in user's `entitlements/{uid}` doc, so a Pro or Founder member gets reason
+  `pro` and never sees an ad. Billing itself is still a TODO: see [docs/PRO.md](PRO.md).
 
 ## Files
 
@@ -41,7 +43,7 @@ None of these block merging the infrastructure. All of them block shipping ads.
 | `src/ads/inviteGate.js` | `runInviteShare`: the ad, the thank-you, then the share, for every tally invite. |
 | `src/ads/useInviteShare.jsx` | The React hook the tally uses; renders the thank-you. |
 | `src/ads/AdThanks.jsx` | The thank-you overlay after an ad was shown. |
-| `src/ads/pro.js` | `isPro()` stub. |
+| `src/ads/pro.js` | `isPro()`, synchronous, from the entitlement cache (`setProEntitlement`). See [docs/PRO.md](PRO.md). |
 
 ## Plugin
 
