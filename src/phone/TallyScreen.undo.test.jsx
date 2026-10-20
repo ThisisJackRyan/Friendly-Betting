@@ -271,7 +271,7 @@ describe('Undo after a settle', () => {
     expect(revealRegion()).toHaveTextContent('No won');
     failNext = new Error('');
     await tap(undoButton());
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not undo this bet.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t undo that. Try again.');
   });
 
   test('past the window the api refuses even if the button were tapped late', async () => {
@@ -371,7 +371,7 @@ describe('Call off', () => {
     await renderTally();
     await tap(callOffButton());
     expect(dialog()).toBeInTheDocument();
-    expect(within(dialog()).getByText('Nobody won this one.')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Nobody wins this one.')).toBeInTheDocument();
     expect(within(dialog()).getByRole('button', { name: 'Keep it' })).toHaveFocus();
     await tap(within(dialog()).getByRole('button', { name: 'Keep it' }));
     expect(dialog()).not.toBeInTheDocument();
@@ -404,7 +404,7 @@ describe('Call off', () => {
     await tap(callOffButton());
     failNext = new Error('');
     await tap(within(dialog()).getByRole('button', { name: 'Call off bet' }));
-    expect(within(dialog()).getByRole('alert')).toHaveTextContent('Could not call off this bet.');
+    expect(within(dialog()).getByRole('alert')).toHaveTextContent('Couldn’t call off this bet. Try again.');
     expect(within(dialog()).getByRole('button', { name: 'Call off bet' })).toBeEnabled();
     expect(revealRegion()).not.toBeInTheDocument();
   });

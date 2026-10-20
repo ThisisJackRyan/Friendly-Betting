@@ -34,7 +34,7 @@ import SettledReveal from './SettledReveal';
 import RunItBack from './RunItBack';
 import UndoSettle from './UndoSettle';
 import ConfirmDialog from './ConfirmDialog';
-import { buildReveal, REVEAL_COPY } from './reveal';
+import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 import { useInviteShare } from '../ads/useInviteShare';
@@ -44,6 +44,9 @@ import { useProBadge } from './useEntitlement';
 const INVITE_LABEL = 'Text the crew';
 
 const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
+
+// The Call off confirm. The reveal after keeps REVEAL_COPY.calledOffSub.
+const CALL_OFF_COPY = 'Nobody wins this one.';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -176,7 +179,7 @@ const TallyScreen = () => {
       setSettledLocalAt(null);
       setBet(reopened);
     } catch (err) {
-      setUndoError(err?.code === 'permission-denied' ? 'Too late to undo.' : friendlyError(err, 'Could not undo this bet.'));
+      setUndoError(err?.code === 'permission-denied' ? 'Too late to undo.' : friendlyError(err, 'Couldn’t undo that. Try again.'));
     } finally {
       setUndoing(false);
     }
@@ -190,7 +193,7 @@ const TallyScreen = () => {
       setBet(off);
       setCallOff({ open: false, busy: false, error: '' });
     } catch (err) {
-      setCallOff({ open: true, busy: false, error: friendlyError(err, 'Could not call off this bet.') });
+      setCallOff({ open: true, busy: false, error: friendlyError(err, 'Couldn’t call off this bet. Try again.') });
     }
   };
 
@@ -370,7 +373,7 @@ const TallyScreen = () => {
       {callOff.open && (
         <ConfirmDialog
           title="Call off this bet?"
-          copy={REVEAL_COPY.calledOffSub}
+          copy={CALL_OFF_COPY}
           confirmLabel="Call off bet"
           busyLabel="Calling off…"
           busy={callOff.busy}

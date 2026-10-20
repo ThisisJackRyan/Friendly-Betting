@@ -3652,7 +3652,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   justify-content: center;
   gap: 8px;
 }
-.undo-settle-row .text-link { width: auto; margin-top: 0; padding: 0 12px; font-size: 15px; }
+.undo-settle-row .text-link { width: auto; margin-top: 0; padding: 0 12px; color: var(--ink); font-size: 15px; }
 .undo-settle-count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .text-link.tally-call-off { color: var(--muted); }
 .text-link.tally-call-off:disabled { opacity: 0.5; }

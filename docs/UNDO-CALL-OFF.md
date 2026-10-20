@@ -14,7 +14,7 @@
   settle with a winner.
 - **Call off.** An open bet shows a quiet `Call off` under Close & settle (creator only,
   hidden while the settle picker is open). It asks first (`Call off this bet?`,
-  `Nobody won this one.`, `Call off bet` / `Keep it`), then shows the existing called-off
+  `Nobody wins this one.`, `Call off bet` / `Keep it`), then shows the existing called-off
   reveal. A call-off has no undo: the confirm is its safety step.
 
 ## Data

@@ -551,7 +551,7 @@ test('Call off on an open bet: confirm, then the called-off result', async ({ pa
   await callOff.click();
   const dialog = page.getByRole('dialog', { name: 'Call off this bet?' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Nobody won this one.');
+  await expect(dialog).toContainText('Nobody wins this one.');
   await page.screenshot({ path: testInfo.outputPath('call-off-confirm.png'), animations: 'disabled', scale: 'css' });
   await dialog.getByRole('button', { name: 'Keep it', exact: true }).click();
   await expect(dialog).toHaveCount(0);
