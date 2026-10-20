@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from '../platform/Link';
 import { useRouter } from '../platform/navigation';
 import { FiArrowUpRight, FiArrowRight, FiPlus, FiSearch, FiX } from 'react-icons/fi';
@@ -19,8 +19,11 @@ import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
 import { useEntitlementState, useProBadge } from './useEntitlement';
 import { PRO_COPY, proPaywallEnabled } from './proConfig';
+import FriendsView from './FriendsView';
+import { friendStats } from './friendStats';
 
-const FILTERS = ['All', 'Open', 'Closed', 'Settled'];
+// Friends swaps the bet list for head to head records.
+const FILTERS = ['All', 'Open', 'Closed', 'Settled', 'Friends'];
 const DELETE_ERROR = 'Couldn\u2019t delete this bet. Try again.';
 const TOAST_MS = 4000;
 
@@ -90,7 +93,8 @@ export function MyBetsList({ user }) {
     });
   }, [uid]);
 
-  const counts = { All: bets?.length || 0, Open: 0, Closed: 0, Settled: 0 };
+  const friends = useMemo(() => friendStats(bets, uid), [bets, uid]);
+  const counts = { All: bets?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
   (bets || []).forEach((bet) => {
     counts[statusLabel(bet)] += 1;
   });
@@ -175,23 +179,27 @@ export function MyBetsList({ user }) {
                     </button>
                   ))}
                 </div>
-                <label className="bet-search">
-                  <FiSearch aria-hidden="true" />
-                  <input
-                    type="search"
-                    aria-label="Search bets"
-                    placeholder="Find a bet…"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                  {search && (
-                    <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>
-                      <FiX aria-hidden="true" />
-                    </button>
-                  )}
-                </label>
+                {filter !== 'Friends' && (
+                  <label className="bet-search">
+                    <FiSearch aria-hidden="true" />
+                    <input
+                      type="search"
+                      aria-label="Search bets"
+                      placeholder="Find a bet…"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                    {search && (
+                      <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>
+                        <FiX aria-hidden="true" />
+                      </button>
+                    )}
+                  </label>
+                )}
               </div>
-              {bets.length === 0 ? (
+              {filter === 'Friends' ? (
+                <FriendsView friends={friends} />
+              ) : bets.length === 0 ? (
                 <div className="empty bets-empty">
                   <span className="empty-mark" aria-hidden="true">
                     <FiPlus size={28} />

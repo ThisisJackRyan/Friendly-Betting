@@ -17,7 +17,8 @@
 // the reveal once the thank-you continues, settle-reveal-after-ad.png, and Pro:
 // the paywall at /pro, paywall.png, a founder's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
-// tally-pro-no-ad.png) only go to --copy-to.
+// tally-pro-no-ad.png, and Friends on My bets, friends.png, with Maya opened,
+// friends-open.png) only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
@@ -98,6 +99,16 @@ const CROWD_BET = {
   ],
 };
 
+// Jack's bets for Friends on My bets: one settled on each side, one called
+// off and one still open, so each friend has a mixed record.
+const FRIEND_BETS = [
+  { ...OPEN_BET, id: 'f1', code: 'f1', createdAt: 5, question: 'Chiefs cover -3?', status: 'closed', winnerId: 'a', settledAt: 5 },
+  { ...FULL_BET, id: 'f2', code: 'f2', createdAt: 4, question: 'Over 47.5 points?', stake: 'Loser buys wings', status: 'closed', winnerId: 'b', settledAt: 4 },
+  { ...OPEN_BET, id: 'f3', code: 'f3', createdAt: 3, question: 'Game goes to overtime?', status: 'called-off',
+    votes: [{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'jake', name: 'Jake', optionId: 'b' }] },
+  { ...FULL_BET, id: 'f4', code: 'f4', createdAt: 2, question: 'Mahomes throws 3 TDs?', stake: 'Coffee', status: 'open', closesAt: null },
+];
+
 async function serverUp() {
   try {
     return (await fetch(BASE)).ok;
@@ -125,7 +136,8 @@ async function startServer() {
 // `ads` swaps in src/ads/config.js with the ads flag on, as the e2e does.
 // `plan` is the signed-in user's entitlement (src/phone/entitlementApi.js is
 // swapped too), and `paywall` turns the paywall flag on in proConfig.js.
-async function fixtures(page, { user, name, bet, settled = false, shareSheet = null, ads = false, plan = null, paywall = false }) {
+// `bets` is My bets' whole list, when it should hold more than `bet`.
+async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -145,7 +157,8 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
       const winnerId = ${JSON.stringify(winnerId || null)};
       if (winnerId) bet = { ...bet, status: 'closed', winnerId, settledAt: Date.now(), settlement: buildSettlement(bet, winnerId) };
       export const subscribeBet = (code, cb) => { cb(bet); return () => {}; };
-      export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
+      const bets = ${JSON.stringify(bets)};
+      export const subscribeMyBets = (uid, cb) => { cb(bets || [bet]); return () => {}; };
       export const hydrateBet = async (b) => b;
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
@@ -537,6 +550,32 @@ const SHOTS = [
       if (await page.getByRole('dialog').count()) throw new Error('an ad showed for a Pro member');
     },
   },
+  {
+    file: 'friends.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await page.goto('/bets');
+      await page.getByRole('button', { name: /^Friends/ }).click();
+      await page.getByRole('region', { name: 'Head to head' }).waitFor();
+      await showBars(page, '.bets-toolbar');
+    },
+  },
+  {
+    file: 'friends-open.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await page.goto('/bets');
+      await page.getByRole('button', { name: /^Friends/ }).click();
+      await page.getByRole('button', { name: /^Maya/ }).click();
+      await showBars(page, '.friend-row[aria-expanded="true"]');
+    },
+  },
 ];
 
 const args = process.argv.slice(2);
@@ -562,7 +601,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);
