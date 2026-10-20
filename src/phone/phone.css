@@ -3181,8 +3181,22 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .bet-stats span {
     font-size: 7px;
   }
+  /* Five filters: tighter here, and scroll sideways rather than push the
+     page wider if the labels still can't fit. */
+  .bet-filters {
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .bet-filters::-webkit-scrollbar {
+    display: none;
+  }
   .bet-filters button {
+    padding-left: 4px;
+    padding-right: 4px;
     font-size: 10px;
+    white-space: nowrap;
   }
   .vote-header > span {
     display: none;
