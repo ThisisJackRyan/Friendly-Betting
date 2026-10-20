@@ -16,6 +16,9 @@ import { resultHeadline, settlementOf } from './settlement';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
 import DeleteBetDialog from './DeleteBetDialog';
+import ProBadge from './ProBadge';
+import { useEntitlementState, useProBadge } from './useEntitlement';
+import { PRO_COPY, proPaywallEnabled } from './proConfig';
 
 const FILTERS = ['All', 'Open', 'Closed', 'Settled'];
 const DELETE_ERROR = 'Couldn\u2019t delete this bet. Try again.';
@@ -32,6 +35,8 @@ export function MyBetsList({ user }) {
   const [deleteError, setDeleteError] = useState('');
   const [toast, setToast] = useState('');
   const deleteTrigger = useRef(null);
+  const proBadge = useProBadge(uid);
+  const { isPro } = useEntitlementState();
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
 
@@ -105,8 +110,16 @@ export function MyBetsList({ user }) {
           <div className="bets-heading">
             <div>
               <p className="eyebrow">YOUR SIDE OF THE STORY</p>
-              <h1 className="screen-title">My bets</h1>
+              <h1 className="screen-title">
+                My bets
+                <ProBadge badge={proBadge} />
+              </h1>
               <p className="intro-copy">The picks, the stakes, and the “told you so” moments.</p>
+              {proPaywallEnabled() && uid && !isPro && (
+                <Link className="text-link pro-link" href="/pro">
+                  {PRO_COPY.link}
+                </Link>
+              )}
             </div>
             <Link className="cta press" href="/new">
               <FiPlus size={18} aria-hidden="true" />

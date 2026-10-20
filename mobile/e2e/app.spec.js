@@ -90,6 +90,7 @@ async function mockCrew(page, { votes, share, patch } = {}) {
     contentType: 'application/javascript',
     body: `const user = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
       export const useIdentity = () => user;
+      export const useSignedInUser = () => user;
       export const savedName = () => 'Jack';
       export const rememberName = () => {};
       export const creatorName = () => 'Jack';`,
@@ -660,5 +661,83 @@ test('in the app, Android back on Home minimizes and on My bets goes Home', asyn
   await androidBack(page);
   await expect.poll(() => page.evaluate(() => window.minimized)).toBe(2);
   await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  expect(errors).toEqual([]);
+});
+
+// Pro (docs/PRO.md). The entitlement module is swapped like api.js, so the
+// app sees a Pro member without Firestore.
+async function mockEntitlement(page, { plan = null, founders = 0 } = {}) {
+  await page.route('**/src/phone/entitlementApi.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `const plan = ${JSON.stringify(plan)};
+      export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
+      export const fetchFounderCount = async () => ${JSON.stringify(founders)};
+      export const requestMockPurchase = async () => ({ ok: true });`,
+  }));
+}
+
+// The paywall flag is off in this dev server; flip it in a copy of proConfig.js.
+async function enablePaywall(page) {
+  await page.route('**/src/phone/proConfig.js*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /export function proPaywallEnabled\(\) \{[\s\S]*?\n\}/,
+      'export function proPaywallEnabled() { return true; }',
+    );
+    if (!body.includes('proPaywallEnabled() { return true; }')) throw new Error('proPaywallEnabled not found in proConfig.js');
+    await route.fulfill({ response, body });
+  });
+}
+
+test('a Pro member sees their badge, and with ads on Text the crew shares with no ad', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await mockEntitlement(page, { plan: { plan: 'pro', source: 'mock', expiresAt: null } });
+  await enableAds(page);
+  await page.goto('/t/crew123');
+  const own = page.locator('.voter-name', { hasText: 'Jack' });
+  await expect(own.locator('.pro-badge')).toHaveText('Pro');
+  await expect(page.locator('.pro-badge')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
+  await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('tally-pro-no-ad.png'), animations: 'disabled', scale: 'css' });
+  expect(errors).toEqual([]);
+});
+
+test('without Pro the same tally has no badge and still shows the ad', async ({ page }) => {
+  await mockCrew(page, { share: 'dismiss' });
+  await mockEntitlement(page, { plan: null });
+  await enableAds(page);
+  await page.goto('/t/crew123');
+  await expect(page.locator('.voter-name', { hasText: 'Jack' })).toBeVisible();
+  await expect(page.locator('.pro-badge')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Ad', exact: true })).toBeVisible();
+});
+
+test('the paywall at /pro: a 404 with the flag off, the offer with it on', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockEntitlement(page, { founders: 12 });
+  await page.goto('/pro');
+  await expect(page.getByRole('heading', { name: 'Lost that one.' })).toBeVisible();
+
+  await enablePaywall(page);
+  await page.goto('/pro');
+  await expect(page.getByRole('heading', { level: 2, name: 'Go Pro' })).toBeVisible();
+  await expect(page.getByText('3 free bets, then $3/mo.')).toBeVisible();
+  await expect(page.getByText('No ads.')).toBeVisible();
+  await expect(page.getByText('Founder: $40 lifetime for the first 100.')).toBeVisible();
+  // No mock purchase in this build: the buttons wait.
+  await expect(page.getByRole('button', { name: 'Get Pro' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Get Founder' })).toBeDisabled();
+  await expect(page.getByText('Coming soon')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Not now' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('paywall.png'), animations: 'disabled', scale: 'css' });
   expect(errors).toEqual([]);
 });

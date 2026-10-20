@@ -29,7 +29,9 @@ None of these block merging the infrastructure. All of them block shipping ads.
   (`requestConsentInfo` / `showConsentForm`) before `initialize`, and only request ads when
   consent allows. Not wired yet.
 - **TODO: Play data safety** form and the Play Console "Contains ads" declaration.
-- **TODO: Pro.** `src/ads/pro.js` `isPro()` always returns `false`. Feature 4 replaces it.
+- **Pro is wired.** `src/ads/pro.js` `isPro()` reads a cache that `src/phone/useEntitlement.js`
+  fills from the signed-in user's `entitlements/{uid}` doc, so a Pro or Founder member gets reason
+  `pro` and never sees an ad. Billing itself is still a TODO: see [docs/PRO.md](PRO.md).
 
 ## Files
 
@@ -44,7 +46,7 @@ None of these block merging the infrastructure. All of them block shipping ads.
 | `src/ads/settleGate.js` | `runSettleAd`: after a saved settle, the ad, the thank-you, then the reveal. |
 | `src/ads/useSettleAd.jsx` | The React hook the tally's settle uses; renders the thank-you. |
 | `src/ads/AdThanks.jsx` | The thank-you overlay after an ad was shown. |
-| `src/ads/pro.js` | `isPro()` stub. |
+| `src/ads/pro.js` | `isPro()`, synchronous, from the entitlement cache (`setProEntitlement`). See [docs/PRO.md](PRO.md). |
 
 ## Plugin
 
@@ -90,10 +92,12 @@ Callers should continue their flow on any result. Only `shown` means the person 
 `initAds()` initializes AdMob once, then on iOS checks the tracking status and asks for
 permission only if it is `notDetermined`. The promise is memoized; a failed init resolves
 `{ ok: false }` (it never rejects) and is retried on the next call. It does nothing on the web,
-with the flag off, or for Pro. The native app calls `startAdsOnAppActive()` at boot
-(`mobile/main.jsx`), which runs `initAds()` once the app is active, so the ATT prompt and SDK
-startup stay out of the first ad's 5 s budget. `showInterstitial` still calls `initAds()` as a
-backstop.
+with the flag off, or for Pro. The native app calls `startAdsWhenProKnown()`
+(`src/ads/startAds.js`) at boot (`mobile/main.jsx`). It waits until the entitlement has loaded
+(or auth says nobody is signed in), at most 5 s, so a Pro member's cold start never inits the
+SDK or sees the ATT prompt, then calls `startAdsOnAppActive()`, which runs `initAds()` once the
+app is active, so the ATT prompt and SDK startup stay out of the first ad's 5 s budget.
+`showInterstitial` still calls `initAds()` as a backstop.
 
 ## Invite interstitial
 

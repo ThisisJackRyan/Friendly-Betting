@@ -67,6 +67,20 @@ export function useIdentity() {
   return user;
 }
 
+// The Firebase user auth already has, without ever signing anyone in:
+// undefined until auth has restored its session, then the user or null.
+export function useSignedInUser() {
+  const [user, setUser] = useState(undefined);
+  useEffect(() => {
+    if (!auth) {
+      setUser(null);
+      return undefined;
+    }
+    return onAuthStateChanged(auth, (next) => setUser(next || null));
+  }, []);
+  return user;
+}
+
 export function savedName() {
   try {
     return (localStorage.getItem(NAME_KEY) || '').trim();
