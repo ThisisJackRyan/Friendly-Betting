@@ -30,6 +30,7 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
 import SettledReveal from './SettledReveal';
+import RunItBack from './RunItBack';
 import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
@@ -273,6 +274,7 @@ const TallyScreen = () => {
                 <Bars bet={bet} highlightId={bet.winnerId} waiting={votingOpen(bet)} showVoters viewerId={user?.uid} viewerBadge={proBadge} />
               </>
             )}
+            {settled && <RunItBack bet={bet} code={betId} user={user} />}
             {error && (
               <p className="form-error" role="alert">
                 {error}
@@ -314,4 +316,11 @@ const TallyScreen = () => {
   );
 };
 
-export default TallyScreen;
+// Keyed by code: Run it back pushes one tally onto another, which React Router
+// renders with the same instance, and the new bet needs a fresh screen.
+const KeyedTallyScreen = () => {
+  const params = useParams() || {};
+  return <TallyScreen key={params.code || params.id} />;
+};
+
+export default KeyedTallyScreen;
