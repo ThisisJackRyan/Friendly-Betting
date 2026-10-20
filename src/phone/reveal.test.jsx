@@ -67,6 +67,18 @@ describe('buildReveal copy', () => {
     expect(reveal.startBet).toBe(false);
   });
 
+  test('a single unnamed winner gets the plain bragging line, not "Called it solo"', () => {
+    for (const name of ['', '   ']) {
+      const reveal = buildReveal({ bet: settled({ winners: [['u1', name]], losers: [['zed', 'Zed']] }), viewerId: 'outsider' });
+      expect(lines(reveal)).toEqual(['Chiefs -3 won', 'One friend called it.', 'Bragging rights, secured.', '$20']);
+    }
+  });
+
+  test('a single named winner keeps "Called it solo"', () => {
+    const reveal = buildReveal({ bet: settled({ winners: [['maya', 'Maya']] }), viewerId: 'outsider' });
+    expect([reveal.kind, reveal.headline, reveal.subline]).toEqual(['winners', 'Maya won.', 'Called it solo. Bragging rights, secured.']);
+  });
+
   test.each([
     [[['jack', 'Jack'], ['u1', '']], 'Jack & 1 other won.'],
     [[['jack', 'Jack'], ['u1', ''], ['u2', '']], 'Jack & 2 others won.'],
@@ -78,7 +90,7 @@ describe('buildReveal copy', () => {
   });
 
   test.each([
-    [1, 'One friend called it.', 'Called it solo. Bragging rights, secured.'],
+    [1, 'One friend called it.', 'Bragging rights, secured.'],
     [3, '3 friends called it.', 'Bragging rights, secured.'],
   ])('all %i winners unnamed get the friends count line', (count, headline, subline) => {
     const winners = Array.from({ length: count }, (_, index) => [`u${index}`, index ? '' : '   ']);
@@ -330,5 +342,39 @@ describe('settled screens', () => {
     expect(screen.getByRole('list', { name: 'Picked by Jack, Maya, and Sam' })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Picked by Bart and 1 friend' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+  });
+
+  test('settled on /b/ and /t/: Share as image sits right under Share the result', async () => {
+    feed(settled(crew));
+    for (const [route, Screen, uid, phone] of [['/b/abc123', VoteScreen, 'maya', false], ['/t/abc123', TallyScreen, 'jack', true]]) {
+      as(uid, phone);
+      await renderAt(route, <Screen />);
+      const text = screen.getByRole('button', { name: 'Share the result' });
+      const image = screen.getByRole('button', { name: 'Share as image' });
+      expect(text.nextElementSibling).toBe(image);
+      cleanup();
+    }
+  });
+
+  test.each([
+    ['calledOff flag', { ...settled(crew), calledOff: true }],
+    ['status called-off', makeBet({ ...crew, status: 'called-off' })],
+  ])('called off (%s) has no image to share', async (_label, bet) => {
+    as('maya');
+    feed(bet);
+    await renderAt('/b/abc123', <VoteScreen />);
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+  });
+
+  test('a legacy count-only bet keeps Share the result but has no image', async () => {
+    as('outsider');
+    feed({
+      id: 'abc123', status: 'closed', winnerId: 'over', type: 'Over Under', line: 3.5, over: 2, under: 1,
+      bet: 'Rolls', stake: '', options: [{ id: 'over', label: 'Over' }, { id: 'under', label: 'Under' }],
+    });
+    await renderAt('/b/abc123', <VoteScreen />);
+    expect(screen.getByRole('button', { name: 'Share the result' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
   });
 });

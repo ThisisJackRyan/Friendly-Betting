@@ -328,8 +328,10 @@ describe('Friends', () => {
       'Ana1 W1 LBets together 4',
       'Ben0 W0 LBets together 1',
     ]);
-    expect(within(rows[0]).getByLabelText('wins')).toHaveTextContent('W');
-    expect(within(rows[0]).getByLabelText('losses')).toHaveTextContent('L');
+    expect(within(rows[0]).getByRole('img', { name: '1 win' })).toHaveTextContent('1 W');
+    expect(within(rows[0]).getByRole('img', { name: '1 loss' })).toHaveTextContent('1 L');
+    expect(within(rows[1]).getByRole('img', { name: '0 wins' })).toHaveTextContent('0 W');
+    expect(within(rows[1]).getByRole('img', { name: '0 losses' })).toHaveTextContent('0 L');
     expect(section).not.toHaveTextContent('Me');
     expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
 
@@ -339,8 +341,10 @@ describe('Friends', () => {
     const links = within(history).getAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['/t/won', '/t/lost', '/t/off', '/t/live']);
     expect(links[0]).toHaveTextContent('Settled');
-    expect(within(links[0]).getByText('W')).toHaveClass('friend-pill', 'win');
-    expect(within(links[1]).getByText('L')).toHaveClass('friend-pill', 'loss');
+    expect(within(links[0]).getByRole('img', { name: 'Won' })).toHaveClass('friend-pill', 'win');
+    expect(within(links[0]).getByRole('img', { name: 'Won' })).toHaveTextContent('W');
+    expect(within(links[1]).getByRole('img', { name: 'Lost' })).toHaveClass('friend-pill', 'loss');
+    expect(within(links[1]).getByRole('img', { name: 'Lost' })).toHaveTextContent('L');
     expect(links[2]).toHaveTextContent('This bet was called off.');
     expect(links[2]).not.toHaveTextContent(/\bW\b|\bL\b/);
     expect(within(links[3]).getByText('Open')).toHaveClass('status', 'open');

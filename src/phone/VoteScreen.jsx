@@ -26,7 +26,7 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { isFinished } from './betStatus';
 import { rememberBet } from './notificationStore';
 import SettledReveal from './SettledReveal';
-import { REVEAL_COPY, buildReveal } from './reveal';
+import { buildReveal } from './reveal';
 import ResultsMenu from './ResultsMenu';
 import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
@@ -136,16 +136,13 @@ const VoteScreen = () => {
               <span className="chip">{typeLabelOf(bet)}</span>
               <span className={`status ${statusLabel(bet).toLowerCase()}`}>{statusLabel(bet)}</span>
             </div>
-            <div className="invite-line">
-              <span className="invite-avatar" aria-hidden="true">
-                {(bet.createdByName || 'F').charAt(0).toUpperCase()}
-              </span>
-              {settled?.kind === 'called-off' ? (
-                <p>
-                  <span className="inviter">{REVEAL_COPY.calledOff}</span>
-                  <span className="invite-caption">{REVEAL_COPY.calledOffSub}</span>
-                </p>
-              ) : (
+            {/* A called-off bet has no invite header; the result card below
+                says it all. */}
+            {settled?.kind !== 'called-off' && (
+              <div className="invite-line">
+                <span className="invite-avatar" aria-hidden="true">
+                  {(bet.createdByName || 'F').charAt(0).toUpperCase()}
+                </span>
                 <p>
                   <span className="inviter">
                     {bet.createdByName || 'A friend'}
@@ -153,8 +150,8 @@ const VoteScreen = () => {
                   </span>
                   <span className="invite-caption">{settled ? 'settled this friendly wager' : 'has a friendly wager for you'}</span>
                 </p>
-              )}
-            </div>
+              </div>
+            )}
             <h1 className="question-xl">{questionOf(bet)}</h1>
             <div className="vote-meta">
               {bet.closesAt && open ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
