@@ -5,6 +5,8 @@ import { json, preflight, validCode, withCors } from '../../../../../../src/serv
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// deliverResultTexts waits out a settle's 35s undo window before texting.
+export const maxDuration = 60;
 
 export function OPTIONS(request) {
   return preflight(request);
@@ -14,7 +16,8 @@ export async function POST(request, context) {
   return withCors(request, await send(context));
 }
 
-// No auth: it only acts on settled bets and each number is claimed once.
+// No auth: it only acts on settled bets past their undo window, and each
+// number is claimed once.
 async function send({ params }) {
   const { code } = await params;
   if (!validCode(code)) return json({ error: 'not-found' }, 404);

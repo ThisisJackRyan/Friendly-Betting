@@ -3643,3 +3643,16 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .friend-bet-question { font-size: 15px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
 .friend-bet-arrow { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #637853; }
 .friend-bet:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* F8: the creator's Undo under a fresh reveal, and Call off on an open bet. */
+.undo-settle { margin: 4px 0 16px; }
+.undo-settle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.undo-settle-row .text-link { width: auto; margin-top: 0; padding: 0 12px; color: var(--ink); font-size: 15px; }
+.undo-settle-count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.text-link.tally-call-off { color: var(--muted); }
+.text-link.tally-call-off:disabled { opacity: 0.5; }

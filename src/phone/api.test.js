@@ -1,6 +1,6 @@
 import { deleteDoc, runTransaction } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
-import { castVote, deleteBet, saveBet, settleBet } from './api';
+import { callOffBet, castVote, deleteBet, saveBet, settleBet, undoSettle } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 
@@ -9,6 +9,8 @@ jest.mock('firebase/firestore', () => ({
   doc: (_db, collection, id) => ({ collection, id }),
   runTransaction: jest.fn(),
   deleteDoc: jest.fn(async () => {}),
+  serverTimestamp: () => 'SERVER_TIME',
+  deleteField: () => 'DELETE_FIELD',
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
 jest.mock('./resultTexts', () => ({
@@ -27,7 +29,10 @@ beforeEach(() => {
   auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }] };
   tx = {
     get: jest.fn(async () => ({ exists: () => Boolean(stored), data: () => JSON.parse(JSON.stringify(stored)) })),
-    update: jest.fn((_ref, patch) => { stored = { ...stored, ...patch }; }),
+    update: jest.fn((_ref, patch) => {
+      stored = { ...stored, ...patch };
+      Object.keys(patch).forEach((key) => { if (patch[key] === 'DELETE_FIELD') delete stored[key]; });
+    }),
   };
   runTransaction.mockReset();
   runTransaction.mockImplementation(async (_db, run) => run(tx));
@@ -38,14 +43,17 @@ beforeEach(() => {
 test('closing writes one atomic result with both winner and loser recipients', async () => {
   const result = await settleBet('abc123', 'a');
   expect(tx.update).toHaveBeenCalledTimes(1);
-  expect(stored).toMatchObject({ status: 'closed', winnerId: 'a', settledAt: expect.any(Number) });
+  // Server time, so the rules can measure the undo window from it.
+  expect(stored).toMatchObject({ status: 'closed', winnerId: 'a', settledAt: 'SERVER_TIME' });
+  expect(result.settledAt).toBeNull();
   expect(stored.settlement.recipients).toEqual([{ voterId: 'jack', won: true }, { voterId: 'sam', won: false }]);
   expect(result.settlement.winners).toEqual([{ voterId: 'jack', name: 'Jack' }]);
 });
 
 test('retrying the same close preserves the event; a different outcome cannot overwrite it', async () => {
   const first = await settleBet('abc123', 'a');
-  expect(await settleBet('abc123', 'a')).toEqual(first);
+  // The same result; the retry reads back the stored server settledAt.
+  expect({ ...(await settleBet('abc123', 'a')), settledAt: null }).toEqual(first);
   expect(tx.update).toHaveBeenCalledTimes(1);
   await expect(settleBet('abc123', 'b')).rejects.toThrow('already settled');
   expect(tx.update).toHaveBeenCalledTimes(1);
@@ -314,5 +322,88 @@ describe('called-off bets', () => {
     await expect(saveBet('abc123', { stake: '$200' })).rejects.toThrow('settled');
     expect(tx.update).not.toHaveBeenCalled();
     expect(requestResultTexts).not.toHaveBeenCalled();
+  });
+});
+
+describe('undoSettle', () => {
+  // The plain form, since the fake transaction reads back through JSON.
+  const at = (ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: 0 });
+  beforeEach(async () => {
+    await settleBet('abc123', 'a');
+    stored = { ...stored, settledAt: at(Date.now() - 5000), calledOff: false };
+    tx.update.mockClear();
+    requestResultTexts.mockReset();
+  });
+
+  test('within the window it reopens the bet in one write that only touches result fields', async () => {
+    const reopened = await undoSettle('abc123');
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(tx.update.mock.calls[0][1]).toEqual({
+      status: 'open', winnerId: null, settledAt: 'DELETE_FIELD', settlement: 'DELETE_FIELD', calledOff: 'DELETE_FIELD',
+    });
+    expect(stored).toMatchObject({ status: 'open', winnerId: null, question: 'Game on?' });
+    expect(stored).not.toHaveProperty('settledAt');
+    expect(stored).not.toHaveProperty('settlement');
+    expect(reopened).toMatchObject({ status: 'open', winnerId: null, votes: stored.votes });
+    expect(reopened).not.toHaveProperty('settlement');
+    expect(requestResultTexts).not.toHaveBeenCalled();
+  });
+
+  test('after the 35s rules window it refuses without writing', async () => {
+    stored = { ...stored, settledAt: at(Date.now() - 36000) };
+    await expect(undoSettle('abc123')).rejects.toThrow('Too late to undo.');
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['an older number settledAt', (bet) => ({ ...bet, settledAt: Date.now() })],
+    ['an open bet', (bet) => ({ ...bet, status: 'open', winnerId: null })],
+    ['a called-off bet', (bet) => ({ ...bet, calledOff: true })],
+  ])('refuses %s', async (_label, patch) => {
+    stored = patch(stored);
+    await expect(undoSettle('abc123')).rejects.toThrow('Too late to undo.');
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  test.each([null, { uid: 'creator', providerData: [] }, { uid: 'other', providerData: [{ providerId: 'phone' }] }])('only the creator can undo: %p', async (actor) => {
+    auth.currentUser = actor;
+    await expect(undoSettle('abc123')).rejects.toThrow('Only the creator');
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('callOffBet', () => {
+  test('calls off an open bet with no winner and a server settledAt, then asks for the texts', async () => {
+    const off = await callOffBet('abc123');
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(tx.update.mock.calls[0][1]).toEqual({ status: 'closed', calledOff: true, settledAt: 'SERVER_TIME' });
+    expect(off).toMatchObject({ status: 'closed', calledOff: true, settledAt: null });
+    expect(off).not.toHaveProperty('settlement');
+    expect(requestResultTexts).toHaveBeenCalledWith('abc123');
+  });
+
+  test('calling off twice writes once', async () => {
+    await callOffBet('abc123');
+    await callOffBet('abc123');
+    expect(tx.update).toHaveBeenCalledTimes(1);
+  });
+
+  test('a settled bet cannot be called off', async () => {
+    await settleBet('abc123', 'a');
+    tx.update.mockClear();
+    await expect(callOffBet('abc123')).rejects.toThrow('already settled');
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  test.each([null, { uid: 'creator', isAnonymous: true, providerData: [{ providerId: 'anonymous' }] }, { uid: 'other', providerData: [{ providerId: 'phone' }] }])('only the creator can call off: %p', async (actor) => {
+    auth.currentUser = actor;
+    await expect(callOffBet('abc123')).rejects.toThrow('Only the creator can call off this bet.');
+    expect(tx.update).not.toHaveBeenCalled();
+    expect(requestResultTexts).not.toHaveBeenCalled();
+  });
+
+  test('a called-off bet takes no votes', async () => {
+    await callOffBet('abc123');
+    await expect(castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' })).rejects.toThrow('This bet is closed.');
   });
 });

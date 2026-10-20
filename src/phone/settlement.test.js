@@ -82,3 +82,9 @@ test.each([
   expect(settlementOf(off)).toBeNull();
   for (const uid of ['jack', 'sam', 'spectator']) expect(notificationFor(off, uid)).toBeNull();
 });
+
+test('a server Timestamp settledAt gives the same numeric id and time as a number', () => {
+  const stamped = { ...settled(), settledAt: { toMillis: () => 1234 } };
+  expect(notificationFor(stamped, 'jack')).toMatchObject({ id: 'abc123:1234', at: 1234 });
+  expect(notificationFor({ ...settled(), settledAt: null }, 'jack')).toBeNull();
+});

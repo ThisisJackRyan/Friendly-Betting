@@ -13,7 +13,7 @@
 // and vote-called-off.png, and a settled bet whose winners all skipped their
 // name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
 // tally, house-ad.png, and the thank-you after it, thank-you.png, and the
-// same after Settle & notify, settle-house-ad.png, settle-thank-you.png, and
+// same after a Settle & notify with no Undo, settle-house-ad.png, settle-thank-you.png, and
 // the reveal once the thank-you continues, settle-reveal-after-ad.png, and Pro:
 // the paywall at /pro, paywall.png, a founder's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
@@ -21,7 +21,10 @@
 // friends-open.png, and the settled reveal with Share as image under Share
 // the result, winner-card-reveal.png, and the winner card PNG that button
 // makes, winner-card.png, and the same for long text and many winners,
-// winner-card-long.png) only go to --copy-to.
+// winner-card-long.png, and F8: Call off on an open tally,
+// f8-call-off-button.png, its confirm, f8-call-off-confirm.png, the reveal
+// with its Undo countdown, f8-undo-countdown.png, and the tally once called
+// off, f8-called-off.png) only go to --copy-to.
 //
 // SCREENSHOTS_BASE points at an app preview already running elsewhere, for
 // when another checkout holds port 5173.
@@ -172,7 +175,9 @@ async function startServer() {
 // `plan` is the signed-in user's entitlement (src/phone/entitlementApi.js is
 // swapped too), and `paywall` turns the paywall flag on in proConfig.js.
 // `bets` is My bets' whole list, when it should hold more than `bet`.
-async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false }) {
+// `noUndo` makes Settle & notify come back with a number settledAt, as an
+// older build wrote: no Undo, the one settle the ad still shows on.
+async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false, noUndo = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -198,7 +203,10 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
-      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: Date.now(), settlement: buildSettlement(bet, id) });
+      // settledAt null, as the real settleBet returns before the server time.
+      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: ${noUndo ? 'Date.now()' : 'null'}, settlement: buildSettlement(bet, id) });
+      export const undoSettle = async () => ({ ...bet, status: 'open', winnerId: null });
+      export const callOffBet = async () => ({ ...bet, status: 'closed', calledOff: true, settledAt: null });
       export const deleteBet = async () => {};`,
   }));
   await page.route('**/src/phone/routes.js*', (route) => route.fulfill({
@@ -296,7 +304,71 @@ async function settleAd(page) {
   await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
 }
 
+// Bring a control into view near the bottom of the tally.
+async function showControl(page, locator) {
+  await locator.evaluate((node) => {
+    const scroller = node.closest('.scroll');
+    scroller.scrollTop += node.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 24;
+  });
+}
+
+async function openCallOff(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  const button = page.getByRole('button', { name: 'Call off', exact: true });
+  await button.waitFor();
+  await showControl(page, button);
+  return button;
+}
+
 const SHOTS = [
+  {
+    file: 'f8-call-off-button.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    run: openCallOff,
+  },
+  {
+    file: 'f8-call-off-confirm.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('dialog', { name: 'Call off this bet?' }).waitFor();
+    },
+  },
+  {
+    file: 'f8-called-off.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('button', { name: 'Call off bet', exact: true }).click();
+      await page.getByText('This bet was called off.').waitFor();
+    },
+  },
+  {
+    file: 'f8-undo-countdown.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+      await page.getByRole('button', { name: 'Chiefs -3', exact: true }).click();
+      await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
+      const undo = page.getByRole('button', { name: 'Undo', exact: true });
+      await undo.waitFor();
+      await page.locator('.reveal-wrap').evaluate((node) => {
+        const scroller = node.closest('.scroll');
+        scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+      });
+    },
+  },
   {
     file: 'create-bet.png',
     user: JACK,
@@ -503,6 +575,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     run: settleAd,
   },
   {
@@ -511,6 +584,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     async run(page) {
       // Held on the thank-you, which would otherwise continue after 1.5 s.
       await page.clock.install();
@@ -526,6 +600,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     async run(page) {
       await settleAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
@@ -675,7 +750,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall, noUndo: shot.noUndo });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

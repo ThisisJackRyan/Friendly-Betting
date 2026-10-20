@@ -5,9 +5,10 @@ import Link from '../platform/Link';
 import { useParams, useRouter } from '../platform/navigation';
 import { FiChevronLeft, FiShare2 } from 'react-icons/fi';
 import { BetFacts } from './ProductUI';
-import { settleBet } from './api';
+import { callOffBet, settleBet, undoSettle } from './api';
 import { useLiveBet } from './useLiveBet';
 import { canSettleBet, isBetCreator } from './creatorSession';
+import { isFinished } from './betStatus';
 import { useIdentity } from './identity';
 import {
   formatCloses,
@@ -31,6 +32,9 @@ import { buildSettlement, settlementOf } from './settlement';
 import ResultCard from './ResultCard';
 import SettledReveal from './SettledReveal';
 import RunItBack from './RunItBack';
+import UndoSettle from './UndoSettle';
+import { undoRemainingMs } from './undoSettle';
+import ConfirmDialog from './ConfirmDialog';
 import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
@@ -41,6 +45,9 @@ import { useProBadge } from './useEntitlement';
 const INVITE_LABEL = 'Text the crew';
 
 const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
+
+// The Call off confirm. The reveal after keeps REVEAL_COPY.calledOffSub.
+const CALL_OFF_COPY = 'Nobody wins this one.';
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -93,6 +100,12 @@ const TallyScreen = () => {
   const [message, setMessage] = useState('');
   const [shareState, setShareState] = useState('');
   const [sharing, setSharing] = useState(false);
+  // When this screen's settle saved, for the Undo countdown (UndoSettle).
+  const [settledLocalAt, setSettledLocalAt] = useState(null);
+  const [undoing, setUndoing] = useState(false);
+  const [undoError, setUndoError] = useState('');
+  const [callOff, setCallOff] = useState({ open: false, busy: false, error: '' });
+  const callOffTrigger = useRef(null);
   const resultRef = useRef(null);
   const revealSettlement = useRef(false);
   // Whether this tab just made this bet (see freshBet): undefined until the
@@ -104,7 +117,8 @@ const TallyScreen = () => {
   const invite = useInviteShare({
     continueLabel: <><FiShare2 size={18} aria-hidden="true" />{INVITE_LABEL}</>,
   });
-  // After a settle saves: maybe an interstitial and a thank-you, then the reveal.
+  // After a settle saves with no Undo to offer: maybe an interstitial and a
+  // thank-you, then the reveal. A settle with Undo skips both (confirmSettle).
   const settleAd = useSettleAd();
 
   useEffect(() => {
@@ -126,15 +140,20 @@ const TallyScreen = () => {
       return;
     }
     // Hold from the tap when an ad may follow: the snapshot can flip to
-    // settled before settleBet resolves.
+    // settled before settleBet resolves. Only a read of the caps: nothing is
+    // counted unless an ad actually shows.
     const tryAd = settleAd.mayShow();
     if (tryAd) setHeld(bet);
     setSaving(true);
     setError('');
+    setUndoError('');
     let settled;
+    let localAt;
     try {
       // Saves first, and asks the server for the result texts, before any ad.
       settled = await settleBet(betId, winnerId);
+      localAt = Date.now();
+      setSettledLocalAt(localAt);
     } catch (err) {
       setHeld(null);
       setError(friendlyError(err, 'Could not settle this bet.'));
@@ -148,11 +167,49 @@ const TallyScreen = () => {
       setSettling(false);
       setSaving(false);
     };
-    if (!tryAd) {
+    // A settle with Undo goes straight to the reveal, with no ad and no
+    // thank-you, so the whole window is there to use (docs/ADS.md). Only a
+    // settle that comes back with no Undo (one already saved, from a stale
+    // screen) goes through the ad gate.
+    if (!tryAd || undoRemainingMs(settled, { localAt }) > 0) {
       reveal();
       return;
     }
     await settleAd.run(reveal);
+  };
+
+  // Back to open, within the window. Settling again skips the ad too.
+  const onUndo = async () => {
+    if (undoing) return;
+    setUndoing(true);
+    setUndoError('');
+    try {
+      const reopened = await undoSettle(betId);
+      setSettledLocalAt(null);
+      setBet(reopened);
+    } catch (err) {
+      setUndoError(err?.code === 'permission-denied' ? 'Too late to undo.' : friendlyError(err, 'Couldn’t undo that. Try again.'));
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+  // Kept the bet: back to the Call off button, as My bets does for Delete.
+  const closeCallOff = () => {
+    setCallOff({ open: false, busy: false, error: '' });
+    callOffTrigger.current?.focus();
+  };
+
+  const confirmCallOff = async () => {
+    if (callOff.busy) return;
+    setCallOff({ open: true, busy: true, error: '' });
+    try {
+      const off = await callOffBet(betId);
+      setBet(off);
+      setCallOff({ open: false, busy: false, error: '' });
+    } catch (err) {
+      setCallOff({ open: true, busy: false, error: friendlyError(err, 'Couldn’t call off this bet. Try again.') });
+    }
   };
 
   const inviteText = () => formatInvite({
@@ -193,6 +250,8 @@ const TallyScreen = () => {
   }, [bet]);
 
   const canSettle = canSettleBet(user, bet);
+  // Only an open bet can be called off; a settle can only be undone.
+  const canCallOff = canSettle && !isFinished(bet);
   const result = settlementOf(bet);
   const settled = buildReveal({ bet, viewerId: user?.uid });
   const reveal = minElapsed && bet !== undefined;
@@ -264,7 +323,13 @@ const TallyScreen = () => {
             <BetFacts bet={bet} />
             <hr className="meta-rule" />
             {settled ? (
-              <div ref={resultRef} className="reveal-wrap"><SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} badge={proBadge} /></div>
+              <div ref={resultRef} className="reveal-wrap">
+                <SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} badge={proBadge}>
+                  {isBetCreator(user, bet) && (
+                    <UndoSettle bet={bet} localAt={settledLocalAt} busy={undoing} error={undoError} onUndo={onUndo} />
+                  )}
+                </SettledReveal>
+              </div>
             ) : (
               <>
                 <div className="results-heading">
@@ -304,12 +369,35 @@ const TallyScreen = () => {
                 Close & settle
               </button>
             )}
+            {canCallOff && !settling && (
+              <button
+                ref={callOffTrigger}
+                type="button"
+                className="text-link tally-call-off"
+                disabled={locked}
+                onClick={() => setCallOff({ open: true, busy: false, error: '' })}
+              >
+                Call off
+              </button>
+            )}
             {canSettle && settling && (
               <SettlePicker bet={bet} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
             )}
           </>
         )}
       </div>
+      {callOff.open && (
+        <ConfirmDialog
+          title="Call off this bet?"
+          copy={CALL_OFF_COPY}
+          confirmLabel="Call off bet"
+          busyLabel="Calling off…"
+          busy={callOff.busy}
+          error={callOff.error}
+          onConfirm={confirmCallOff}
+          onCancel={closeCallOff}
+        />
+      )}
       {invite.thanks}
       {settleAd.thanks}
     </div>

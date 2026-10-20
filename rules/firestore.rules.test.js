@@ -353,12 +353,9 @@ describe('calledOff (settle-only)', () => {
   });
 });
 
-// DOCUMENTS CURRENT BEHAVIOR, not the wanted one. isOpen() only rejects
-// status 'closed', so a bet called off by status 'called-off' (with or
-// without the calledOff flag) or by the flag on a bet that is not 'closed'
-// still takes votes at the rules layer. The app refuses these votes client-
-// side (castVote, betStatus.votingOpen); a rules fix is separate work.
-describe('votes on called-off bets (current rules behavior)', () => {
+// isOpen() refuses both called-off markers, so no vote lands on a called-off
+// bet whichever form it takes.
+describe('votes on called-off bets', () => {
   const nextVotes = [...openBet.votes, { voterId: 'anon-2', name: 'Lee', optionId: 'b', at: 3 }];
 
   beforeEach(async () => {
@@ -369,24 +366,33 @@ describe('votes on called-off bets (current rules behavior)', () => {
     });
   });
 
-  test('CURRENTLY ALLOWED: a vote on status called-off without the flag', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-status').update({ votes: nextVotes }));
+  test('denied: a vote on status called-off without the flag', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-status').update({ votes: nextVotes }));
   });
 
-  test('CURRENTLY ALLOWED: a vote on status called-off with calledOff: true', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-both').update({ votes: nextVotes }));
+  test('denied: a vote on status called-off with calledOff: true', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-both').update({ votes: nextVotes }));
   });
 
-  test('CURRENTLY ALLOWED: a vote on an open-status bet with calledOff: true', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-flag-open').update({ votes: nextVotes }));
+  test('denied: a vote on an open-status bet with calledOff: true', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-flag-open').update({ votes: nextVotes }));
   });
 
-  test('denied: a vote on a closed bet with calledOff: true (status closed is what blocks it)', async () => {
+  test('denied: a vote on a closed bet with calledOff: true', async () => {
     await assertFails(anon('anon-2').doc('bets/settledoff').update({ votes: nextVotes }));
   });
 
   test('denied: signed-out users still cannot vote on a called-off bet', async () => {
     await assertFails(guest().doc('bets/off-status').update({ votes: nextVotes }));
+  });
+
+  test('denied: the creator cannot edit a called-off bet', async () => {
+    await assertFails(creator().doc('bets/off-flag-open').update({ question: 'Changed' }));
+    await assertFails(creator().doc('bets/off-status').update({ question: 'Changed' }));
+  });
+
+  test('a calledOff: false flag is still an open bet', async () => {
+    await assertSucceeds(anon('anon-2').doc('bets/calledoff').update({ votes: nextVotes }));
   });
 });
 

@@ -2,6 +2,10 @@ rules_version = '2';
 
 // Friendly Betting – Cloud Firestore security rules.
 //
+// DO NOT DEPLOY the undo / call-off rules (docs/UNDO-CALL-OFF.md) from this
+// branch. They are tested against the emulator only; never run
+// `firebase deploy` with them until that doc's checklist is done.
+//
 // NOT AUTO-DEPLOYED. Nothing in this repo or on Vercel deploys this file.
 // Before anyone runs `firebase deploy --only firestore:rules`, review it
 // line by line against the rules currently live in the Firebase console
@@ -17,8 +21,9 @@ rules_version = '2';
 //   - createBet  -> create on bets/{code}
 //   - castVote   -> update of `votes` only
 //   - saveBet    -> creator edit of their own open bet
-//   - settleBet  -> creator close & settle (the only path that may set
-//                   calledOff)
+//   - settleBet  -> creator close & settle with a winner
+//   - callOffBet -> creator calls off an open bet (calledOff, no winner)
+//   - undoSettle -> creator takes a settle back within 30s (35s here)
 //   - deleteBet  -> creator delete, normally through the server route below;
 //                   a client delete only when that route isn't configured
 // A bet with no creator uid (createdByID) can't be closed, settled or deleted
@@ -34,7 +39,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Fields that close or settle a bet. Only the creator may change them,
-    // only through the settle write below, and only once. `calledOff` lives
+    // only through the settle, call-off and undo writes below. `calledOff` lives
     // here because the result-text server (src/server/resultTexts.js) texts
     // "called off" for any bet with calledOff == true; nothing else may set it.
     function resultFields() {
@@ -66,14 +71,38 @@ service cloud.firestore {
         && bet.get('createdByID', '') == request.auth.uid;
     }
 
-    // Legacy bets have no status field; treat them as open.
+    // Either marker calls a bet off, like isCalledOff in src/phone/betStatus.js.
+    function isCalledOff(bet) {
+      return bet.get('calledOff', false) == true
+        || bet.get('status', 'open') == 'called-off';
+    }
+
+    // Legacy bets have no status field; treat them as open. A called-off bet
+    // is never open, so it takes no votes and no edits.
     function isOpen(bet) {
-      return bet.get('status', 'open') != 'closed';
+      return bet.get('status', 'open') != 'closed' && !isCalledOff(bet);
     }
 
     function isSettled(bet) {
       return bet.get('status', 'open') == 'closed'
         && bet.get('winnerId', null) != null;
+    }
+
+    // The settle write's settledAt: the server time of this write
+    // (serverTimestamp()), which is what the undo window is measured from.
+    // A number is what older app builds write (Date.now()); those settles
+    // can't be undone. Leaving it out is allowed as before.
+    function validSettledAt() {
+      return request.resource.data.get('settledAt', null) == null
+        || request.resource.data.settledAt == request.time
+        || request.resource.data.settledAt is number;
+    }
+
+    // The creator's undo window after a settle. The app shows 30s; the extra
+    // 5s lets a tap near the end land.
+    function inUndoWindow(bet) {
+      return bet.get('settledAt', null) is timestamp
+        && request.time < bet.settledAt + duration.value(35, 's');
     }
 
     match /bets/{code} {
@@ -94,7 +123,8 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff']);
 
       // castVote: any signed-in user (voters use anonymous auth) may change
-      // the votes list on an open bet, and nothing else.
+      // the votes list on an open bet, and nothing else. isOpen refuses a
+      // called-off bet by either marker (calledOff true, status 'called-off').
       allow update: if request.auth != null
         && isOpen(resource.data)
         && changedKeys().hasOnly(['votes']);
@@ -105,20 +135,47 @@ service cloud.firestore {
         && isOpen(resource.data)
         && !changedKeys().hasAny(resultFields().concat(lockedFields()).concat(['votes']));
 
-      // settleBet: only the creator closes & settles, only once. The write
-      // closes the bet (status 'closed') with a non-empty winnerId; it may
-      // also set calledOff, which must then be a bool. The app has no
-      // call-off action yet, so a called-off bet still names a winnerId.
-      // After a winner is set the result fields, calledOff included, are
-      // immutable (no rule allows changing them on a settled bet).
+      // settleBet: only the creator closes & settles a bet that is neither
+      // settled nor called off. The write closes the bet (status 'closed')
+      // with a non-empty winnerId; it may also set calledOff, which must then
+      // be a bool (older settles named a winner on a called-off bet). After a
+      // winner is set the result fields are immutable, except for the undo
+      // below.
       allow update: if isBetCreator(resource.data)
         && !isSettled(resource.data)
+        && !isCalledOff(resource.data)
         && changedKeys().hasOnly(resultFields())
         && request.resource.data.status == 'closed'
         && request.resource.data.winnerId is string
         && request.resource.data.winnerId != ''
+        && validSettledAt()
         && (!changedKeys().hasAny(['calledOff'])
           || request.resource.data.calledOff is bool);
+
+      // callOffBet: only the creator calls off an open bet. Closed, with
+      // calledOff true, no winner and no settlement, stamped with the server
+      // time. Final: no rule changes a called-off bet again.
+      allow update: if isBetCreator(resource.data)
+        && isOpen(resource.data)
+        && changedKeys().hasOnly(resultFields())
+        && request.resource.data.status == 'closed'
+        && request.resource.data.calledOff == true
+        && request.resource.data.get('winnerId', null) == null
+        && !request.resource.data.keys().hasAny(['settlement'])
+        && request.resource.data.settledAt == request.time;
+
+      // undoSettle: only the creator, only on a settled (not called-off) bet
+      // whose server settledAt is under 35s old. Only result fields change,
+      // and the bet is left open: status 'open', no winner, and no settledAt,
+      // settlement or calledOff.
+      allow update: if isBetCreator(resource.data)
+        && isSettled(resource.data)
+        && !isCalledOff(resource.data)
+        && inUndoWindow(resource.data)
+        && changedKeys().hasOnly(resultFields())
+        && request.resource.data.status == 'open'
+        && request.resource.data.get('winnerId', null) == null
+        && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff']);
 
       // deleteBet: only the creator. Votes are embedded in the doc, so they go
       // with it. Saved result-text numbers (privateResultTexts) are client-

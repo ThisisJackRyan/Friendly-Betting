@@ -9,6 +9,7 @@ import { useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 import { buildSettlement } from './settlement';
+import { renderWinnerCard } from './winnerCardImage';
 import { saveResultText } from './resultTexts';
 import { RESULT_TEXT_COPY } from './resultTextCopy';
 import { PHONE_INVALID_ERROR, PHONE_OFFLINE_ERROR, phoneError } from './creatorSession';
@@ -90,6 +91,7 @@ beforeEach(() => {
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
   castVote.mockClear();
+  renderWinnerCard.mockClear();
   settleBet.mockReset();
   settleBet.mockResolvedValue(undefined);
 });
@@ -825,6 +827,8 @@ test('a mistyped code shows the not-found screen with a way to start a bet', asy
 describe.each([
   ['status called-off', { status: 'called-off' }],
   ['calledOff flag', { calledOff: true }],
+  // What Call off writes.
+  ['closed + calledOff', { status: 'closed', calledOff: true, settledAt: 1 }],
 ])('a called-off bet (%s) on the vote page', (_label, patch) => {
   const anon = { uid: 'anon-1', isAnonymous: true, providerData: [] };
 
@@ -854,6 +858,11 @@ describe.each([
     expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Picks close/)).not.toBeInTheDocument();
     expect(screen.queryByText('Picks are closed. The final call is coming.')).not.toBeInTheDocument();
+    // Nothing to share: no text, no image, and no winner card drawn.
+    expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(renderWinnerCard).not.toHaveBeenCalled();
     expect(castVote).not.toHaveBeenCalled();
   });
 
@@ -879,4 +888,22 @@ describe.each([
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
   });
+});
+
+test('a settle undone live takes Share as image away and the options come back', async () => {
+  useIdentity.mockReturnValue({ uid: 'anon-1', isAnonymous: true, providerData: [] });
+  const settled = { ...openBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(openBet, 'a') };
+  let publish;
+  subscribeBet.mockImplementation((_code, onChange) => {
+    publish = (bet) => act(() => onChange(bet));
+    onChange(settled);
+    return () => {};
+  });
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(await screen.findByRole('button', { name: 'Share as image' })).toBeInTheDocument();
+  publish(openBet);
+  expect(screen.queryByRole('region', { name: 'Settled result' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
 });
