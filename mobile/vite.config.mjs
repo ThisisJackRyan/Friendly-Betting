@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const path = (relative) => fileURLToPath(new URL(relative, import.meta.url));
 
 export default defineConfig(({ mode }) => {
-  // Same flag as the web build: the shell env wins over .env* files at the repo root.
+  // Same flags as the web build: the shell env wins over .env* files at the repo root.
   const env = { ...loadEnv(mode, path('../'), 'NEXT_PUBLIC_'), ...process.env };
   return {
     root: path('./'),
@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       'process.env.NEXT_PUBLIC_RESULT_TEXTS': JSON.stringify(env.NEXT_PUBLIC_RESULT_TEXTS ?? ''),
+      'process.env.NEXT_PUBLIC_ADS_ENABLED': JSON.stringify(env.NEXT_PUBLIC_ADS_ENABLED ?? ''),
     },
     resolve: {
       alias: [
