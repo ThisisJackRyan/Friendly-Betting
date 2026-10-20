@@ -3,7 +3,7 @@ import { AdMob } from '@capacitor-community/admob';
 import { showHouseAd } from './HouseAd';
 import { isPro } from './pro';
 import { AD_LIMITS, placementLimits } from './config';
-import { __resetAdsForTests, initAds, showInterstitial } from './adService';
+import { __resetAdsForTests, canShowInterstitial, initAds, showInterstitial } from './adService';
 
 jest.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: jest.fn(() => false), getPlatform: jest.fn(() => 'web') },
@@ -319,4 +319,38 @@ test('never throws, even when called with nothing or when a cap check blows up',
   nextSlot();
   // Same default placement, now at its session cap.
   await expect(showInterstitial(null)).resolves.toEqual(skipped('capped'));
+});
+
+describe('canShowInterstitial, the synchronous precheck', () => {
+  test('agrees with showInterstitial on every skip it can see up front', async () => {
+    expect(canShowInterstitial('invite')).toBe(true);
+    delete process.env.NEXT_PUBLIC_ADS_ENABLED;
+    expect(canShowInterstitial('invite')).toBe(false);
+    process.env.NEXT_PUBLIC_ADS_ENABLED = '1';
+
+    isPro.mockReturnValue(true);
+    expect(canShowInterstitial('invite')).toBe(false);
+    isPro.mockReturnValue(false);
+
+    let close;
+    showHouseAd.mockImplementation(() => new Promise((resolve) => { close = resolve; }));
+    const first = showInterstitial({ placement: 'invite' });
+    await flush();
+    // Busy while an ad is up.
+    expect(canShowInterstitial('other')).toBe(false);
+    close();
+    await expect(first).resolves.toEqual(shown);
+    // Too soon after the last ad, then the invite's own session cap.
+    expect(canShowInterstitial('other')).toBe(false);
+    nextSlot();
+    expect(canShowInterstitial('other')).toBe(true);
+    expect(canShowInterstitial('invite')).toBe(placementLimits('invite').maxPerSession > 1);
+  });
+
+  test('returns a boolean synchronously and never throws', () => {
+    isPro.mockImplementation(() => { throw new Error('boom'); });
+    expect(canShowInterstitial()).toBe(true);
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
+    expect(typeof canShowInterstitial('invite')).toBe('boolean');
+  });
 });

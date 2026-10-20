@@ -11,7 +11,8 @@
 // and the creator's Wanna vote? link under the invite, creator-vote-link.png,
 // and a bet called off by status alone on /t/ and /b/, tally-called-off.png
 // and vote-called-off.png, and a settled bet whose winners all skipped their
-// name, reveal-unnamed-winners.png)
+// name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
+// tally, house-ad.png, and the thank-you after it, thank-you.png)
 // only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
@@ -117,7 +118,8 @@ async function startServer() {
 // settles on side a, or pass the winning option id. `shareSheet` gives the
 // page a navigator.share (Chromium on Linux has none): 'open' never closes,
 // like a sheet still on screen, and 'dismiss' is closed without sending.
-async function fixtures(page, { user, name, bet, settled = false, shareSheet = null }) {
+// `ads` swaps in src/ads/config.js with the ads flag on, as the e2e does.
+async function fixtures(page, { user, name, bet, settled = false, shareSheet = null, ads = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -148,6 +150,16 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
     contentType: 'application/javascript',
     body: `export function voteUrl(code) { return 'https://www.friendly-bets.com/b/' + encodeURIComponent(code); }`,
   }));
+  if (ads) {
+    await page.route('**/src/ads/config.js*', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(
+        /export function adsEnabled\(\) \{[\s\S]*?\n\}/,
+        'export function adsEnabled() { return true; }',
+      );
+      await route.fulfill({ response, body });
+    });
+  }
   if (shareSheet) {
     await page.addInitScript((mode) => {
       Object.defineProperty(navigator, 'share', {
@@ -192,6 +204,14 @@ async function makeBet(page) {
   await page.getByRole('button', { name: 'Text friends', exact: true }).click();
   await page.waitForURL(`**/t/${CODE}`);
   await page.locator('.tally-share.is-nudge').waitFor();
+}
+
+// The tally's Text the crew with ads on: the web house ad comes up first.
+async function inviteAd(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
 }
 
 const SHOTS = [
@@ -374,6 +394,28 @@ const SHOTS = [
     },
   },
   {
+    file: 'house-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'open',
+    ads: true,
+    run: inviteAd,
+  },
+  {
+    file: 'thank-you.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'open',
+    ads: true,
+    async run(page) {
+      await inviteAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor();
+    },
+  },
+  {
     file: 'results-open.png',
     docs: false,
     user: MAYA,
@@ -411,7 +453,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

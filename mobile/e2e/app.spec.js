@@ -295,6 +295,122 @@ test('with no share sheet and no clipboard, the tally shows the whole invite to 
   expect(errors).toEqual([]);
 });
 
+// Ads are off in this dev server (NEXT_PUBLIC_ADS_ENABLED unset). For the ad
+// tests, the browser gets a copy of src/ads/config.js with the flag on, the
+// same module swap mockCrew uses. Nothing in the app knows about it.
+async function enableAds(page, { lastShownAt } = {}) {
+  await page.route('**/src/ads/config.js*', async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(
+      /export function adsEnabled\(\) \{[\s\S]*?\n\}/,
+      'export function adsEnabled() { return true; }',
+    );
+    if (!body.includes('return true;')) throw new Error('adsEnabled not found in config.js');
+    await route.fulfill({ response, body });
+  });
+  if (lastShownAt) {
+    // An interstitial a moment ago: the minimum interval skips the next one.
+    await page.addInitScript((at) => {
+      // Init scripts also run on about:blank, which has no storage.
+      if (location.origin === 'null') return;
+      localStorage.setItem('fb.ads.caps.v1', JSON.stringify({ day: '', counts: {}, lastShownAt: at }));
+    }, lastShownAt);
+  }
+}
+
+const crewInvite = 'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123';
+const crewShares = (page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
+const thanksLine = 'Thanks for watching. Ads keep this app free.';
+
+test('with ads off (the default), Text the crew shares directly as before', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await page.goto('/t/crew123');
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
+  await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('with ads on, the house ad, then the thank-you, then the share from its tap', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await enableAds(page);
+  await page.goto('/t/crew123');
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+
+  const ad = page.getByRole('dialog', { name: 'Ad', exact: true });
+  await expect(ad).toBeVisible();
+  expect(await crewShares(page)).toEqual([]);
+  await ad.getByRole('button', { name: 'Close ad' }).click();
+  await expect(ad).toHaveCount(0);
+
+  // A web page with navigator.share: the thank-you waits for a tap, so the
+  // share sheet opens inside a user gesture.
+  const thanks = page.getByRole('dialog', { name: thanksLine });
+  await expect(thanks).toBeVisible();
+  await expect(thanks).toContainText(thanksLine);
+  await page.waitForTimeout(2000);
+  await expect(thanks).toBeVisible();
+  expect(await crewShares(page)).toEqual([]);
+  const box = await thanks.getByRole('button', { name: 'Text the crew', exact: true }).boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: testInfo.outputPath('ad-thanks.png'), animations: 'disabled', scale: 'css' });
+  await thanks.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect(thanks).toHaveCount(0);
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
+  await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+
+  // The invite placement allows one ad a session: the next tap shares directly.
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite, crewInvite]);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('with ads on but an ad shown a moment ago, Text the crew skips the ad and shares directly', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await enableAds(page, { lastShownAt: Date.now() });
+  await page.goto('/t/crew123');
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('with ads on, the share sheet after Create goes through the ad and thank-you too', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [], share: 'dismiss' });
+  await enableAds(page);
+  await page.goto('/new/money-line');
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByLabel('Option A').fill('Bears');
+  await page.getByLabel('Option B').fill('Packers');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByLabel('Stake', { exact: true }).fill('$20 pot');
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+
+  const ad = page.getByRole('dialog', { name: 'Ad', exact: true });
+  await expect(ad).toBeVisible();
+  await ad.getByRole('button', { name: 'Close ad' }).click();
+  const thanks = page.getByRole('dialog', { name: thanksLine });
+  await expect(thanks).toBeVisible();
+  expect(await crewShares(page)).toEqual([]);
+  await thanks.click();
+  await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
+  await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 for (const [side, winner, ping, headline, subline] of [
   ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Bragging rights, secured.'],
   ['Packers', 'Sam', 'This one’s settled.', 'Sam won.', 'Not your day. Get ’em next time.'],

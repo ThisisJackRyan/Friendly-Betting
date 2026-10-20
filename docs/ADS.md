@@ -1,7 +1,8 @@
 # Ads
 
-Infrastructure only. No screen calls `showInterstitial` yet, so no flow shows an ad.
-Off by default (`NEXT_PUBLIC_ADS_ENABLED` unset).
+One placement is wired: `invite`, before the invite share on the tally (see
+[Invite interstitial](#invite-interstitial)). Off by default (`NEXT_PUBLIC_ADS_ENABLED` unset),
+and with the flag off every flow behaves exactly as it did before ads.
 
 ## Release TODOs
 
@@ -37,6 +38,9 @@ None of these block merging the infrastructure. All of them block shipping ads.
 | `src/ads/adService.js` | `showInterstitial`, `initAds`, `__resetAdsForTests`. Picks a backend. |
 | `src/ads/caps.js` | Frequency caps (session, day, minimum interval). |
 | `src/ads/HouseAd.jsx` | The web stand-in: a neutral full-screen overlay. |
+| `src/ads/inviteGate.js` | `runInviteShare`: the ad, the thank-you, then the share, for every tally invite. |
+| `src/ads/useInviteShare.jsx` | The React hook the tally uses; renders the thank-you. |
+| `src/ads/AdThanks.jsx` | The thank-you overlay after an ad was shown. |
 | `src/ads/pro.js` | `isPro()` stub. |
 
 ## Plugin
@@ -57,6 +61,11 @@ import { showInterstitial, initAds } from '../ads/adService';
 
 const { shown, skipped, reason } = await showInterstitial({ placement: 'after-settle' });
 ```
+
+`canShowInterstitial(placement)` is the synchronous half: it runs the checks `showInterstitial`
+makes before it starts (flag, Pro, busy, caps, interval) and returns `false` when the call would
+skip right away. `true` does not promise an ad (the load can still time out or fail). Use it to
+decide inside a click handler without an `await`. It never throws.
 
 `showInterstitial({ placement })` resolves `{ shown, skipped, reason }` once the ad has been
 closed, or as soon as it is skipped. It never rejects and never throws.
@@ -80,6 +89,49 @@ permission only if it is `notDetermined`. The promise is memoized; a failed init
 `{ ok: false }` (it never rejects) and is retried on the next call. It does nothing on the web,
 with the flag off, or for Pro. `showInterstitial` calls it, so calling it ahead of time is
 optional (it moves the ATT prompt and SDK startup out of the first ad's 5 s budget).
+
+## Invite interstitial
+
+Every invite share on the tally (`src/phone/TallyScreen.jsx`) goes through one flow,
+`useInviteShare` / `runInviteShare` (`src/ads/inviteGate.js`): the Text the crew button and the
+one-time share sheet right after Create. The result texts (`ResultShare`) do not.
+
+1. `canShowInterstitial('invite')`. If false (flag off, Pro, capped, too soon, busy), the share
+   runs at once, synchronously, inside the same click.
+2. Otherwise `await showInterstitial({ placement: 'invite' })`. Any skip (`timeout`, `error`,
+   `not-loaded`, ...) or a throw goes straight to the share, with no thank-you.
+3. Only when `shown` is true: the thank-you overlay (`AdThanks`), "Thanks for watching. Ads keep
+   this app free." It is fixed position on `document.body` (no layout shift), respects the
+   safe-area insets, continues on a tap anywhere, and its button (at least 44 pt) reuses the
+   "Text the crew" label, so there is no new copy besides that line.
+4. Then the same share as before: `formatInvite` text, and `shareMessage` (share sheet, then
+   `sms:`, the clipboard, then the manual copy) for the button, or `openShareSheet` (the sheet
+   only, never a fallback) for the share after Create. With no share sheet at all, the share
+   after Create does nothing, as before, and no ad is tried.
+
+If the tally unmounts while the ad or thank-you is up, nothing is shared.
+
+Caps: `placements.invite` is 1 per session, 3 per day, plus the global 3 minute interval.
+
+### The web user-gesture problem
+
+`navigator.share` (iOS Safari especially) needs transient user activation, and waiting on an
+ad spends the tap that started the share. So:
+
+- **Skipped up front** (the default, flag off): `canShowInterstitial` is synchronous, so
+  `shareMessage` reaches `navigator.share` inside the original click. Nothing changes.
+- **Native app** (Capacitor Share): no gesture rule. The thank-you continues by itself after
+  1.5 s (or on a tap) and the share opens.
+- **Web with `navigator.share`, ad shown**: the thank-you stays up until it is tapped (no
+  auto-continue), and the share runs synchronously inside that tap's click handler, so the
+  sheet has a fresh gesture.
+- **Web without `navigator.share`** (most desktop browsers): only fallbacks are left, so the
+  thank-you continues by itself after 1.5 s. A clipboard write that the browser refuses without
+  a gesture falls through to the manual copy, as it already does.
+- **Ad tried but skipped on the web** (timeout, no fill, error): the share runs after the await.
+  The browser may refuse `navigator.share` by then; `shareMessage` then falls back to `sms:`,
+  the clipboard or the manual copy like any refused sheet, and `openShareSheet` (after Create)
+  shows nothing, the button stays.
 
 ## Backends
 
@@ -140,12 +192,16 @@ From Google's sample ad units (they always serve test ads, safe to click):
 ## How to test
 
 - Unit tests: `npx jest src/ads` (mocked plugin, fake timers).
-- Web: no flow calls the service yet, so add a temporary button that calls
-  `showInterstitial({ placement: 'dev' })`, run `NEXT_PUBLIC_ADS_ENABLED=1 npm run dev`, and click
-  it. Expect the house ad overlay; it closes on the button, Escape, or after 10 s. Remove the
-  button before committing.
+- Unit tests for the invite flow: `npx jest src/ads src/phone/TallyScreen`.
+- E2E: `CI=1 npm run test:mobile` covers the invite with ads off, with ads on (house ad, then the
+  thank-you, then the share from its tap) and skipped. The e2e swaps in `src/ads/config.js` with
+  the flag on in the browser; the dev server itself keeps the default.
+- Screenshots: `npm run screenshots -- house-ad.png thank-you.png --copy-to=<dir>`.
+- Web: `NEXT_PUBLIC_ADS_ENABLED=1 npm run dev`, open a tally you made, tap Text the crew. Expect
+  the house ad overlay (closes on the button, Escape, or after 10 s), then the thank-you; tap it
+  to share.
 - App: `NEXT_PUBLIC_ADS_ENABLED=1 npm run mobile:sync`, open Xcode or Android Studio, run on a
-  device or simulator with the same temporary call. Expect a Google "Test Ad" interstitial and
+  device or simulator and tap Text the crew on a tally. Expect a Google "Test Ad" interstitial and
   the ATT prompt on first run (iOS). Reset ATT with Settings > Privacy > Tracking, or by
   deleting the app.
 - Clear caps between tries: `localStorage.removeItem('fb.ads.caps.v1')` and reload.

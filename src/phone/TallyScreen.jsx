@@ -33,6 +33,9 @@ import SettledReveal from './SettledReveal';
 import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
+import { useInviteShare } from '../ads/useInviteShare';
+
+const INVITE_LABEL = 'Text the crew';
 
 const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
 
@@ -86,6 +89,11 @@ const TallyScreen = () => {
   // first mount takes the note, then true until the share sheet opens once.
   const fresh = useRef(undefined);
   const minElapsed = useMinHold(betId);
+  // Every invite share (the button and the one after Create) goes through the
+  // ad gate: maybe an interstitial and a thank-you, then the same share.
+  const invite = useInviteShare({
+    continueLabel: <><FiShare2 size={18} aria-hidden="true" />{INVITE_LABEL}</>,
+  });
 
   useEffect(() => {
     if (fresh.current === undefined) fresh.current = takeFreshBet(betId);
@@ -125,17 +133,18 @@ const TallyScreen = () => {
     url: voteUrl(bet.code || betId),
   });
 
-  const onShare = async () => {
+  // Not async: with no ad to try, shareMessage starts inside this click, so
+  // the browser still sees the tap navigator.share needs.
+  const onShare = () => {
     if (!bet || sharing) return;
     const text = inviteText();
     setMessage(text);
     setSharing(true);
-    try {
-      const result = await shareMessage(text);
-      setShareState(result);
-    } finally {
-      setSharing(false);
-    }
+    invite.share(() => shareMessage(text))
+      .then((result) => {
+        if (result != null) setShareState(result);
+      })
+      .finally(() => setSharing(false));
   };
 
   // Right after Create, the share sheet opens by itself, once. Only a real
@@ -144,10 +153,13 @@ const TallyScreen = () => {
     if (!bet || !fresh.current || !votingOpen(bet)) return;
     fresh.current = false;
     if (!hasShareSheet()) return;
-    setMessage(inviteText());
+    const text = inviteText();
+    setMessage(text);
     setSharing(true);
-    openShareSheet(inviteText())
-      .then((result) => setShareState(result))
+    invite.share(() => openShareSheet(text))
+      .then((result) => {
+        if (result != null) setShareState(result);
+      })
       .finally(() => setSharing(false));
   }, [bet]);
 
@@ -240,7 +252,7 @@ const TallyScreen = () => {
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
               <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
-                Text the crew
+                {INVITE_LABEL}
               </button>
               {offerVote && (
                 <Link className="text-link tally-vote-link" href={`/b/${encodeURIComponent(bet.code || betId)}`}>
@@ -259,6 +271,7 @@ const TallyScreen = () => {
           </>
         )}
       </div>
+      {invite.thanks}
     </div>
   );
 };

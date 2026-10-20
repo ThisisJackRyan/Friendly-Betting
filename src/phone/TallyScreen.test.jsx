@@ -305,6 +305,22 @@ describe('the invite right after Create', () => {
     expect(screen.getByText('Copied \u2014 paste into a text.')).toBeInTheDocument();
     expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
   });
+
+  test('with ads off (the default) the share starts inside the tap, with no ad or thank-you', async () => {
+    expect(process.env.NEXT_PUBLIC_ADS_ENABLED).toBeUndefined();
+    let insideClick = null;
+    shareMessage.mockImplementationOnce(async () => {
+      insideClick = window.event?.type;
+      return 'copied';
+    });
+    await renderTally();
+    await signIn(creator);
+    await userEvent.click(inviteButton());
+    expect(insideClick).toBe('click');
+    expect(shareMessage).toHaveBeenCalledWith(invite);
+    expect(document.querySelector('[data-house-ad-host]')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });
 
 // Both ways a bet can be called off. The flag variant is an open bet with the
