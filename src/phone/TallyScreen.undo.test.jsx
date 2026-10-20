@@ -6,6 +6,7 @@ import { canShowInterstitial, showInterstitial } from '../ads/adService';
 import { AD_THANKS_LINE } from '../ads/AdThanks';
 import { buildSettlement } from './settlement';
 import { renderWinnerCard } from './winnerCardImage';
+import { REVEAL_COPY } from './reveal';
 import { navigation } from 'next/navigation';
 
 // Undo after a settle, and Call off on an open bet. The api is the real one
@@ -195,10 +196,17 @@ describe('Undo after a settle', () => {
     expect(revealRegion()).toHaveTextContent('No won');
   });
 
-  test('sits under Share the result and Share as image, above Run it back', async () => {
+  test('sits right under Share the result and Share as image, above Run it back', async () => {
     await renderTally();
+    // Maya picked Yes, so her reveal also offers to start a bet.
     await settleOnNo();
-    const order = [shareTextButton(), shareImageButton(), undoButton(), screen.getByRole('button', { name: 'Run it back' })];
+    const order = [
+      shareTextButton(),
+      shareImageButton(),
+      undoButton(),
+      screen.getByRole('link', { name: REVEAL_COPY.startBet }),
+      screen.getByRole('button', { name: 'Run it back' }),
+    ];
     order.forEach((node) => expect(node).toBeInTheDocument());
     order.slice(1).forEach((node, i) => {
       expect(order[i].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

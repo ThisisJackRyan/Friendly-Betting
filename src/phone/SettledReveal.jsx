@@ -8,9 +8,10 @@ import ProBadge from './ProBadge';
 // buildReveal() result. A count-only legacy bet keeps the plain result card.
 // A called-off bet has no result to share, so it gets no Share button.
 // `badge`, the viewer's own Pro badge, follows a headline about them.
+// `children` (the creator's Undo) go right under the share buttons.
 const ABOUT_VIEWER = new Set(['you-won', 'you-solo']);
 
-export default function SettledReveal({ bet, code, reveal, voterId, badge = null }) {
+export default function SettledReveal({ bet, code, reveal, voterId, badge = null, children = null }) {
   return (
     <>
       {reveal.kind === 'legacy' ? <ResultCard bet={bet} voterId={voterId} /> : (
@@ -25,6 +26,7 @@ export default function SettledReveal({ bet, code, reveal, voterId, badge = null
         </section>
       )}
       {reveal.kind !== 'called-off' && <ResultShare bet={bet} code={code} />}
+      {children}
       {reveal.startBet && (
         <Link className="cta press reveal-start" href="/new">
           {REVEAL_COPY.startBet}

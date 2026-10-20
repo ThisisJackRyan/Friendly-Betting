@@ -306,10 +306,11 @@ const TallyScreen = () => {
             <hr className="meta-rule" />
             {settled ? (
               <div ref={resultRef} className="reveal-wrap">
-                <SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} badge={proBadge} />
-                {isBetCreator(user, bet) && (
-                  <UndoSettle bet={bet} localAt={settledLocalAt} busy={undoing} error={undoError} onUndo={onUndo} />
-                )}
+                <SettledReveal bet={bet} code={betId} reveal={settled} voterId={user?.uid} badge={proBadge}>
+                  {isBetCreator(user, bet) && (
+                    <UndoSettle bet={bet} localAt={settledLocalAt} busy={undoing} error={undoError} onUndo={onUndo} />
+                  )}
+                </SettledReveal>
               </div>
             ) : (
               <>
