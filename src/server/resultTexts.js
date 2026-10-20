@@ -3,6 +3,7 @@ import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
 import { normalizeE164 } from '../phone/resultTexts';
 import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
+import { undoHoldMs } from '../phone/undoSettle';
 import { PROD_ORIGIN } from '../platform/runtime';
 
 // Numbers live outside the public bet doc, so they can never reach the tally,
@@ -136,10 +137,28 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
   });
 }
 
-// The single hook the settle path calls. Safe to run any number of times.
-export async function deliverResultTexts({ db, code, sendSms, origin = DEFAULT_ORIGIN }) {
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+async function readBet(db, code) {
   const snap = await db.doc(`bets/${code}`).get();
-  const bet = snap.exists ? snap.data() : null;
+  return snap.exists ? snap.data() : null;
+}
+
+// The single hook the settle and call-off paths call. Safe to run any number
+// of times. A settle can be undone for a short while (src/phone/undoSettle.js),
+// so this waits that out and re-reads the bet: an undone bet is open again and
+// texts nobody. If it was settled again meanwhile, that settle's own call
+// sends. Call-offs have no undo and send right away.
+export async function deliverResultTexts({
+  db, code, sendSms, origin = DEFAULT_ORIGIN, now = Date.now, wait = sleep,
+}) {
+  let bet = await readBet(db, code);
+  const hold = undoHoldMs(bet, now());
+  if (hold > 0) {
+    await wait(hold);
+    bet = await readBet(db, code);
+    if (undoHoldMs(bet, now()) > 0) return { sent: 0, skipped: 'undo-window' };
+  }
   const calledOff = isCalledOff(bet);
   if (!bet || (!isSettled(bet) && !calledOff)) return { sent: 0, skipped: 'not-settled' };
   const listed = await db.collection(numbersPath(code)).get();

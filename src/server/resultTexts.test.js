@@ -227,6 +227,65 @@ describe('deliverResultTexts', () => {
     expect(sendSms.mock.calls.map(([, body]) => body)).toEqual([calledOffText, calledOffText]);
   });
 
+  describe('the undo window', () => {
+    const NOW = 1_800_000_000_000;
+    const at = (ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000) * 1e6 });
+    const fresh = () => ({ ...settle(openBet(), 'a'), settledAt: at(NOW - 2000) });
+
+    test('a fresh settle waits out the 35s undo window, then texts', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => { clock += ms; });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 2, failed: 0 });
+      expect(wait).toHaveBeenCalledWith(33000);
+      expect(sendSms).toHaveBeenCalledTimes(2);
+    });
+
+    test('a settle undone during the wait texts nobody and keeps the numbers', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn();
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => {
+        clock += ms;
+        await db.doc('bets/abc123').set(openBet());
+      });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 0, skipped: 'not-settled' });
+      expect(sendSms).not.toHaveBeenCalled();
+      expect(db.paths('privateResultTexts/')).toHaveLength(2);
+    });
+
+    test('undone and settled again during the wait: this run stands down for the new one', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => {
+        clock += ms;
+        await db.doc('bets/abc123').set({ ...settle(openBet(), 'b'), settledAt: at(clock - 1000) });
+      });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 0, skipped: 'undo-window' });
+      expect(sendSms).not.toHaveBeenCalled();
+      expect(db.paths('privateResultTexts/')).toHaveLength(2);
+      // The second settle's own call, past its window, sends the new result.
+      const later = await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock + 40000, wait: jest.fn() });
+      expect(later).toEqual({ sent: 2, failed: 0 });
+      expect(sendSms.mock.calls.map(([, body]) => body)).toContain(lostText.replace('Yes won', 'No won'));
+    });
+
+    test('a call-off and an older number settledAt send right away', async () => {
+      for (const bet of [
+        openBet({ status: 'closed', calledOff: true, settledAt: at(NOW - 1000) }),
+        { ...settle(openBet(), 'a'), settledAt: NOW - 1000 },
+      ]) {
+        const db = await seeded(bet);
+        const wait = jest.fn();
+        const sendSms = jest.fn(async () => {});
+        expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => NOW, wait })).toEqual({ sent: 2, failed: 0 });
+        expect(wait).not.toHaveBeenCalled();
+      }
+    });
+  });
+
   test('a missing bet is a no-op', async () => {
     const sendSms = jest.fn();
     expect(await deliverResultTexts({ db: fakeDb(), code: 'abc123', sendSms })).toEqual({ sent: 0, skipped: 'not-settled' });

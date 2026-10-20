@@ -37,6 +37,8 @@ jest.mock('../Config/firebase-config', () => ({
 jest.mock('firebase/firestore', () => ({
   doc: (_db, collection, id) => ({ collection, id }),
   runTransaction: jest.fn(),
+  serverTimestamp: () => ({ seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 }),
+  deleteField: () => undefined,
 }));
 
 const openBet = {

@@ -1,11 +1,13 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   onSnapshot,
   query,
   runTransaction,
+  serverTimestamp,
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
@@ -15,6 +17,7 @@ import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
+import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -146,8 +149,7 @@ export async function castVote(code, vote) {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('This bet is gone.');
     const data = snap.data();
-    // The rules only refuse votes on status 'closed', so this guard is what
-    // keeps picks off a called-off bet.
+    // The rules refuse closed and called-off bets too; this says so first.
     if (!votingOpen(data)) throw new Error('This bet is closed.');
     if (!vote.voterId) throw new Error('Still connecting. Try your pick again.');
     const full = await hydrateBet(data, (legacyRef) => tx.get(legacyRef));
@@ -185,15 +187,68 @@ export async function settleBet(code, winnerId) {
     const update = {
       status: 'closed',
       winnerId,
-      settledAt: Date.now(),
       settlement: buildSettlement(full, winnerId),
     };
-    tx.update(ref, update);
-    return { ...full, ...update };
+    // Server time: the rules measure the undo window from it.
+    tx.update(ref, { ...update, settledAt: serverTimestamp() });
+    // Until the snapshot brings the server time, settledAt reads null.
+    return { ...full, ...update, settledAt: null };
   });
-  // Fire-and-forget: the server re-reads the bet and texts each saved number once.
+  // Fire-and-forget: the server waits out the undo window, re-reads the bet
+  // and texts each saved number once.
   requestResultTexts(code);
   return settled;
+}
+
+// The creator takes a settle back within the undo window (undoSettle.js):
+// the bet is open again with no winner, settledAt or settlement, and the
+// rules check the window against the server settledAt. Returns the open bet.
+export async function undoSettle(code) {
+  const ref = doc(db, 'bets', code);
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('This bet is gone.');
+    const bet = { ...snap.data(), id: code, code };
+    if (!isBetCreator(auth?.currentUser, bet)) {
+      throw new Error('Only the creator can settle this bet.');
+    }
+    const settledAt = timestampMs(bet.settledAt);
+    if (!isSettled(bet) || settledAt == null || Date.now() >= settledAt + UNDO_RULES_WINDOW_MS) {
+      throw new Error('Too late to undo.');
+    }
+    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    tx.update(ref, {
+      status: 'open',
+      winnerId: null,
+      settledAt: deleteField(),
+      settlement: deleteField(),
+      calledOff: deleteField(),
+    });
+    const { settledAt: _at, settlement: _settlement, calledOff: _off, ...rest } = full;
+    return { ...rest, status: 'open', winnerId: null };
+  });
+}
+
+// The creator calls off an open bet: closed, nobody won, no undo. Called-off
+// texts go out right away.
+export async function callOffBet(code) {
+  const ref = doc(db, 'bets', code);
+  const calledOff = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('This bet is gone.');
+    const bet = { ...snap.data(), id: code, code };
+    if (!isBetCreator(auth?.currentUser, bet)) {
+      throw new Error('Only the creator can call off this bet.');
+    }
+    if (isCalledOff(bet)) return bet;
+    if (isSettled(bet)) throw new Error('This one’s already settled. The result is locked.');
+    if (isFinished(bet)) throw new Error('This bet is closed.');
+    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    tx.update(ref, { status: 'closed', calledOff: true, settledAt: serverTimestamp() });
+    return { ...full, status: 'closed', calledOff: true, settledAt: null };
+  });
+  requestResultTexts(code);
+  return calledOff;
 }
 
 // The creator deletes their bet. The server route also deletes the voters'
