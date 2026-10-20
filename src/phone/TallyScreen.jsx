@@ -34,6 +34,7 @@ import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 import { useInviteShare } from '../ads/useInviteShare';
+import { useSettleAd } from '../ads/useSettleAd';
 
 const INVITE_LABEL = 'Text the crew';
 
@@ -76,7 +77,13 @@ const TallyScreen = () => {
   const betId = params.code || params.id;
   const router = useRouter();
   const user = useIdentity();
-  const { bet, setBet, failed } = useLiveBet(betId);
+  const { bet: liveBet, setBet, failed } = useLiveBet(betId);
+  // While a settle ad and its thank-you are up, the screen stays as it was at
+  // the tap (the picker, Settling…) even after the live snapshot flips to
+  // settled, so the reveal happens once, after the overlay. Never over a
+  // deleted bet.
+  const [held, setHeld] = useState(null);
+  const bet = held && liveBet ? held : liveBet;
   const [error, setError] = useState('');
   const [settling, setSettling] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,6 +101,8 @@ const TallyScreen = () => {
   const invite = useInviteShare({
     continueLabel: <><FiShare2 size={18} aria-hidden="true" />{INVITE_LABEL}</>,
   });
+  // After a settle saves: maybe an interstitial and a thank-you, then the reveal.
+  const settleAd = useSettleAd();
 
   useEffect(() => {
     if (fresh.current === undefined) fresh.current = takeFreshBet(betId);
@@ -113,18 +122,34 @@ const TallyScreen = () => {
       setError('Only the creator can settle this bet.');
       return;
     }
+    // Hold from the tap when an ad may follow: the snapshot can flip to
+    // settled before settleBet resolves.
+    const tryAd = settleAd.mayShow();
+    if (tryAd) setHeld(bet);
     setSaving(true);
     setError('');
+    let settled;
     try {
-      const settled = await settleBet(betId, winnerId);
+      // Saves first, and asks the server for the result texts, before any ad.
+      settled = await settleBet(betId, winnerId);
+    } catch (err) {
+      setHeld(null);
+      setError(friendlyError(err, 'Could not settle this bet.'));
+      setSaving(false);
+      return;
+    }
+    const reveal = () => {
       revealSettlement.current = true;
       if (settled) setBet(settled);
+      setHeld(null);
       setSettling(false);
-    } catch (err) {
-      setError(friendlyError(err, 'Could not settle this bet.'));
-    } finally {
       setSaving(false);
+    };
+    if (!tryAd) {
+      reveal();
+      return;
     }
+    await settleAd.run(reveal);
   };
 
   const inviteText = () => formatInvite({
@@ -272,6 +297,7 @@ const TallyScreen = () => {
         )}
       </div>
       {invite.thanks}
+      {settleAd.thanks}
     </div>
   );
 };

@@ -12,7 +12,9 @@
 // and a bet called off by status alone on /t/ and /b/, tally-called-off.png
 // and vote-called-off.png, and a settled bet whose winners all skipped their
 // name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
-// tally, house-ad.png, and the thank-you after it, thank-you.png)
+// tally, house-ad.png, and the thank-you after it, thank-you.png, and the
+// same after Settle & notify, settle-house-ad.png, settle-thank-you.png, and
+// the reveal once the thank-you continues, settle-reveal-after-ad.png)
 // only go to --copy-to.
 //
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
@@ -143,7 +145,7 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
-      export const settleBet = async () => bet;
+      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: Date.now(), settlement: buildSettlement(bet, id) });
       export const deleteBet = async () => {};`,
   }));
   await page.route('**/src/phone/routes.js*', (route) => route.fulfill({
@@ -211,6 +213,16 @@ async function inviteAd(page) {
   await page.goto(`/t/${CODE}`);
   await page.getByText('Updated live').waitFor();
   await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
+}
+
+// Close & settle on the tally with ads on, Chiefs -3 wins: the house ad comes up.
+async function settleAd(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+  await page.getByRole('button', { name: 'Chiefs -3', exact: true }).click();
+  await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
   await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
 }
 
@@ -413,6 +425,42 @@ const SHOTS = [
       await inviteAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
       await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor();
+    },
+  },
+  {
+    file: 'settle-house-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    run: settleAd,
+  },
+  {
+    file: 'settle-thank-you.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    async run(page) {
+      // Held on the thank-you, which would otherwise continue after 1.5 s.
+      await page.clock.install();
+      await settleAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor();
+      await page.clock.pauseAt(Date.now() + 200);
+    },
+  },
+  {
+    file: 'settle-reveal-after-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    async run(page) {
+      await settleAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor({ state: 'detached' });
+      await page.getByRole('region', { name: 'Settled result' }).waitFor();
     },
   },
   {

@@ -31,6 +31,8 @@ export const AD_LIMITS = {
     default: { maxPerSession: 2, maxPerDay: 4 },
     // Before the tally's invite share. Light: inviting the crew is the core flow.
     invite: { maxPerSession: 1, maxPerDay: 3 },
+    // After Settle & notify, before the reveal. Counted apart from invite.
+    settle: { maxPerSession: 1, maxPerDay: 3 },
   },
   // Across all placements: no interstitial within this long of the last one.
   minIntervalMs: 3 * 60 * 1000,

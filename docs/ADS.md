@@ -1,7 +1,8 @@
 # Ads
 
-One placement is wired: `invite`, before the invite share on the tally (see
-[Invite interstitial](#invite-interstitial)). Off by default (`NEXT_PUBLIC_ADS_ENABLED` unset),
+Two placements are wired: `invite`, before the invite share on the tally (see
+[Invite interstitial](#invite-interstitial)), and `settle`, after Settle & notify and before the
+reveal (see [Settle interstitial](#settle-interstitial)). Off by default (`NEXT_PUBLIC_ADS_ENABLED` unset),
 and with the flag off every flow behaves exactly as it did before ads.
 
 ## Release TODOs
@@ -40,6 +41,8 @@ None of these block merging the infrastructure. All of them block shipping ads.
 | `src/ads/HouseAd.jsx` | The web stand-in: a neutral full-screen overlay. |
 | `src/ads/inviteGate.js` | `runInviteShare`: the ad, the thank-you, then the share, for every tally invite. |
 | `src/ads/useInviteShare.jsx` | The React hook the tally uses; renders the thank-you. |
+| `src/ads/settleGate.js` | `runSettleAd`: after a saved settle, the ad, the thank-you, then the reveal. |
+| `src/ads/useSettleAd.jsx` | The React hook the tally's settle uses; renders the thank-you. |
 | `src/ads/AdThanks.jsx` | The thank-you overlay after an ad was shown. |
 | `src/ads/pro.js` | `isPro()` stub. |
 
@@ -59,7 +62,7 @@ never loads it.
 ```js
 import { showInterstitial, initAds } from '../ads/adService';
 
-const { shown, skipped, reason } = await showInterstitial({ placement: 'after-settle' });
+const { shown, skipped, reason } = await showInterstitial({ placement: 'settle' });
 ```
 
 `canShowInterstitial(placement)` is the synchronous half: it runs the checks `showInterstitial`
@@ -133,6 +136,41 @@ ad spends the tap that started the share. So:
   the clipboard or the manual copy like any refused sheet, and `openShareSheet` (after Create)
   shows nothing, the button stays.
 
+## Settle interstitial
+
+When the creator settles on the tally (Close & settle, pick the winner, Settle & notify),
+`TallyScreen` runs `useSettleAd` / `runSettleAd` (`src/ads/settleGate.js`):
+
+1. `canShowInterstitial('settle')` at the tap. If false (flag off, Pro, capped, too soon, busy),
+   nothing about the settle changes: the save, then the reveal, exactly as before ads.
+2. The save always goes first: `settleBet` (the Firestore transaction, then the fire-and-forget
+   `requestResultTexts(code)` that sends the native result texts). The ad never starts before it
+   resolves and never delays it. If the save fails, the error shows as before and no ad is tried.
+3. After a successful save, `await showInterstitial({ placement: 'settle' })`. Any skip
+   (`timeout` after 5 s, `error`, `not-loaded`, ...) or a throw goes straight to the reveal.
+4. Only when `shown` is true: the same `AdThanks` overlay and line. No share follows, so there
+   is no gesture rule: it continues by itself after 1.5 s, or on a tap, on every platform.
+   It has no button text (there is no existing neutral label to reuse, and no new copy): a
+   transparent control covers the whole layer, named by the thank-you line, so it takes focus
+   and Enter or Space as well as a tap anywhere.
+5. Then the reveal (`SettledReveal`), once.
+
+While the ad and thank-you are up the tally holds the screen it had at the tap (the picker
+showing Settling…), even though the live snapshot flips the bet to settled underneath. The hold
+starts at the tap whenever an ad may follow, since the snapshot can land before `settleBet`
+resolves. The reveal and its scroll happen in one render after the overlay closes, so there is
+no layout shift and no double reveal. A bet deleted meanwhile is not held.
+
+If the tally unmounts while the save is in flight, the save still lands but no ad starts. If it
+unmounts during the ad or the thank-you, nothing more happens (no thank-you, no reveal, the
+thank-you's timer is cleared).
+
+Share the result (`ResultShare`) is untouched: the ad flow never calls it, and on the web it
+still opens only from the person's own tap, so `navigator.share` has its gesture.
+
+Caps: `placements.settle` is 1 per session, 3 per day, counted apart from `invite`. The global
+3 minute interval still applies across both, so an invite ad a minute ago skips the settle ad.
+
 ## Backends
 
 1. **Disabled**: flag off or Pro. Resolves immediately, touches nothing.
@@ -192,11 +230,13 @@ From Google's sample ad units (they always serve test ads, safe to click):
 ## How to test
 
 - Unit tests: `npx jest src/ads` (mocked plugin, fake timers).
-- Unit tests for the invite flow: `npx jest src/ads src/phone/TallyScreen`.
+- Unit tests for the invite and settle flows: `npx jest src/ads src/phone/TallyScreen`.
 - E2E: `CI=1 npm run test:mobile` covers the invite with ads off, with ads on (house ad, then the
-  thank-you, then the share from its tap) and skipped. The e2e swaps in `src/ads/config.js` with
+  thank-you, then the share from its tap) and skipped, and the settle with ads off, with ads on
+  (house ad, thank-you, reveal) and skipped (capped). The e2e swaps in `src/ads/config.js` with
   the flag on in the browser; the dev server itself keeps the default.
-- Screenshots: `npm run screenshots -- house-ad.png thank-you.png --copy-to=<dir>`.
+- Screenshots: `npm run screenshots -- house-ad.png thank-you.png --copy-to=<dir>`, and for the
+  settle `settle-house-ad.png settle-thank-you.png settle-reveal-after-ad.png`.
 - Web: `NEXT_PUBLIC_ADS_ENABLED=1 npm run dev`, open a tally you made, tap Text the crew. Expect
   the house ad overlay (closes on the button, Escape, or after 10 s), then the thank-you; tap it
   to share.

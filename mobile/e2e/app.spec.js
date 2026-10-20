@@ -298,7 +298,7 @@ test('with no share sheet and no clipboard, the tally shows the whole invite to 
 // Ads are off in this dev server (NEXT_PUBLIC_ADS_ENABLED unset). For the ad
 // tests, the browser gets a copy of src/ads/config.js with the flag on, the
 // same module swap mockCrew uses. Nothing in the app knows about it.
-async function enableAds(page, { lastShownAt } = {}) {
+async function enableAds(page, { lastShownAt, cappedToday } = {}) {
   await page.route('**/src/ads/config.js*', async (route) => {
     const response = await route.fetch();
     const body = (await response.text()).replace(
@@ -315,6 +315,17 @@ async function enableAds(page, { lastShownAt } = {}) {
       if (location.origin === 'null') return;
       localStorage.setItem('fb.ads.caps.v1', JSON.stringify({ day: '', counts: {}, lastShownAt: at }));
     }, lastShownAt);
+  }
+  if (cappedToday) {
+    // This placement already hit its daily limit today (an hour ago, so the
+    // interval is not what skips it).
+    await page.addInitScript((placement) => {
+      if (location.origin === 'null') return;
+      const now = new Date();
+      const pad = (value) => String(value).padStart(2, '0');
+      const day = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      localStorage.setItem('fb.ads.caps.v1', JSON.stringify({ day, counts: { [placement]: 99 }, lastShownAt: Date.now() - 3600000 }));
+    }, cappedToday);
   }
 }
 
@@ -408,6 +419,76 @@ test('with ads on, the share sheet after Create goes through the ad and thank-yo
   await thanks.click();
   await expect.poll(() => crewShares(page)).toEqual([crewInvite]);
   await expect(page.getByText('Saved. Text when you’re ready.')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+// Close & settle on the tally, Packers wins (Sam's pick).
+async function settleOnPackers(page) {
+  await page.goto('/t/crew123');
+  await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+  await page.getByRole('button', { name: 'Packers', exact: true }).click();
+  await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
+}
+
+const settledRegion = (page) => page.getByRole('region', { name: 'Settled result' });
+
+test('settle with ads off (the default): straight to the reveal as before', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await settleOnPackers(page);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  expect(await crewShares(page)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('settle with ads on: the house ad, then the thank-you, then the reveal once', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await enableAds(page);
+  await settleOnPackers(page);
+
+  const ad = page.getByRole('dialog', { name: 'Ad', exact: true });
+  await expect(ad).toBeVisible();
+  // Saved already (the snapshot flipped), but the reveal waits behind the ad.
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('crew-bet')).winnerId)).toBe('b');
+  await expect(settledRegion(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Settling…', exact: true })).toBeDisabled();
+  await ad.getByRole('button', { name: 'Close ad' }).click();
+  await expect(ad).toHaveCount(0);
+
+  const thanks = page.getByRole('dialog', { name: thanksLine });
+  await expect(thanks).toBeVisible();
+  await expect(thanks).toContainText(thanksLine);
+  await expect(settledRegion(page)).toHaveCount(0);
+  // No button text; the whole layer is the control, named by the line.
+  await expect(thanks.getByRole('button', { name: thanksLine })).toBeFocused();
+  // It continues by itself after 1.5 s, with no tap.
+  await expect(thanks).toHaveCount(0, { timeout: 4000 });
+  await expect(settledRegion(page)).toHaveCount(1);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toHaveCount(0);
+
+  // Share the result was not opened by the ad flow; it still takes a tap.
+  expect(await crewShares(page)).toEqual([]);
+  await page.getByRole('button', { name: 'Share the result', exact: true }).click();
+  await expect.poll(() => crewShares(page)).toHaveLength(1);
+  expect((await crewShares(page))[0]).toContain('Sam won the $20 pot');
+  expect(errors).toEqual([]);
+});
+
+test('settle with ads on but the settle ad capped for today: straight to the reveal', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { share: 'dismiss' });
+  await enableAds(page, { cappedToday: 'settle' });
+  await settleOnPackers(page);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
