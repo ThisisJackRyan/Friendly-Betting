@@ -147,7 +147,7 @@ describe('rendered screens never show TODO_UX', () => {
     await renderAt('/b/abc123', <VoteScreen />);
     const card = screen.getByRole('region', { name: 'Settled result' });
     expect([...card.children].map((node) => node.textContent)).toEqual([
-      'Chiefs -3 won', 'One friend called it.', 'Called it solo. Bragging rights, secured.', 'Stakes: $20',
+      'Chiefs -3 won', 'One friend called it.', 'Bragging rights, secured.', 'Stakes: $20',
     ]);
     cleanup();
     feed(BETS['several unnamed winners']);

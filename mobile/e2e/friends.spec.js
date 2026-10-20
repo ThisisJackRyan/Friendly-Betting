@@ -56,6 +56,10 @@ test('Friends on My bets shows each record, opens a friend, and a shared bet ope
   const section = page.getByRole('region', { name: 'Head to head' });
   const rows = section.getByRole('button');
   await expect(rows).toHaveText([/^Ana1 W1 LBets together 4/, /^Ben0 W0 LBets together 1/]);
+  await expect(rows.first().getByRole('img', { name: '1 win', exact: true })).toBeVisible();
+  await expect(rows.first().getByRole('img', { name: '1 loss', exact: true })).toBeVisible();
+  await expect(rows.nth(1).getByRole('img', { name: '0 wins', exact: true })).toBeVisible();
+  await expect(rows.nth(1).getByRole('img', { name: '0 losses', exact: true })).toBeVisible();
   await expect(section).not.toContainText('Jack');
   const box = await rows.first().boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
@@ -66,7 +70,9 @@ test('Friends on My bets shows each record, opens a friend, and a shared bet ope
   const shared = section.getByRole('link');
   await expect(shared).toHaveCount(4);
   await expect(shared.nth(0).locator('.friend-pill.win')).toHaveText('W');
+  await expect(shared.nth(0).locator('.friend-pill.win')).toHaveAttribute('aria-label', 'Won');
   await expect(shared.nth(1).locator('.friend-pill.loss')).toHaveText('L');
+  await expect(shared.nth(1).locator('.friend-pill.loss')).toHaveAttribute('aria-label', 'Lost');
   await expect(shared.nth(2)).toContainText('This bet was called off.');
   await expect(shared.nth(3).locator('.friend-pill')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
