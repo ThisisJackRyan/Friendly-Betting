@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export const AD_THANKS_LINE = 'Thanks for watching. Ads keep this app free.';
+export const AD_THANKS_LINE = 'Thanks for watching. That keeps Friendly free.';
 
 // The thank-you after an interstitial. A fixed full-screen layer on
 // document.body, so nothing under it moves. A tap anywhere continues; with

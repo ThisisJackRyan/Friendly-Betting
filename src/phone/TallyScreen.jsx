@@ -45,7 +45,7 @@ const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
   sms: 'Opening Messages.',
-  copied: 'Copied \u2014 paste into a text.',
+  copied: 'Copied. Paste it into a text.',
   aborted: 'Saved. Text when you\u2019re ready.',
   manual: 'Copy the message below.',
 };

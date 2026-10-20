@@ -302,7 +302,7 @@ describe('the invite right after Create', () => {
     await signIn(creator);
     await userEvent.click(inviteButton());
     expect(shareMessage).toHaveBeenCalledWith(invite);
-    expect(screen.getByText('Copied \u2014 paste into a text.')).toBeInTheDocument();
+    expect(screen.getByText('Copied. Paste it into a text.')).toBeInTheDocument();
     expect(document.querySelector('.manual-message')).not.toBeInTheDocument();
   });
 

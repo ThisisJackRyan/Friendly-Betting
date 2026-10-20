@@ -440,7 +440,7 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/b/${CODE}`);
-      await page.getByText('3 friends won.').waitFor();
+      await page.getByText('3 friends called it.').waitFor();
       await showBars(page, '.reveal');
     },
   },
@@ -463,7 +463,7 @@ const SHOTS = [
     async run(page) {
       await inviteAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
-      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor();
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor();
     },
   },
   {
@@ -485,7 +485,7 @@ const SHOTS = [
       await page.clock.install();
       await settleAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
-      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor();
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor();
       await page.clock.pauseAt(Date.now() + 200);
     },
   },
@@ -498,7 +498,7 @@ const SHOTS = [
     async run(page) {
       await settleAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
-      await page.getByRole('dialog', { name: 'Thanks for watching. Ads keep this app free.' }).waitFor({ state: 'detached' });
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor({ state: 'detached' });
       await page.getByRole('region', { name: 'Settled result' }).waitFor();
     },
   },
@@ -523,7 +523,7 @@ const SHOTS = [
     paywall: true,
     async run(page) {
       await page.goto('/pro');
-      await page.getByText('Founder: $40 lifetime for the first 100.').waitFor();
+      await page.getByText('Founder: $40 once, Pro for life. First 100 only.').waitFor();
     },
   },
   {

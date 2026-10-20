@@ -14,7 +14,14 @@ const OUTCOME = { win: 'W', loss: 'L', 'called-off': REVEAL_COPY.calledOff };
 // friendStats.js), and a tap opens the bets they picked on.
 export default function FriendsView({ friends }) {
   const [openId, setOpenId] = useState(null);
-  if (!friends.length) return <p className="friends-empty">No friends yet</p>;
+  if (!friends.length) {
+    return (
+      <>
+        <h2 className="friends-empty">No friends yet</h2>
+        <p className="friends-empty">Bet with someone and they’ll show up here.</p>
+      </>
+    );
+  }
   return (
     <section className="friends" aria-labelledby="friends-heading">
       <p id="friends-heading" className="eyebrow">Head to head</p>
@@ -33,8 +40,8 @@ export default function FriendsView({ friends }) {
               >
                 <span className="friend-name">{friend.name}</span>
                 <span className="friend-record">
-                  <span className="friend-pill win"><strong>{friend.wins}</strong> W</span>
-                  <span className="friend-pill loss"><strong>{friend.losses}</strong> L</span>
+                  <span className="friend-pill win"><strong>{friend.wins}</strong> <span role="img" aria-label="wins">W</span></span>
+                  <span className="friend-pill loss"><strong>{friend.losses}</strong> <span role="img" aria-label="losses">L</span></span>
                 </span>
                 <span className="friend-together">
                   Bets together <strong>{friend.betsTogether}</strong>

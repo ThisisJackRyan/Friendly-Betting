@@ -93,16 +93,17 @@ type also needs CreateForm and model support before it goes in the list.
 `src/phone/Paywall.jsx` at `/pro` (web `app/(chrome)/pro/page.js`, app route `pro`). With
 `NEXT_PUBLIC_PRO_PAYWALL` off the web route is a real 404 and the app shows the not-found page.
 
-Copy (all from `PRO_COPY`): `Go Pro`, `3 free bets, then $3/mo.`, `No ads.`, the founder line,
+Copy (all from `PRO_COPY`): `Go Pro`, `Start 3 bets free, then $3/mo.`, `No ads.`, the founder line,
 `Picking a side is always free.`, and `Get Pro`, `Get Founder`, `Not now`. The founder line is
-data-driven from `meta/founders`: `Founder: $40 lifetime for the first 100.` while fewer than 100
-are taken, `Founder: $80 lifetime for the next 500.` up to 600, then
-`Founder spots are sold out.` (and no Get Founder button). If the count can't be read, the founder
+data-driven from `meta/founders`: `Founder: $40 once, Pro for life. First 100 only.` while fewer than 100
+are taken, `Founder: $80 once, Pro for life. Next 500 only.` up to 600, then
+`Founder spots are gone. Pro is still $3/mo.` (and no Get Founder button). If the count can't be read, the founder
 line and button are left out rather than guessing a price.
 
 Buttons only do something with `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1` (previews). Otherwise they are
 disabled with `Coming soon` under them. A Pro member sees their badge and
-`You’re all set. No ads.` instead of the buttons.
+`You’re Pro. No more ads.` instead of the buttons; a Founder with a number sees
+`You’re Founder #7. No more ads.` (their own number).
 
 Entry points: `/pro` directly, and a `Go Pro` link on My bets for a signed-in creator without Pro
 (flag on). **Not done: the "4th bet" prompt.** Counting a creator's bets in Create would need a

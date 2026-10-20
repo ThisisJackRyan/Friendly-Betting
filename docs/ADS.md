@@ -109,8 +109,8 @@ one-time share sheet right after Create. The result texts (`ResultShare`) do not
    runs at once, synchronously, inside the same click.
 2. Otherwise `await showInterstitial({ placement: 'invite' })`. Any skip (`timeout`, `error`,
    `not-loaded`, ...) or a throw goes straight to the share, with no thank-you.
-3. Only when `shown` is true: the thank-you overlay (`AdThanks`), "Thanks for watching. Ads keep
-   this app free." It is fixed position on `document.body` (no layout shift), respects the
+3. Only when `shown` is true: the thank-you overlay (`AdThanks`), "Thanks for watching. That keeps
+   Friendly free." It is fixed position on `document.body` (no layout shift), respects the
    safe-area insets, continues on a tap anywhere, and its button (at least 44 pt) reuses the
    "Text the crew" label, so there is no new copy besides that line.
 4. Then the same share as before: `formatInvite` text, and `shareMessage` (share sheet, then
@@ -174,7 +174,8 @@ Share the result (`ResultShare`) is untouched: the ad flow never calls it, and o
 still opens only from the person's own tap, so `navigator.share` has its gesture.
 
 Caps: `placements.settle` is 1 per session, 3 per day, counted apart from `invite`. The global
-3 minute interval still applies across both, so an invite ad a minute ago skips the settle ad.
+3 minute interval still applies across both, so an invite ad a minute ago skips the settle ad,
+and so does the global `maxPerDay` of 4 ads a day across all placements.
 
 ## Backends
 

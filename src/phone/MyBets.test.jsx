@@ -328,6 +328,8 @@ describe('Friends', () => {
       'Ana1 W1 LBets together 4',
       'Ben0 W0 LBets together 1',
     ]);
+    expect(within(rows[0]).getByLabelText('wins')).toHaveTextContent('W');
+    expect(within(rows[0]).getByLabelText('losses')).toHaveTextContent('L');
     expect(section).not.toHaveTextContent('Me');
     expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
 
@@ -360,7 +362,8 @@ describe('Friends', () => {
     render(<MyBetsList user={user} />);
     // The only pick on the fixtures has no name, so nobody can be listed.
     await showFriends();
-    expect(screen.getByText('No friends yet')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'No friends yet' })).toHaveClass('friends-empty');
+    expect(screen.getByText('Bet with someone and they’ll show up here.')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Head to head' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'All 3' }));
     expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
