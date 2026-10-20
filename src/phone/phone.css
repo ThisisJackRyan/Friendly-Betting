@@ -3181,8 +3181,22 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .bet-stats span {
     font-size: 7px;
   }
+  /* Five filters: tighter here, and scroll sideways rather than push the
+     page wider if the labels still can't fit. */
+  .bet-filters {
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .bet-filters::-webkit-scrollbar {
+    display: none;
+  }
   .bet-filters button {
+    padding-left: 4px;
+    padding-right: 4px;
     font-size: 10px;
+    white-space: nowrap;
   }
   .vote-header > span {
     display: none;
@@ -3559,3 +3573,69 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .paywall-owned { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
 .paywall-owned .pro-badge { margin: 0 8px 0 0; }
 .paywall-actions .secondary:disabled { opacity: 0.55; }
+
+/* My bets, Friends: head to head records and each friend's shared bets. */
+.friends { display: flex; flex-direction: column; gap: 12px; }
+.friends .eyebrow { margin: 0; }
+.friends-empty { margin: 8px 0; color: var(--muted); font-size: 14px; }
+.friend-list,
+.friend-bets { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.friend {
+  border-radius: var(--radius-card);
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.friend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'name record chevron' 'together together together';
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 16px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.friend-name { grid-area: name; font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.friend-record { grid-area: record; display: flex; gap: 6px; }
+.friend-together { grid-area: together; color: var(--muted); font-size: 12px; }
+.friend-together strong { color: var(--ink); }
+.friend-chevron { grid-area: chevron; color: var(--muted); transition: transform 150ms ease-out; }
+.friend-row[aria-expanded='true'] .friend-chevron { transform: rotate(180deg); }
+.friend-row:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: var(--radius-card); }
+.friend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  background: #eeeff3;
+  color: #5d6372;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.friend-pill.win { background: #edf3e8; color: var(--accent); }
+.friend-pill.loss { background: #f5f0e4; color: #796038; }
+.friend-pill.called-off { white-space: normal; }
+.friend-bets { padding: 0 12px 14px; }
+.friend-bet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 40px 14px 14px;
+  border-radius: 12px;
+  background: #f6f8f2;
+  color: var(--ink);
+  text-decoration: none;
+}
+.friend-bet .bet-card-top { justify-content: flex-start; flex-wrap: wrap; }
+.friend-bet-question { font-size: 15px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.friend-bet-arrow { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #637853; }
+.friend-bet:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }

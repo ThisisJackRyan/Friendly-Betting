@@ -287,3 +287,82 @@ describe('delete a bet', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
   });
 });
+
+describe('Friends', () => {
+  const pick = (voterId, name, optionId) => ({ voterId, name, optionId });
+  const crewBets = [
+    {
+      id: 'won', createdByID: 'creator', createdAt: 5, schemaVersion: 2, type: 'money-line', question: 'Bears win?',
+      status: 'closed', winnerId: 'a', options,
+      votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b'), pick('uid-ben', 'Ben', 'a')],
+    },
+    {
+      id: 'lost', createdByID: 'creator', createdAt: 4, schemaVersion: 2, type: 'money-line', question: 'Over 40?',
+      status: 'closed', winnerId: 'b', options, votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b')],
+    },
+    {
+      id: 'off', createdByID: 'creator', createdAt: 3, schemaVersion: 2, type: 'money-line', question: 'Rain delay?',
+      status: 'called-off', options, votes: [pick('uid-ana', 'Ana', 'b')],
+    },
+    {
+      id: 'live', createdByID: 'creator', createdAt: 2, schemaVersion: 2, type: 'prop', question: 'Who wins game night?',
+      status: 'open', stake: 'Coffee', options, votes: [pick('uid-ana', 'Ana', 'b')],
+    },
+  ];
+  const showFriends = async () => {
+    const filters = screen.getByRole('group', { name: 'Filter bets by status' });
+    await userEvent.click(within(filters).getByRole('button', { name: /^Friends/ }));
+  };
+
+  test('lists each friend with their record and opens their shared bets', async () => {
+    subscribeMyBets.mockImplementation((_uid, publish) => { publish(crewBets); return () => {}; });
+    render(<MyBetsList user={user} />);
+    const filters = screen.getByRole('group', { name: 'Filter bets by status' });
+    expect(within(filters).getByRole('button', { name: 'Friends 2' })).toBeInTheDocument();
+    await showFriends();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bears win?')).not.toBeInTheDocument();
+    const section = screen.getByRole('region', { name: 'Head to head' });
+    const rows = within(section).getAllByRole('button');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'Ana1 W1 LBets together 4',
+      'Ben0 W0 LBets together 1',
+    ]);
+    expect(section).not.toHaveTextContent('Me');
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(rows[0]);
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'true');
+    const history = document.getElementById(rows[0].getAttribute('aria-controls'));
+    const links = within(history).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/t/won', '/t/lost', '/t/off', '/t/live']);
+    expect(links[0]).toHaveTextContent('Settled');
+    expect(within(links[0]).getByText('W')).toHaveClass('friend-pill', 'win');
+    expect(within(links[1]).getByText('L')).toHaveClass('friend-pill', 'loss');
+    expect(links[2]).toHaveTextContent('This bet was called off.');
+    expect(links[2]).not.toHaveTextContent(/\bW\b|\bL\b/);
+    expect(within(links[3]).getByText('Open')).toHaveClass('status', 'open');
+    expect(links[3]).toHaveTextContent('Coffee');
+    expect(links[3].querySelector('.friend-pill')).toBeNull();
+
+    await userEvent.click(rows[1]);
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
+    const benLinks = within(document.getElementById(rows[1].getAttribute('aria-controls'))).getAllByRole('link');
+    // Same side as the creator: settled, but no W or L.
+    expect(benLinks).toHaveLength(1);
+    expect(benLinks[0]).toHaveTextContent('Settled');
+    expect(benLinks[0].querySelector('.friend-pill')).toBeNull();
+    await userEvent.click(rows[1]);
+    expect(screen.queryAllByRole('link', { name: /Bears win/ })).toHaveLength(0);
+  });
+
+  test('with no friends yet it shows a plain label', async () => {
+    render(<MyBetsList user={user} />);
+    // The only pick on the fixtures has no name, so nobody can be listed.
+    await showFriends();
+    expect(screen.getByText('No friends yet')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Head to head' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'All 3' }));
+    expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
+  });
+});
