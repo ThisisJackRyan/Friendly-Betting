@@ -13,7 +13,7 @@
 // and vote-called-off.png, and a settled bet whose winners all skipped their
 // name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
 // tally, house-ad.png, and the thank-you after it, thank-you.png, and the
-// same after Settle & notify, settle-house-ad.png, settle-thank-you.png, and
+// same after a Settle & notify with no Undo, settle-house-ad.png, settle-thank-you.png, and
 // the reveal once the thank-you continues, settle-reveal-after-ad.png, and Pro:
 // the paywall at /pro, paywall.png, a founder's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
@@ -175,7 +175,9 @@ async function startServer() {
 // `plan` is the signed-in user's entitlement (src/phone/entitlementApi.js is
 // swapped too), and `paywall` turns the paywall flag on in proConfig.js.
 // `bets` is My bets' whole list, when it should hold more than `bet`.
-async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false }) {
+// `noUndo` makes Settle & notify come back with a number settledAt, as an
+// older build wrote: no Undo, the one settle the ad still shows on.
+async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false, noUndo = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -202,7 +204,7 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
       // settledAt null, as the real settleBet returns before the server time.
-      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: null, settlement: buildSettlement(bet, id) });
+      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: ${noUndo ? 'Date.now()' : 'null'}, settlement: buildSettlement(bet, id) });
       export const undoSettle = async () => ({ ...bet, status: 'open', winnerId: null });
       export const callOffBet = async () => ({ ...bet, status: 'closed', calledOff: true, settledAt: null });
       export const deleteBet = async () => {};`,
@@ -573,6 +575,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     run: settleAd,
   },
   {
@@ -581,6 +584,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     async run(page) {
       // Held on the thank-you, which would otherwise continue after 1.5 s.
       await page.clock.install();
@@ -596,6 +600,7 @@ const SHOTS = [
     user: JACK,
     bet: OPEN_BET,
     ads: true,
+    noUndo: true,
     async run(page) {
       await settleAd(page);
       await page.getByRole('button', { name: 'Close ad' }).click();
@@ -745,7 +750,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall, noUndo: shot.noUndo });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

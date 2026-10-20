@@ -79,6 +79,8 @@ test('browser back walks the create steps and keeps the draft', async ({ page })
 
 // `serverTime`: settles come back with settledAt null, as the real settleBet
 // returns them before the server time arrives, so the Undo countdown runs.
+// Without it settledAt is a number, as an older build wrote: no Undo, like a
+// settle already saved past its window, the one case the settle ad covers.
 async function mockCrew(page, { votes, share, patch, serverTime = false } = {}) {
   const bet = {
     id: 'crew123', code: 'crew123', schemaVersion: 2, type: 'money-line',
@@ -465,7 +467,28 @@ test('settle with ads off (the default): straight to the reveal as before', asyn
   expect(errors).toEqual([]);
 });
 
-test('settle with ads on: the house ad, then the thank-you, then the reveal once', async ({ page }) => {
+test('settle with ads on: no ad and no thank-you, straight to the reveal with the full 30s Undo', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.clock.install();
+  await mockCrew(page, { share: 'dismiss', serverTime: true });
+  await enableAds(page);
+  await settleOnPackers(page);
+  await expect(settledRegion(page)).toContainText('Packers won');
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeVisible();
+  await expect(page.locator('.undo-settle-count')).toHaveText('30s');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  // Not later either, and the settle caps are not touched.
+  await page.clock.runFor(31000);
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-house-ad-host]')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('fb.ads.caps.v1'))).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test('settle with ads on and no Undo (an older settledAt): the house ad, then the thank-you, then the reveal once', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await mockCrew(page, { share: 'dismiss' });
@@ -492,6 +515,7 @@ test('settle with ads on: the house ad, then the thank-you, then the reveal once
   await expect(settledRegion(page)).toHaveCount(1);
   await expect(settledRegion(page)).toContainText('Packers won');
   await expect(page.getByRole('button', { name: 'Close & settle', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
 
   // Share the result was not opened by the ad flow; it still takes a tap.
   expect(await crewShares(page)).toEqual([]);

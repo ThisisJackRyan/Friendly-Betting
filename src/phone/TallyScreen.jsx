@@ -33,6 +33,7 @@ import ResultCard from './ResultCard';
 import SettledReveal from './SettledReveal';
 import RunItBack from './RunItBack';
 import UndoSettle from './UndoSettle';
+import { undoRemainingMs } from './undoSettle';
 import ConfirmDialog from './ConfirmDialog';
 import { buildReveal } from './reveal';
 import { rememberBet } from './notificationStore';
@@ -115,7 +116,8 @@ const TallyScreen = () => {
   const invite = useInviteShare({
     continueLabel: <><FiShare2 size={18} aria-hidden="true" />{INVITE_LABEL}</>,
   });
-  // After a settle saves: maybe an interstitial and a thank-you, then the reveal.
+  // After a settle saves with no Undo to offer: maybe an interstitial and a
+  // thank-you, then the reveal. A settle with Undo skips both (confirmSettle).
   const settleAd = useSettleAd();
 
   useEffect(() => {
@@ -137,17 +139,20 @@ const TallyScreen = () => {
       return;
     }
     // Hold from the tap when an ad may follow: the snapshot can flip to
-    // settled before settleBet resolves.
+    // settled before settleBet resolves. Only a read of the caps: nothing is
+    // counted unless an ad actually shows.
     const tryAd = settleAd.mayShow();
     if (tryAd) setHeld(bet);
     setSaving(true);
     setError('');
     setUndoError('');
     let settled;
+    let localAt;
     try {
       // Saves first, and asks the server for the result texts, before any ad.
       settled = await settleBet(betId, winnerId);
-      setSettledLocalAt(Date.now());
+      localAt = Date.now();
+      setSettledLocalAt(localAt);
     } catch (err) {
       setHeld(null);
       setError(friendlyError(err, 'Could not settle this bet.'));
@@ -161,15 +166,18 @@ const TallyScreen = () => {
       setSettling(false);
       setSaving(false);
     };
-    if (!tryAd) {
+    // A settle with Undo goes straight to the reveal, with no ad and no
+    // thank-you, so the whole window is there to use (docs/ADS.md). Only a
+    // settle that comes back with no Undo (one already saved, from a stale
+    // screen) goes through the ad gate.
+    if (!tryAd || undoRemainingMs(settled, { localAt }) > 0) {
       reveal();
       return;
     }
     await settleAd.run(reveal);
   };
 
-  // Back to open, within the window. An ad already shown stays counted, so
-  // settling again goes through the usual ad caps.
+  // Back to open, within the window. Settling again skips the ad too.
   const onUndo = async () => {
     if (undoing) return;
     setUndoing(true);

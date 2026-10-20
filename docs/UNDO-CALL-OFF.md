@@ -46,10 +46,13 @@ countdown then runs from the moment this screen's settle saved.
 
 ## Ads
 
-Unchanged: the settle saves, then maybe the interstitial and the thank-you, then the
-reveal. Undo appears with the reveal, so time spent on an ad comes out of the 30s. An ad
-already shown stays counted; undoing and settling again goes through the usual caps.
-Undo and Call off never show an ad.
+A settle with Undo shows no ad: it saves, then goes straight to the reveal with the full
+30s countdown. No interstitial and no thank-you, before or after, and nothing counts
+against the settle caps. Time on an ad would come out of the window, and an ad later on
+is not at a natural transition (docs/ADS.md, Settle interstitial). Undoing and settling
+again is the same. The settle ad gate is left in place for a settle that comes back with
+no Undo (one already saved past its window, from a stale screen). Undo and Call off never
+show an ad.
 
 ## Result texts
 

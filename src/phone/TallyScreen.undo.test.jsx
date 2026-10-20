@@ -285,21 +285,19 @@ describe('Undo after a settle', () => {
     expect(writes).toHaveLength(1);
   });
 
-  test('with an ad, Undo shows after the reveal, counting from the settle', async () => {
+  test('with ads allowed, a settle still skips the ad and thank-you: Undo has the full 30s', async () => {
     canShowInterstitial.mockReturnValue(true);
     showInterstitial.mockResolvedValue({ shown: true, skipped: false, reason: 'shown' });
     await renderTally();
     await settleOnNo();
     await pushStored();
-    expect(screen.getByRole('dialog', { name: AD_THANKS_LINE })).toBeInTheDocument();
-    expect(undoButton()).not.toBeInTheDocument();
-    await advance(1500);
+    expect(screen.queryByRole('dialog', { name: AD_THANKS_LINE })).not.toBeInTheDocument();
     expect(revealRegion()).toHaveTextContent('No won');
     expect(undoButton()).toBeInTheDocument();
-    expect(screen.getByText('29s')).toBeInTheDocument();
-    // Undo never shows an ad; the one shown stays counted by the ad caps.
-    await tap(undoButton());
-    expect(showInterstitial).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('30s')).toBeInTheDocument();
+    await advance(30000);
+    expect(undoButton()).not.toBeInTheDocument();
+    expect(showInterstitial).not.toHaveBeenCalled();
   });
 
   test('coming back within the window shows what is left of it, from the server time', async () => {

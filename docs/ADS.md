@@ -143,15 +143,32 @@ ad spends the tap that started the share. So:
 
 ## Settle interstitial
 
-When the creator settles on the tally (Close & settle, pick the winner, Settle & notify),
-`TallyScreen` runs `useSettleAd` / `runSettleAd` (`src/ads/settleGate.js`):
+**A settle with Undo shows no ad.** A fresh settle comes back with the creator's 30s Undo
+(docs/UNDO-CALL-OFF.md), and an ad and thank-you in front of the reveal would eat that window,
+or all of it. So when the saved settle has Undo left (`undoRemainingMs(settled, { localAt }) > 0`),
+`confirmSettle` goes straight to the reveal: no `showInterstitial`, no thank-you, and nothing is
+counted against the settle caps. The ad is not moved to later either: an interstitial 30 s after
+the tap is not at a natural transition, which is where AdMob wants them. Every settle the tally
+makes today is fresh, so in practice the settle ad does not show.
 
-1. `canShowInterstitial('settle')` at the tap. If false (flag off, Pro, capped, too soon, busy),
-   nothing about the settle changes: the save, then the reveal, exactly as before ads.
+The gate, the `settle` placement and its caps all stay in place, so the ad can be pointed at a
+better moment later. The one path that still reaches it is a settle that comes back with no Undo:
+`settleBet` hands back a settle already saved with the same winner (a stale screen, say the
+creator's other tab settled first) whose window has passed, or whose `settledAt` is a number from
+an older build. There is no settle outside the tally and no native-only settle path. That path
+runs the steps below, unchanged; `src/ads/settleGate.test.js` covers the gate on the real ad
+service, and `src/phone/TallyScreen.settleAd.test.jsx` covers both the fresh settle (no ad, caps
+untouched) and the no-Undo one (ad, counted).
+
+When the gate runs, `TallyScreen` uses `useSettleAd` / `runSettleAd` (`src/ads/settleGate.js`):
+
+1. `canShowInterstitial('settle')` at the tap, a read of the caps that counts nothing. If false
+   (flag off, Pro, capped, too soon, busy), nothing about the settle changes: the save, then the
+   reveal, exactly as before ads.
 2. The save always goes first: `settleBet` (the Firestore transaction, then the fire-and-forget
    `requestResultTexts(code)` that sends the native result texts). The ad never starts before it
    resolves and never delays it. If the save fails, the error shows as before and no ad is tried.
-3. After a successful save, `await showInterstitial({ placement: 'settle' })`. Any skip
+3. After a successful save with no Undo, `await showInterstitial({ placement: 'settle' })`. Any skip
    (`timeout` after 5 s, `error`, `not-loaded`, ...) or a throw goes straight to the reveal.
 4. Only when `shown` is true: the same `AdThanks` overlay and line. No share follows, so there
    is no gesture rule: it continues by itself after 1.5 s, or on a tap, on every platform.
@@ -163,7 +180,7 @@ When the creator settles on the tally (Close & settle, pick the winner, Settle &
 While the ad and thank-you are up the tally holds the screen it had at the tap (the picker
 showing Settling…), even though the live snapshot flips the bet to settled underneath. The hold
 starts at the tap whenever an ad may follow, since the snapshot can land before `settleBet`
-resolves. The reveal and its scroll happen in one render after the overlay closes, so there is
+resolves; a settle with Undo lets it go as soon as the save resolves. The reveal and its scroll happen in one render after the overlay closes, so there is
 no layout shift and no double reveal. A bet deleted meanwhile is not held.
 
 If the tally unmounts while the save is in flight, the save still lands but no ad starts. If it
@@ -243,10 +260,11 @@ From Google's sample ad units (they always serve test ads, safe to click):
 - Unit tests for the invite and settle flows: `npx jest src/ads src/phone/TallyScreen`.
 - E2E: `CI=1 npm run test:mobile` covers the invite with ads off, with ads on (house ad, then the
   thank-you, then the share from its tap) and skipped, and the settle with ads off, with ads on
-  (house ad, thank-you, reveal) and skipped (capped). The e2e swaps in `src/ads/config.js` with
+  (no ad, the full 30s Undo, caps untouched), with ads on and no Undo (house ad, thank-you,
+  reveal) and skipped (capped). The e2e swaps in `src/ads/config.js` with
   the flag on in the browser; the dev server itself keeps the default.
 - Screenshots: `npm run screenshots -- house-ad.png thank-you.png --copy-to=<dir>`, and for the
-  settle `settle-house-ad.png settle-thank-you.png settle-reveal-after-ad.png`.
+  settle with no Undo `settle-house-ad.png settle-thank-you.png settle-reveal-after-ad.png`.
 - Web: `NEXT_PUBLIC_ADS_ENABLED=1 npm run dev`, open a tally you made, tap Text the crew. Expect
   the house ad overlay (closes on the button, Escape, or after 10 s), then the thank-you; tap it
   to share.
