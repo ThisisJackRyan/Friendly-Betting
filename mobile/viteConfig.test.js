@@ -12,6 +12,7 @@ function defined(env) {
   `;
   const base = { ...process.env };
   delete base.NEXT_PUBLIC_RESULT_TEXTS;
+  delete base.NEXT_PUBLIC_ADS_ENABLED;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     env: { ...base, ...env },
     encoding: 'utf8',
@@ -20,9 +21,22 @@ function defined(env) {
 }
 
 test('the mobile build turns the result texts flag on from the build env', () => {
-  expect(defined({ NEXT_PUBLIC_RESULT_TEXTS: '1' })).toEqual({ 'process.env.NEXT_PUBLIC_RESULT_TEXTS': '"1"' });
+  expect(defined({ NEXT_PUBLIC_RESULT_TEXTS: '1' })).toEqual({
+    'process.env.NEXT_PUBLIC_RESULT_TEXTS': '"1"',
+    'process.env.NEXT_PUBLIC_ADS_ENABLED': '""',
+  });
 });
 
-test('the mobile build leaves the flag off by default and exposes nothing else', () => {
-  expect(defined({})).toEqual({ 'process.env.NEXT_PUBLIC_RESULT_TEXTS': '""' });
+test('the mobile build turns the ads flag on from the build env', () => {
+  expect(defined({ NEXT_PUBLIC_ADS_ENABLED: '1' })).toEqual({
+    'process.env.NEXT_PUBLIC_RESULT_TEXTS': '""',
+    'process.env.NEXT_PUBLIC_ADS_ENABLED': '"1"',
+  });
+});
+
+test('the mobile build leaves both flags off by default and exposes nothing else', () => {
+  expect(defined({})).toEqual({
+    'process.env.NEXT_PUBLIC_RESULT_TEXTS': '""',
+    'process.env.NEXT_PUBLIC_ADS_ENABLED': '""',
+  });
 });

@@ -148,8 +148,9 @@ Preflight never touches auth or the database.
 | --- | --- | --- |
 | `FIREBASE_SERVICE_ACCOUNT` | Vercel, server only | Service-account JSON (or base64 of it) for the API routes. Optional; without it the routes return 503 and the app uses its client fallbacks. |
 | `NEXT_PUBLIC_RESULT_TEXTS` | Vercel and native builds | `1` shows the optional result-text field and fires the send call after settling. Leave unset until an SMS provider is wired into `src/server/sms.js` and the service account is set. |
+| `NEXT_PUBLIC_ADS_ENABLED` | Vercel and native builds | `1` lets `showInterstitial` show ads (house ad on web, AdMob test ads in the app). No flow calls it yet. See [docs/ADS.md](ADS.md). |
 
-`NEXT_PUBLIC_RESULT_TEXTS` is read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
+`NEXT_PUBLIC_RESULT_TEXTS` and `NEXT_PUBLIC_ADS_ENABLED` are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 
 ## Screenshots
 
