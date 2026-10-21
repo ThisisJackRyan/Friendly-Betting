@@ -14,16 +14,38 @@ export function subscribeEntitlement(uid, onChange) {
   );
 }
 
+// A hung read or purchase gives up after this long, so the Pro sheet is
+// never stuck on it.
+const TIMEOUT_MS = 20000;
+
+function withTimeout(promise, controller) {
+  let timer;
+  const expired = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller?.abort();
+      const err = new Error('Timed out.');
+      err.code = 'timeout';
+      reject(err);
+    }, TIMEOUT_MS);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
+}
+
 // One fresh read of the user's own entitlement (Restore purchase), from the
 // server rather than the cache. null when there is none.
 export async function fetchEntitlement(uid) {
-  const snap = await getDocFromServer(doc(db, 'entitlements', uid));
+  const snap = await withTimeout(getDocFromServer(doc(db, 'entitlements', uid)));
   return snap.exists() ? snap.data() : null;
 }
 
 // Preview only: asks the mock purchase route to grant `plan` ('pro') to the
 // signed-in user. The new entitlement arrives through subscribeEntitlement.
-export async function requestMockPurchase(plan) {
+export function requestMockPurchase(plan) {
+  const controller = new AbortController();
+  return withTimeout(postMockPurchase(plan, controller.signal), controller);
+}
+
+async function postMockPurchase(plan, signal) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
   const token = await user.getIdToken();
@@ -31,6 +53,7 @@ export async function requestMockPurchase(plan) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ plan }),
+    signal,
   });
   const body = await res.json().catch(() => ({}));
   if (res.ok) return body;

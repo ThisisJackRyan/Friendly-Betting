@@ -1,7 +1,8 @@
 # Pro tier
 
-Creators get 3 free bet creations, then Pro at $3/mo, the only plan. Bettors (anyone who only picks a side) are
-always free and never need an account.
+Pro is $3/mo, the only plan: no ads, Run it back and head-to-head stats. Creating bets is not capped
+(`FREE_BETS` is not enforced yet). Bettors (anyone who only picks a side) are always free and never
+need an account.
 
 Today Pro is a data model, rules, a client listener, badges, a flagged paywall and a
 preview-only mock purchase. **No real payment exists yet**; see [TODOs](#todos-for-real-billing).

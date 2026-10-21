@@ -78,7 +78,7 @@ Firebase JS remains the session authority on both platforms, with IndexedDB pers
 
 Native release check: create each bet type on a device, verify a configured test phone, invite a browser participant, cast picks from both clients, settle as the creator, check winner/loser results, reopen the app, share the result and confirm the URL uses prod. Also test OTP resend/expiry, Android back, cold/warm deep links, notches, keyboard, rotation and lost connection. Browser smoke tests cannot verify native phone auth, Messages, OS link association or signing.
 
-There is no paywall in this release. Pricing stays locked: 3 free creations, then $3/month unlimited. There is one plan (Pro); the Founder tier was dropped. Bettors always free. One non-voter nudge and rematches remain later work. (The README only says bettors are free; it lists no prices.)
+The paywall is off unless `NEXT_PUBLIC_PRO_PAYWALL=1` (web only). Pro is $3/month: no ads, Run it back and head-to-head stats. There is one plan (Pro); the Founder tier was dropped. Creating bets is not capped: `FREE_BETS` in `src/phone/proConfig.js` is not enforced anywhere yet. Bettors always free. One non-voter nudge remains later work. (The README has the same Pro line.)
 
 ### Current close/settle and SMS map
 
