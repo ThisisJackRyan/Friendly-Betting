@@ -265,13 +265,43 @@ describe('Undo after a settle', () => {
     await renderTally();
     await settleOnNo();
     await pushStored();
-    failNext = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
-    await tap(undoButton());
-    expect(screen.getByRole('alert')).toHaveTextContent('Too late to undo.');
-    expect(revealRegion()).toHaveTextContent('No won');
     failNext = new Error('');
     await tap(undoButton());
     expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t undo that. Try again.');
+    expect(revealRegion()).toHaveTextContent('No won');
+  });
+
+  test('a rules refusal with time left is a failed undo, not too late', async () => {
+    await renderTally();
+    await settleOnNo();
+    await pushStored();
+    await advance(10000);
+    expect(screen.getByText('20s')).toBeInTheDocument();
+    failNext = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    await tap(undoButton());
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t undo that. Try again.');
+    expect(screen.queryByText('Too late to undo.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saving was blocked/)).not.toBeInTheDocument();
+    expect(revealRegion()).toHaveTextContent('No won');
+    // Still time on the clock: Undo stays up to try again.
+    expect(undoButton()).toBeEnabled();
+  });
+
+  test('a refusal that comes back after the countdown ran out says too late', async () => {
+    await renderTally();
+    await settleOnNo();
+    await pushStored();
+    await advance(28000);
+    expect(screen.getByText('2s')).toBeInTheDocument();
+    runTransaction.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      setTimeout(() => reject(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })), 3000);
+    }));
+    await tap(undoButton());
+    expect(screen.getByRole('button', { name: 'Undoing…' })).toBeDisabled();
+    await advance(3000);
+    expect(screen.getByRole('alert')).toHaveTextContent('Too late to undo.');
+    expect(undoButton()).not.toBeInTheDocument();
+    expect(revealRegion()).toHaveTextContent('No won');
   });
 
   test('past the window the api refuses even if the button were tapped late', async () => {
@@ -411,6 +441,17 @@ describe('Call off', () => {
     expect(shareImageButton()).not.toBeInTheDocument();
     await advance(2000);
     expect(renderWinnerCard).not.toHaveBeenCalled();
+  });
+
+  test('a rules refusal on call off says call off failed, not saving was blocked', async () => {
+    await renderTally();
+    await tap(callOffButton());
+    failNext = Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    await tap(within(dialog()).getByRole('button', { name: 'Call off bet' }));
+    expect(within(dialog()).getByRole('alert')).toHaveTextContent('Couldn’t call off this bet. Try again.');
+    expect(screen.queryByText(/Saving was blocked/)).not.toBeInTheDocument();
+    expect(within(dialog()).getByRole('button', { name: 'Call off bet' })).toBeEnabled();
+    expect(revealRegion()).not.toBeInTheDocument();
   });
 
   test('a failed call-off keeps the dialog open with the error', async () => {

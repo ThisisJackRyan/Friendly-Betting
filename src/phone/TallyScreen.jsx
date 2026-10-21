@@ -48,6 +48,26 @@ const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
 
 // The Call off confirm. The reveal after keeps REVEAL_COPY.calledOffSub.
 const CALL_OFF_COPY = 'Nobody wins this one.';
+const CALL_OFF_FAILED = 'Couldn\u2019t call off this bet. Try again.';
+
+const UNDO_TOO_LATE = 'Too late to undo.';
+const UNDO_FAILED = 'Couldn\u2019t undo that. Try again.';
+
+// "Too late" only when the window really is over: this screen's countdown ran
+// out before the failure came back, or undoSettle measured the server
+// settledAt past the rules' window. A rules refusal with time still on the
+// clock is a failed undo the creator can try again.
+function undoErrorCopy(err, expired) {
+  if (expired || err?.message === UNDO_TOO_LATE) return UNDO_TOO_LATE;
+  if (err?.code === 'permission-denied') return UNDO_FAILED;
+  return friendlyError(err, UNDO_FAILED);
+}
+
+// Call off's own line for a rules refusal, not the generic save one.
+function callOffErrorCopy(err) {
+  if (err?.code === 'permission-denied') return CALL_OFF_FAILED;
+  return friendlyError(err, CALL_OFF_FAILED);
+}
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -188,7 +208,7 @@ const TallyScreen = () => {
       setSettledLocalAt(null);
       setBet(reopened);
     } catch (err) {
-      setUndoError(err?.code === 'permission-denied' ? 'Too late to undo.' : friendlyError(err, 'Couldn’t undo that. Try again.'));
+      setUndoError(undoErrorCopy(err, undoRemainingMs(bet, { localAt: settledLocalAt }) <= 0));
     } finally {
       setUndoing(false);
     }
@@ -208,7 +228,7 @@ const TallyScreen = () => {
       setBet(off);
       setCallOff({ open: false, busy: false, error: '' });
     } catch (err) {
-      setCallOff({ open: true, busy: false, error: friendlyError(err, 'Couldn’t call off this bet. Try again.') });
+      setCallOff({ open: true, busy: false, error: callOffErrorCopy(err) });
     }
   };
 
