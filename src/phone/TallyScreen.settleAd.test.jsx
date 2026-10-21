@@ -393,6 +393,45 @@ describe('a settle with no Undo (already saved, from a stale screen)', () => {
     expect(document.querySelector('.reveal-headline')).toHaveFocus();
   });
 
+  test('the headline takes focus without scrolling: the reveal scrolls itself into place', async () => {
+    const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      await renderTally();
+      await settleOnNo();
+      await settle();
+      focus.mockClear();
+      await tap(screen.getByText(AD_THANKS_LINE));
+      const headline = document.querySelector('.reveal-headline');
+      expect(headline).toHaveFocus();
+      const onHeadline = focus.mock.contexts.map((element, i) => [element, focus.mock.calls[i]])
+        .filter(([element]) => element === headline);
+      expect(onHeadline).toEqual([[headline, [{ preventScroll: true }]]]);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  test('focus the user has put somewhere else is left there as the thank-you closes', async () => {
+    const elsewhere = document.createElement('input');
+    document.body.appendChild(elsewhere);
+    await renderTally();
+    await settleOnNo();
+    await settle();
+    expect(within(thanks()).getByRole('button')).toHaveFocus();
+    // What the page sees as the layer goes: focus already on another control.
+    const active = jest.spyOn(document, 'activeElement', 'get').mockReturnValue(elsewhere);
+    try {
+      await tap(screen.getByText(AD_THANKS_LINE));
+      expect(thanks()).not.toBeInTheDocument();
+      expect(revealRegion()).toHaveTextContent('No won');
+      active.mockRestore();
+      expect(document.querySelector('.reveal-headline')).not.toHaveFocus();
+    } finally {
+      active.mockRestore();
+      elsewhere.remove();
+    }
+  });
+
   test.each(['disabled', 'pro', 'capped', 'interval', 'busy', 'timeout', 'error', 'not-loaded'])(
     'an ad skipped as %s reveals directly, with no thank-you',
     async (reason) => {

@@ -70,16 +70,19 @@ export default function HouseAd({ onClose, autoCloseMs = 0 }) {
   };
 
   // While the ad is up the page behind it is inert; on close (or unmount)
-  // focus goes back where it was.
+  // focus goes back where it was, unless something else has taken it.
   useEffect(() => {
     const previous = document.activeElement;
-    const root = appRoot(dialog.current);
+    const node = dialog.current;
+    const root = appRoot(node);
     const madeInert = Boolean(root && !root.hasAttribute('inert'));
     if (madeInert) root.setAttribute('inert', '');
     return () => {
       if (madeInert) root.removeAttribute('inert');
       try {
-        if (previous && previous !== document.body && previous.isConnected) previous.focus?.();
+        const active = document.activeElement;
+        const free = !active || active === document.body || !active.isConnected || Boolean(node?.contains(active));
+        if (free && previous && previous !== document.body && previous.isConnected) previous.focus?.({ preventScroll: true });
       } catch {
         // Nowhere to go back to.
       }

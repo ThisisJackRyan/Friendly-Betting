@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import AdThanks, { AD_THANKS_LINE, continueButtonStyle, thanksLayerStyle } from './AdThanks';
+import AdThanks, { AD_THANKS_LINE, continueButtonStyle, focusIsFree, thanksLayerStyle } from './AdThanks';
 
 afterEach(() => {
   jest.useRealTimers();
@@ -112,4 +112,28 @@ test('once it is gone, focus is free again', () => {
   const under = screen.getByRole('button', { name: 'Under the layer' });
   act(() => { under.focus(); });
   expect(under).toHaveFocus();
+});
+
+describe('focusIsFree: whether focus may go back once the thank-you closes', () => {
+  test('free on the body, or still inside the layer', () => {
+    render(<AdThanks onContinue={() => {}} label="Text the crew" />);
+    expect(screen.getByRole('button', { name: 'Text the crew' })).toHaveFocus();
+    expect(focusIsFree()).toBe(true);
+    act(() => { document.activeElement.blur(); });
+    expect(document.activeElement).toBe(document.body);
+    expect(focusIsFree()).toBe(true);
+  });
+
+  test('free when nothing, or a removed node, has focus', () => {
+    const gone = document.createElement('button');
+    expect(focusIsFree({ activeElement: null, body: document.body })).toBe(true);
+    expect(focusIsFree({ activeElement: gone, body: document.body })).toBe(true);
+  });
+
+  test('not free once the user has focused something else on the page', () => {
+    render(<button type="button">Elsewhere</button>);
+    const other = screen.getByRole('button', { name: 'Elsewhere' });
+    act(() => { other.focus(); });
+    expect(focusIsFree()).toBe(false);
+  });
 });

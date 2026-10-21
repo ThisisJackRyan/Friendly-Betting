@@ -40,6 +40,7 @@ import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 import { useInviteShare } from '../ads/useInviteShare';
 import { useSettleAd } from '../ads/useSettleAd';
+import { focusIsFree } from '../ads/AdThanks';
 import { useProBadge } from './useEntitlement';
 
 const INVITE_LABEL = 'Text the crew';
@@ -306,12 +307,14 @@ const TallyScreen = () => {
       // The button is disabled until its share is done.
       if (sharing || locked) return;
       focusAfterThanks.current = null;
-      inviteButton.current?.focus();
+      // Not if the user has put focus somewhere else meanwhile.
+      if (focusIsFree()) inviteButton.current?.focus({ preventScroll: true });
       return;
     }
     if (held || !settled) return;
     focusAfterThanks.current = null;
-    resultRef.current?.querySelector('.reveal-headline')?.focus();
+    // The reveal scrolls itself into place (below); focus must not jump it.
+    if (focusIsFree()) resultRef.current?.querySelector('.reveal-headline')?.focus({ preventScroll: true });
   });
 
   const final = Boolean(settled);

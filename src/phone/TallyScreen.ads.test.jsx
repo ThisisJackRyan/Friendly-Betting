@@ -170,6 +170,53 @@ describe('Text the crew', () => {
     expect(inviteButton()).toHaveFocus();
   });
 
+  test('focus the user moved elsewhere while the share was open stays there, and the return does not scroll', async () => {
+    let finishShare;
+    shareMessage.mockImplementation(() => new Promise((resolve) => {
+      finishShare = () => resolve('copied');
+    }));
+    const elsewhere = document.createElement('input');
+    document.body.appendChild(elsewhere);
+    const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      await renderTally();
+      await tap(inviteButton());
+      await settle();
+      await tap(within(thanks()).getByRole('button', { name: 'Text the crew' }));
+      expect(thanks()).not.toBeInTheDocument();
+      act(() => { elsewhere.focus(); });
+      focus.mockClear();
+      await act(async () => { finishShare(); });
+      expect(inviteButton()).toBeEnabled();
+      expect(elsewhere).toHaveFocus();
+      expect(focus.mock.contexts).not.toContain(inviteButton());
+    } finally {
+      focus.mockRestore();
+      elsewhere.remove();
+    }
+  });
+
+  test('the return to Text the crew does not scroll the screen', async () => {
+    let finishShare;
+    shareMessage.mockImplementation(() => new Promise((resolve) => {
+      finishShare = () => resolve('copied');
+    }));
+    const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      await renderTally();
+      await tap(inviteButton());
+      await settle();
+      await tap(within(thanks()).getByRole('button', { name: 'Text the crew' }));
+      focus.mockClear();
+      await act(async () => { finishShare(); });
+      expect(inviteButton()).toHaveFocus();
+      const i = focus.mock.contexts.indexOf(inviteButton());
+      expect(focus.mock.calls[i]).toEqual([{ preventScroll: true }]);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   test('with no ad shown, Text the crew does not pull focus after the share', async () => {
     showInterstitial.mockResolvedValue({ shown: false, skipped: true, reason: 'capped' });
     await renderTally();

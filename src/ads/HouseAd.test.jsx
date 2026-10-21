@@ -74,6 +74,39 @@ test.each(['root', '__next'])('the app root #%s is inert while the ad is up, and
   expect(opener).toHaveFocus();
 });
 
+test('focus goes back to the opener without scrolling, and not over focus the user has put elsewhere', async () => {
+  const app = document.createElement('div');
+  app.id = 'root';
+  const opener = document.createElement('button');
+  const other = document.createElement('input');
+  app.append(opener, other);
+  document.body.appendChild(app);
+  opener.focus();
+  const focus = jest.spyOn(HTMLElement.prototype, 'focus');
+  try {
+    await act(async () => { showHouseAd(); });
+    const close = await screen.findByRole('button', { name: 'Close ad' });
+    focus.mockClear();
+    await userEvent.click(close);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(opener).toHaveFocus();
+    expect(focus.mock.calls[focus.mock.contexts.indexOf(opener)]).toEqual([{ preventScroll: true }]);
+
+    await act(async () => { showHouseAd(); });
+    await screen.findByRole('button', { name: 'Close ad' });
+    // Something outside the ad took focus before it closed (a script, say).
+    app.removeAttribute('inert');
+    act(() => { other.focus(); });
+    await userEvent.keyboard('{Escape}');
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.queryByRole('button', { name: 'Close ad' })).not.toBeInTheDocument();
+    expect(other).toHaveFocus();
+  } finally {
+    focus.mockRestore();
+    app.remove();
+  }
+});
+
 test('the Next app frame is the fallback root, and unmount alone clears inert', () => {
   const frame = document.createElement('div');
   frame.className = 'app-frame';
