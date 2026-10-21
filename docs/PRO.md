@@ -117,7 +117,9 @@ Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in f
   failed purchase shows `Couldn’t finish that. Try again.` above it.
 - **Restore purchase** re-reads `entitlements/{uid}` from the server (`fetchEntitlement` in
   `entitlementApi.js`, via `refreshEntitlement()` in `useEntitlement.js`, which shares the result
-  with every screen and the ad service). Pro found: `Restored. You’re Pro.`; none:
+  with every screen and the ad service). Pro found: `Restored. You’re Pro.`, or
+  `Restored. You’re Founder #7.` for a Founder (`Restored. You’re Pro.` if their number is
+  missing); none:
   `Nothing to restore on this account.` above the button. No store receipts are checked yet.
 - **Terms / Privacy** link to `NEXT_PUBLIC_TERMS_URL` / `NEXT_PUBLIC_PRIVACY_URL` in a new tab,
   each only when set; the dots only sit between links that show.

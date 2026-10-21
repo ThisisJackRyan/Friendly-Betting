@@ -100,6 +100,7 @@ export const PRO_COPY = {
   restore: 'Restore purchase',
   restoring: 'Restoring…',
   restored: 'Restored. You’re Pro.',
+  restoredFounder: (number) => `Restored. You’re Founder #${number}.`,
   nothingToRestore: 'Nothing to restore on this account.',
   terms: 'Terms',
   privacy: 'Privacy',

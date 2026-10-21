@@ -143,9 +143,10 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   };
 
   const badge = badgeFor(entitlement) || { kind: 'pro' };
-  let successLine = PRO_COPY.owned;
-  if (restored) successLine = PRO_COPY.restored;
-  else if (badge.kind === 'founder' && badge.number) successLine = PRO_COPY.ownedFounder(badge.number);
+  // A Founder whose number is unknown gets the Pro lines.
+  const founderNumber = badge.kind === 'founder' ? badge.number : undefined;
+  let successLine = founderNumber ? PRO_COPY.ownedFounder(founderNumber) : PRO_COPY.owned;
+  if (restored) successLine = founderNumber ? PRO_COPY.restoredFounder(founderNumber) : PRO_COPY.restored;
 
   let mainLabel = plan === 'founder' ? PRO_COPY.getFounder : PRO_COPY.getPro;
   if (buying) mainLabel = PRO_COPY.buying;

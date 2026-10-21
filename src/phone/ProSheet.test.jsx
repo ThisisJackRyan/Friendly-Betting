@@ -39,6 +39,7 @@ const SPEC = {
   restore: 'Restore purchase',
   restoring: 'Restoring…',
   restored: 'Restored. You’re Pro.',
+  restoredFounder7: 'Restored. You’re Founder #7.',
   nothing: 'Nothing to restore on this account.',
   terms: 'Terms',
   privacy: 'Privacy',
@@ -438,6 +439,38 @@ describe('Restore purchase', () => {
     expect(screen.getByRole('heading', { name: SPEC.restored })).toBeInTheDocument();
     // Shared at once: the ad service sees the restored plan.
     expect(adServiceIsPro()).toBe(true);
+  });
+
+  test('a restored Founder: their number under the large Founder badge', async () => {
+    fetchEntitlement.mockResolvedValue({ plan: 'founder', founderNumber: 7, expiresAt: null });
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    const line = screen.getByRole('heading', { level: 2 });
+    expect(line.textContent).toBe(SPEC.restoredFounder7);
+    expect(line.textContent).toBe('Restored. You\u2019re Founder #7.');
+    const badge = document.querySelector('.pro-sheet-success-badge');
+    expect(badge.querySelector('.pro-badge')).toHaveTextContent(/^Founder #7$/);
+    expect(badge.nextElementSibling).toBe(line);
+  });
+
+  test('a restored Pro member: Restored. You’re Pro. under the Pro badge', async () => {
+    fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: null });
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    const line = screen.getByRole('heading', { level: 2 });
+    expect(line.textContent).toBe(SPEC.restored);
+    expect(line.textContent).toBe('Restored. You\u2019re Pro.');
+    const badge = document.querySelector('.pro-sheet-success-badge');
+    expect(badge.querySelector('.pro-badge')).toHaveTextContent(/^Pro$/);
+    expect(badge.nextElementSibling).toBe(line);
+  });
+
+  test('a restored Founder with no number falls back to Restored. You’re Pro.', async () => {
+    fetchEntitlement.mockResolvedValue({ plan: 'founder', expiresAt: null });
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(SPEC.restored);
+    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent(/^Founder$/);
   });
 
   test('nothing found: the muted line above the button', async () => {
