@@ -644,9 +644,10 @@ test('settle with ads on but the settle ad capped for today: straight to the rev
   expect(errors).toEqual([]);
 });
 
-for (const [side, winner, ping, headline, subline] of [
-  ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Time for everyone else to pay up.'],
-  ['Packers', 'Sam', 'This one’s settled.', 'Sam won.', 'Not your day. Get ’em next time.'],
+// Jack is the creator: the preview reads his own win as the reveal will.
+for (const [side, winner, ping, headline, subline, previewLines] of [
+  ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Time for everyone else to pay up.', ['You called it.', 'Solo win. Time for everyone else to pay up.']],
+  ['Packers', 'Sam', 'This one’s settled.', 'Sam won.', 'Not your day. Get ’em next time.', ['Sam won the $20 pot', 'Time for everyone else to pay up.']],
 ]) {
   test(`settle in the app: ${winner} wins, with the right participant ping`, async ({ page }, testInfo) => {
     page.on('pageerror', (error) => console.error('App preview error:', error.message));
@@ -654,7 +655,10 @@ for (const [side, winner, ping, headline, subline] of [
     await page.goto('/t/crew123');
     await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
     await page.getByRole('button', { name: side, exact: true }).click();
-    await expect(page.getByRole('region', { name: 'Result preview' })).toContainText(`${winner} won the $20 pot`);
+    const preview = page.getByRole('region', { name: 'Result preview' });
+    await expect(preview.getByRole('heading', { level: 2 })).toHaveText(previewLines[0]);
+    await expect(preview).toContainText(previewLines[1]);
+    await expect(preview).not.toContainText('Bragging rights, secured.');
     await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
     const reveal = page.getByRole('region', { name: 'Settled result' });
     await expect(reveal).toContainText(`${side} won`);

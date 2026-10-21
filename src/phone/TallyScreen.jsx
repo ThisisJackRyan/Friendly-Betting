@@ -77,7 +77,8 @@ const SHARE_NOTE = {
   manual: 'Copy the message below.',
 };
 
-function SettlePicker({ bet, saving, onPick, onCancel }) {
+// voterId: the creator's, so the preview reads their own win as the reveal will.
+function SettlePicker({ bet, voterId, saving, onPick, onCancel }) {
   const [picked, setPicked] = useState(null);
   const preview = (bet.options || []).some((option) => option.id === picked) ? {
     ...bet, status: 'closed', winnerId: picked, settlement: buildSettlement(bet, picked),
@@ -92,7 +93,7 @@ function SettlePicker({ bet, saving, onPick, onCancel }) {
         </button>
       ))}
       {preview && <>
-        <ResultCard bet={preview} preview />
+        <ResultCard bet={preview} voterId={voterId} preview />
         <p className="field-hint">This locks the result. Friends get the final word when they open FRIENDLY where they made their pick.</p>
         <button type="button" className="cta press" disabled={saving} onClick={() => onPick(picked)}>{saving ? 'Settling…' : 'Settle & notify'}</button>
       </>}
@@ -422,7 +423,7 @@ const TallyScreen = () => {
               </button>
             )}
             {canSettle && settling && (
-              <SettlePicker bet={bet} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
+              <SettlePicker bet={bet} voterId={user?.uid} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
             )}
           </>
         )}

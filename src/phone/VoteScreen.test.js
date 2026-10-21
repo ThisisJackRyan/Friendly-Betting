@@ -292,6 +292,24 @@ test('the creator previews, confirms, and gets the committed result immediately'
   expect(shareMessage).toHaveBeenCalledWith(expect.not.stringContaining('Make your call'));
 });
 
+test('the preview reads the creator\'s own unnamed solo win as the reveal will, with the stake line', async () => {
+  subscribeBet.mockImplementation((_code, onChange) => {
+    onChange({ ...openBet, stake: 'Lunch', votes: [{ voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }] });
+    return () => {};
+  });
+  renderAt('/t/abc123', <TallyScreen />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Close & settle' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+  const preview = screen.getByRole('region', { name: 'Result preview' });
+  expect(within(preview).getByRole('heading', { level: 2 })).toHaveTextContent('You called it.');
+  expect(preview).toHaveTextContent('Solo win. Lunch is on everyone else.');
+  expect(preview).not.toHaveTextContent('A friend won');
+  expect(preview).not.toHaveTextContent('Bragging rights, secured.');
+  await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(within(preview).getByRole('heading', { level: 2 })).toHaveTextContent('Sam won');
+  expect(preview).toHaveTextContent('Lunch is on everyone else.');
+});
+
 test('failed settlement keeps the preview available and does not claim a result', async () => {
   settleBet.mockRejectedValue(new Error('Could not settle. Try again.'));
   renderAt('/t/abc123', <TallyScreen />);
