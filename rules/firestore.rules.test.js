@@ -265,6 +265,21 @@ describe('votes', () => {
     await assertFails(guest().doc('bets/abc123').update({ votes: nextVotes }));
     await assertFails(anon('anon-2').doc('bets/settled').update({ votes: nextVotes }));
   });
+
+  // renameVote: the same votes-only update, with only the name changed.
+  const renamed = [{ ...openBet.votes[0], name: 'Sammy' }];
+
+  test('a voter renames their own pick on an open bet', async () => {
+    await assertSucceeds(anon('anon-1').doc('bets/abc123').update({ votes: renamed }));
+  });
+
+  test('no renames on a settled or called-off bet, or signed out', async () => {
+    await assertFails(anon('anon-1').doc('bets/settled').update({ votes: renamed }));
+    await assertFails(anon('anon-1').doc('bets/settledoff').update({ votes: renamed }));
+    await seed({ 'bets/off': { ...openBet, code: 'off', status: 'closed', calledOff: true } });
+    await assertFails(anon('anon-1').doc('bets/off').update({ votes: renamed }));
+    await assertFails(guest().doc('bets/abc123').update({ votes: renamed }));
+  });
 });
 
 describe('creator edits (saveBet)', () => {

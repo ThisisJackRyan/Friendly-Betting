@@ -15,6 +15,7 @@ import { REVEAL_COPY, buildReveal, winnerPhrase } from './reveal';
 import * as voters from './voters';
 import * as inviteCopy from './inviteCopy';
 import * as resultTextCopy from './resultTextCopy';
+import * as nameEditCopy from './nameEditCopy';
 import { AUTH_COPY } from './creatorSession';
 
 // No placeholder copy ("TODO_UX: ...") may reach a screen, a copy table, or
@@ -218,11 +219,16 @@ describe('copy modules never hold TODO_UX', () => {
     ['voters', voters],
     ['inviteCopy', inviteCopy],
     ['resultTextCopy', resultTextCopy],
+    ['nameEditCopy', nameEditCopy],
     ['AUTH_COPY', AUTH_COPY],
   ])('%s', (_label, copy) => {
     const all = strings(copy);
     expect(all.length).toBeGreaterThan(0);
     all.forEach((text) => expect(text).not.toContain(MARKER));
+  });
+
+  test('the name edit copy has no em dashes', () => {
+    strings(nameEditCopy).forEach((text) => expect(text).not.toContain('\u2014'));
   });
 
   test('reveal helpers for unnamed winners', () => {

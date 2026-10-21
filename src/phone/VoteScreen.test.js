@@ -4,7 +4,8 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
-import { castVote, settleBet, subscribeBet } from './api';
+import { castVote, renameVote, settleBet, subscribeBet } from './api';
+import { NAME_EDIT_COPY } from './nameEditCopy';
 import { useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
@@ -42,6 +43,7 @@ jest.mock('./api', () => ({
   }),
   hydrateBet: async (bet) => bet,
   castVote: jest.fn(async () => {}),
+  renameVote: jest.fn(async () => {}),
   settleBet: jest.fn(async () => {}),
 }));
 
@@ -978,5 +980,103 @@ describe('the winner card follows the viewer', () => {
       expect(viewerId).toBe('user-1');
       expect(text.headline).toBe(headline);
     });
+  });
+});
+
+describe('adding or editing a name after picking', () => {
+  const voter = { uid: 'anon-1', isAnonymous: true, providerData: [{ providerId: 'anonymous' }] };
+  let publish;
+  let current;
+
+  beforeEach(() => {
+    useIdentity.mockReturnValue(voter);
+    renameVote.mockReset();
+    current = openBet;
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = (bet) => { current = bet; act(() => onChange(bet)); };
+      onChange(current);
+      return () => {};
+    });
+    // The snapshot follows each write, like Firestore does.
+    castVote.mockImplementation(async (_code, vote) => {
+      publish({ ...current, votes: [...current.votes.filter((v) => v.voterId !== vote.voterId), vote] });
+    });
+    renameVote.mockImplementation(async (_code, voterId, name) => {
+      publish({ ...current, votes: current.votes.map((v) => (v.voterId === voterId ? { ...v, name } : v)) });
+    });
+  });
+
+  afterEach(() => {
+    castVote.mockImplementation(async () => {});
+  });
+
+  const pickedAs = (name) => ({ ...openBet, votes: [{ voterId: 'anon-1', name, optionId: 'a' }] });
+
+  test('shows after a nameless pick, and saving changes the name but not the side', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.clear(await screen.findByLabelText(/your name/i));
+    expect(screen.queryByRole('button', { name: NAME_EDIT_COPY.add })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: '', optionId: 'a' });
+    expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.add }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('placeholder', 'ex: John');
+    expect(input).toHaveFocus();
+    await userEvent.type(input, '  John ');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+
+    expect(renameVote).toHaveBeenCalledWith('abc123', 'anon-1', 'John');
+    expect(castVote).toHaveBeenCalledTimes(1);
+    expect(current.votes).toEqual([{ voterId: 'anon-1', name: 'John', optionId: 'a' }]);
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    const edit = screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('John') });
+    expect(edit).toHaveTextContent(NAME_EDIT_COPY.edit);
+    expect(edit).toHaveFocus();
+  });
+
+  test('prefills the current name, and cancel leaves it alone', async () => {
+    current = pickedAs('Sam');
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveValue('Sam');
+    // Nothing to save until it changes.
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeDisabled();
+    await userEvent.type(input, 'my');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.cancel }));
+    expect(renameVote).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') })).toBeInTheDocument();
+  });
+
+  test('a refused save shows an error and keeps the old name', async () => {
+    current = pickedAs('Sam');
+    renameVote.mockImplementation(async () => {
+      throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'John');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+    expect(current.votes[0]).toEqual({ voterId: 'anon-1', name: 'Sam', optionId: 'a' });
+    expect(input).toHaveValue('John');
+    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.cancel }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') })).toBeInTheDocument();
+  });
+
+  test('not offered once picks are closed or the bet is settled', async () => {
+    current = { ...pickedAs('Sam'), status: 'closed', winnerId: 'a' };
+    current = { ...current, settlement: buildSettlement(current, 'a') };
+    renderAt('/b/abc123', <VoteScreen />);
+    await screen.findByRole('heading', { name: 'Who is late' });
+    expect(screen.queryByRole('button', { name: /name/i })).not.toBeInTheDocument();
   });
 });

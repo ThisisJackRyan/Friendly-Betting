@@ -203,6 +203,7 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
+      export const renameVote = async () => {};
       // settledAt null, as the real settleBet returns before the server time.
       export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: ${noUndo ? 'Date.now()' : 'null'}, settlement: buildSettlement(bet, id) });
       export const undoSettle = async () => ({ ...bet, status: 'open', winnerId: null });

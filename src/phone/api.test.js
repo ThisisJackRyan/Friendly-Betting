@@ -1,6 +1,6 @@
 import { deleteDoc, runTransaction } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
-import { callOffBet, castVote, deleteBet, saveBet, settleBet, undoSettle } from './api';
+import { callOffBet, castVote, deleteBet, renameVote, saveBet, settleBet, undoSettle } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 
@@ -116,6 +116,25 @@ test('only a committed pick subscribes the participant to results', async () => 
   expect(rememberBet).toHaveBeenCalledWith('maya', 'abc123');
   await settleBet('abc123', 'a');
   await expect(castVote('abc123', { ...vote, optionId: 'b' })).rejects.toThrow('closed');
+});
+
+test('renameVote changes only the name on the voter\'s own pick, in place', async () => {
+  stored.votes = [{ voterId: 'jack', name: '', optionId: 'a', at: 5 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 6 }];
+  await renameVote('abc123', 'jack', '  John ');
+  expect(tx.update).toHaveBeenCalledTimes(1);
+  expect(Object.keys(tx.update.mock.calls[0][1])).toEqual(['votes']);
+  expect(stored.votes).toEqual([{ voterId: 'jack', name: 'John', optionId: 'a', at: 5 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 6 }]);
+});
+
+test('renameVote refuses with no pick, on a closed bet, or a gone bet, before writing', async () => {
+  await expect(renameVote('abc123', 'nobody', 'John')).rejects.toThrow();
+  await expect(renameVote('abc123', '', 'John')).rejects.toThrow();
+  await settleBet('abc123', 'a');
+  tx.update.mockClear();
+  await expect(renameVote('abc123', 'jack', 'John')).rejects.toThrow('closed');
+  stored = null;
+  await expect(renameVote('abc123', 'jack', 'John')).rejects.toThrow('gone');
+  expect(tx.update).not.toHaveBeenCalled();
 });
 
 test('invalid picks and late edits cannot alter the final result', async () => {

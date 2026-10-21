@@ -49,6 +49,7 @@ async function mockBet(page, { state = 'settled', uid = 'jack' } = {}) {
       export const createBet = async () => 'crew123';
       export const saveBet = async () => 'crew123';
       export const castVote = async () => {};
+      export const renameVote = async () => {};
       export const deleteBet = async () => {};
       export const undoSettle = async () => open;
       export const callOffBet = async () => bet;

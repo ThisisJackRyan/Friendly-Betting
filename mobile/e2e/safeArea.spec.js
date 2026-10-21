@@ -38,6 +38,7 @@ async function mockSignedIn(page, uid = 'jack') {
       export const createBet = async () => 'new123';
       export const saveBet = async () => 'new123';
       export const castVote = async () => {};
+      export const renameVote = async () => {};
       export const deleteBet = async () => {};
       export const undoSettle = async () => {};
       export const callOffBet = async () => {};

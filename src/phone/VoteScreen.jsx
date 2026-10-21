@@ -5,7 +5,7 @@ import Link from '../platform/Link';
 import { useParams } from '../platform/navigation';
 import { FiCheckCircle, FiSlash } from 'react-icons/fi';
 import { BetFacts, Brand } from './ProductUI';
-import { castVote } from './api';
+import { castVote, renameVote } from './api';
 import { useLiveBet } from './useLiveBet';
 import { rememberName, savedName, useIdentity } from './identity';
 import {
@@ -32,8 +32,19 @@ import ResultTextCard from './ResultTextCard';
 import { resultTextsEnabled } from './resultTexts';
 import ProBadge from './ProBadge';
 import { useProBadge } from './useEntitlement';
+import NameEdit from './NameEdit';
+import { NAME_PLACEHOLDER } from './nameEditCopy';
 
 const LOAD_ERROR = 'Could not open this bet.';
+
+// The bet with this voter's pick showing `name`, while a rename is saving.
+function withName(bet, voterId, name) {
+  if (!bet || name === null || !Array.isArray(bet.votes)) return bet;
+  return {
+    ...bet,
+    votes: bet.votes.map((vote) => (vote.voterId === voterId ? { ...vote, name } : vote)),
+  };
+}
 
 const VoteScreen = () => {
   const params = useParams();
@@ -47,6 +58,8 @@ const VoteScreen = () => {
   // The pick just cast, counted in the tally until a snapshot records it.
   const [optimistic, setOptimistic] = useState(null);
   const [saving, setSaving] = useState(false);
+  // A name just saved on the voter's pick, shown until a snapshot has it.
+  const [renamed, setRenamed] = useState(null);
   const minElapsed = useMinHold(code);
 
   useEffect(() => {
@@ -58,6 +71,7 @@ const VoteScreen = () => {
     setError('');
     setPendingId(null);
     setOptimistic(null);
+    setRenamed(null);
   }, [code]);
 
   const recorded = hasVote(bet, optimistic);
@@ -65,8 +79,12 @@ const VoteScreen = () => {
     if (recorded) setOptimistic(null);
   }, [recorded]);
 
-  const tally = withOptimisticVote(bet, optimistic);
   const existing = voteFor(bet, user?.uid);
+  const storedName = existing?.name || '';
+  useEffect(() => {
+    if (renamed !== null && storedName === renamed) setRenamed(null);
+  }, [renamed, storedName]);
+  const tally = withName(withOptimisticVote(bet, optimistic), user?.uid, renamed);
   const selectedId = pendingId || existing?.optionId || null;
   const selected = (bet?.options || []).find((option) => option.id === selectedId);
   const open = bet ? votingOpen(bet) : false;
@@ -108,6 +126,19 @@ const VoteScreen = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Only the name changes; the side stays whatever the bet records.
+  const saveName = async (next) => {
+    setRenamed(next);
+    try {
+      await renameVote(code, user.uid, next);
+    } catch (err) {
+      setRenamed(null);
+      throw err;
+    }
+    if (next) rememberName(next);
+    setName(next);
   };
 
   return (
@@ -168,6 +199,7 @@ const VoteScreen = () => {
                   {"You're on "}
                   <strong>{optionVoteLabel(bet, selected)}</strong>
                 </p>
+                {existing && open && <NameEdit current={renamed ?? storedName} onSave={saveName} />}
                 <Bars bet={tally} highlightId={selectedId} />
                 <Link className="text-link" href={`/t/${bet.id || code}`}>
                   See the picks
@@ -190,7 +222,7 @@ const VoteScreen = () => {
                   <input
                     id="voter-name"
                     value={name}
-                    placeholder="ex: John"
+                    placeholder={NAME_PLACEHOLDER}
                     autoComplete="nickname"
                     onChange={(event) => setName(event.target.value)}
                   />
