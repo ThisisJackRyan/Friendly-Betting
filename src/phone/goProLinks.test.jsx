@@ -10,6 +10,7 @@ import { useIdentity, useSignedInUser } from './identity';
 import { subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { navigation } from 'next/navigation';
+import { isNativeApp } from '../platform/runtime';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -49,6 +50,10 @@ jest.mock('./share', () => ({
   shareMessage: jest.fn(async () => 'manual'),
   hasShareSheet: jest.fn(() => false),
   openShareSheet: jest.fn(async () => 'aborted'),
+}));
+jest.mock('../platform/runtime', () => ({
+  ...jest.requireActual('../platform/runtime'),
+  isNativeApp: jest.fn(() => false),
 }));
 jest.mock('./FriendlyLoader', () => ({ __esModule: true, default: () => null, useMinHold: () => true }));
 jest.mock('./ResultsMenu', () => () => null);
@@ -135,6 +140,17 @@ describe.each(PLACEMENTS)('on %s', (_label, user, element, kind) => {
     setup({ user, paywall: false });
     await show(element());
     expect(goPro()).toBeNull();
+  });
+
+  test('hidden in the native app, even with the paywall on', async () => {
+    setup({ user });
+    isNativeApp.mockReturnValue(true);
+    try {
+      await show(element());
+      expect(goPro()).toBeNull();
+    } finally {
+      isNativeApp.mockReturnValue(false);
+    }
   });
 });
 
