@@ -1,17 +1,46 @@
 import { isCalledOff } from './betStatus';
 import { settlementOf } from './settlement';
 
-// Every on-screen string for the settled reveal on /b/ and /t/.
+// The winners' line, by what was at stake. It ends every winning subline on
+// the reveal and on the Share as image card.
+export const STAKE_LINES = {
+  bragging: 'Bragging rights, secured.',
+  coffee: 'Coffee\u2019s on everyone else.',
+  lunch: 'Lunch is on everyone else.',
+  drinks: 'Drinks are on everyone else.',
+  custom: 'Time for everyone else to pay up.',
+};
+
+const STAKE_KINDS = { 'bragging rights': 'bragging', coffee: 'coffee', lunch: 'lunch', drinks: 'drinks' };
+
+// A stake is stored as the text the creator picked or typed: a Create chip
+// saves its label ("Bragging rights", "Coffee"), and the settlement snapshot
+// fills an empty one with "Bragging rights". Case, spacing and a closing
+// period or "!" don't change which it is; anything else is a custom stake.
+export function stakeKind(stake) {
+  const key = String(stake || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[.!]+$/, '');
+  if (!key) return 'bragging';
+  return STAKE_KINDS[key] || 'custom';
+}
+
+export const stakeLine = (stake) => STAKE_LINES[stakeKind(stake)];
+
+// Every on-screen string for the settled reveal on /b/ and /t/. A winning
+// subline takes its stake line (stakeLine) after the fixed start.
 export const REVEAL_COPY = {
   eyebrow: (side) => `${side} won`,
   won: (names) => `${names} won.`,
-  bragging: 'Bragging rights, secured.',
-  solo: 'Called it solo. Bragging rights, secured.',
+  solo: (line) => `Called it solo. ${line}`,
   nobody: 'Nobody called it.',
   nobodySub: 'Not one of you saw that coming.',
   youWon: 'You called it.',
-  youWonWith: (names) => `${names} won. Bragging rights, secured.`,
-  youSolo: 'Solo win. Bragging rights, secured.',
+  youWonWith: (names, line) => `${names} won. ${line}`,
+  youSolo: (line) => `Solo win. ${line}`,
   youLost: 'Not your day. Get ’em next time.',
   calledOff: 'This bet was called off.',
   calledOffSub: 'Nobody won this one.',
@@ -68,14 +97,15 @@ export function buildReveal({ bet, viewerId }) {
   if (countOnly) return { ...base, kind: 'legacy', headline: '', subline: '' };
 
   const winners = result.winners;
+  const line = stakeLine(result.stake);
   const recipient = viewerId ? result.recipients.find((item) => item.voterId === viewerId) : null;
 
   if (recipient?.won) {
     const others = winners.filter((winner) => winner.voterId !== viewerId);
-    if (!others.length) return { ...base, kind: 'you-solo', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youSolo };
+    if (!others.length) return { ...base, kind: 'you-solo', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youSolo(line) };
     const named = winnerPhrase(others) || REVEAL_COPY.others(others.length);
     const names = others.length === 1 ? `You & ${named}` : `You, ${named}`;
-    return { ...base, kind: 'you-won', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youWonWith(names) };
+    return { ...base, kind: 'you-won', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youWonWith(names, line) };
   }
 
   if (!winners.length) return { ...base, kind: 'nobody', headline: REVEAL_COPY.nobody, subline: REVEAL_COPY.nobodySub };
@@ -84,7 +114,7 @@ export function buildReveal({ bet, viewerId }) {
   const headline = names ? REVEAL_COPY.won(names) : REVEAL_COPY.friends(winners.length);
   if (recipient) return { ...base, kind: 'you-lost', headline, subline: REVEAL_COPY.youLost, startBet: true };
   // "Called it solo" only follows a name; a lone unnamed winner gets the
-  // plain line.
-  const subline = names && winners.length === 1 ? REVEAL_COPY.solo : REVEAL_COPY.bragging;
+  // plain stake line.
+  const subline = names && winners.length === 1 ? REVEAL_COPY.solo(line) : line;
   return { ...base, kind: 'winners', headline, subline };
 }

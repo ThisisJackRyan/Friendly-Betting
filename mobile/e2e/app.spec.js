@@ -645,7 +645,7 @@ test('settle with ads on but the settle ad capped for today: straight to the rev
 });
 
 for (const [side, winner, ping, headline, subline] of [
-  ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Bragging rights, secured.'],
+  ['Bears', 'Jack', 'You called it.', 'You called it.', 'Solo win. Time for everyone else to pay up.'],
   ['Packers', 'Sam', 'This one’s settled.', 'Sam won.', 'Not your day. Get ’em next time.'],
 ]) {
   test(`settle in the app: ${winner} wins, with the right participant ping`, async ({ page }, testInfo) => {
