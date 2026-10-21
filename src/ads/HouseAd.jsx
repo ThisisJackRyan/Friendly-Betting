@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useModalBackground } from '../platform/modalBackground';
 
 // The web stand-in for an interstitial: a fixed full-screen layer, so the page
 // under it never moves. Closes on the button, Escape, or by itself. The close
@@ -33,15 +34,6 @@ const panel = {
   background: 'var(--wash, #e8efe3)',
 };
 
-// The page behind the ad: the mobile app's #root, or the Next app's frame.
-function appRoot(dialog) {
-  if (typeof document === 'undefined') return null;
-  const root = document.getElementById('root')
-    || document.getElementById('__next')
-    || document.querySelector('.app-frame');
-  return root && dialog && !root.contains(dialog) ? root : null;
-}
-
 export default function HouseAd({ onClose, autoCloseMs = 0 }) {
   const dialog = useRef(null);
   const button = useRef(null);
@@ -55,23 +47,7 @@ export default function HouseAd({ onClose, autoCloseMs = 0 }) {
 
   // While the ad is up the page behind it is inert; on close (or unmount)
   // focus goes back where it was, unless something else has taken it.
-  useEffect(() => {
-    const previous = document.activeElement;
-    const node = dialog.current;
-    const root = appRoot(node);
-    const madeInert = Boolean(root && !root.hasAttribute('inert'));
-    if (madeInert) root.setAttribute('inert', '');
-    return () => {
-      if (madeInert) root.removeAttribute('inert');
-      try {
-        const active = document.activeElement;
-        const free = !active || active === document.body || !active.isConnected || Boolean(node?.contains(active));
-        if (free && previous && previous !== document.body && previous.isConnected) previous.focus?.({ preventScroll: true });
-      } catch {
-        // Nowhere to go back to.
-      }
-    };
-  }, []);
+  useModalBackground(dialog);
 
   useEffect(() => {
     button.current?.focus();

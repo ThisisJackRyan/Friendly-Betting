@@ -15,7 +15,7 @@
 // tally, house-ad.png, and the thank-you after it, thank-you.png, and the
 // same after a Settle & notify with no Undo, settle-house-ad.png, settle-thank-you.png, and
 // the reveal once the thank-you continues, settle-reveal-after-ad.png, and Pro:
-// the paywall at /pro, paywall.png, a founder's own badge on the tally,
+// the paywall at /pro, paywall.png, a Pro member's own badge on the tally,
 // pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
 // tally-pro-no-ad.png, and Friends on My bets, friends.png, with Maya opened,
 // friends-open.png, and the settled reveal with Share as image under Share
@@ -218,7 +218,6 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(plan); return () => {}; };
-      export const fetchFounderCount = async () => 12;
       export const requestMockPurchase = async () => ({ ok: true });`,
   }));
   if (paywall) {
@@ -630,7 +629,7 @@ const SHOTS = [
     paywall: true,
     async run(page) {
       await page.goto('/pro');
-      await page.getByText('Founder: $40 once, Pro for life. First 100 only.').waitFor();
+      await page.locator('.pro-price').waitFor();
     },
   },
   {
@@ -638,7 +637,7 @@ const SHOTS = [
     docs: false,
     user: JACK,
     bet: FULL_BET,
-    plan: { plan: 'founder', source: 'mock', founderNumber: 12, expiresAt: null },
+    plan: { plan: 'pro', source: 'mock', expiresAt: null },
     async run(page) {
       await page.goto(`/t/${CODE}`);
       await page.locator('.voter-name .pro-badge').waitFor();

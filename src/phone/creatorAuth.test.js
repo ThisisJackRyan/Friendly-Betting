@@ -491,6 +491,45 @@ test('an in-use link with no recoverable credential asks for a new code', async 
   expect(mockSignInWithCredential).not.toHaveBeenCalled();
 });
 
+describe('the no-proof case logs its link error code on preview and dev only', () => {
+  const saved = process.env.NEXT_PUBLIC_VERCEL_ENV;
+  let warn;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true, phoneNumber: '+15551234567' };
+    const taken = new Error('taken +15551234567');
+    taken.code = 'auth/credential-already-in-use';
+    taken.customData = { phoneNumber: '+15551234567' };
+    mockLinkWithCredential.mockRejectedValue(taken);
+    mockCredentialFromError.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    if (saved === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    else process.env.NEXT_PUBLIC_VERCEL_ENV = saved;
+  });
+
+  test.each(['preview', 'development'])('%s: the cause code, and nothing else', async (env) => {
+    process.env.NEXT_PUBLIC_VERCEL_ENV = env;
+    const err = await verifyPhoneCode('vid-1', '123456').catch((error) => error);
+    expect(err.code).toBe(SPENT_CODE);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[phone-auth] no proof on link error', 'auth/credential-already-in-use');
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).not.toMatch(/5551234567|123456|vid-1/);
+  });
+
+  test.each([undefined, '', 'production'])('%s: no log', async (env) => {
+    if (env === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    else process.env.NEXT_PUBLIC_VERCEL_ENV = env;
+    const err = await verifyPhoneCode('vid-1', '123456').catch((error) => error);
+    expect(err.code).toBe(SPENT_CODE);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 test('with no session, verify signs in with the phone credential', async () => {
   mockAuthState.currentUser = null;
   mockSignInWithCredential.mockResolvedValue({ user: { uid: 'creator-2' } });

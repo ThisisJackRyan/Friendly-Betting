@@ -458,6 +458,14 @@ describe('pro entitlements', () => {
     await assertSucceeds(anon('anon-5').doc('entitlements/anon-5').get());
   });
 
+  test('a legacy founder doc (lifetime, with a founder number) still reads for its member', async () => {
+    const legacy = { plan: 'founder', source: 'mock', since: 1, founderNumber: 7, expiresAt: null };
+    await seed({ [own]: legacy });
+    const snap = await assertSucceeds(creator().doc(own).get());
+    expect(snap.data()).toEqual(legacy);
+    await assertFails(otherPhone().doc(own).get());
+  });
+
   test('another user cannot read it', async () => {
     await assertFails(otherPhone().doc(own).get());
     await assertFails(anon().doc(own).get());
@@ -504,21 +512,16 @@ describe('pro entitlements', () => {
   });
 });
 
-describe('founder counter', () => {
+describe('meta', () => {
   const founders = 'meta/founders';
 
   beforeEach(async () => {
     await seed({ [founders]: { count: 42 }, 'meta/other': { secret: true } });
   });
 
-  test('anyone can read the founder count, signed in or not', async () => {
-    for (const db of [guest(), anon(), creator()]) {
-      await assertSucceeds(db.doc(founders).get());
-    }
-  });
-
-  test('no client can change, create or delete it', async () => {
+  test('the old founder count is closed now: no client reads or writes it', async () => {
     for (const db of [guest(), anon(), creator(), otherPhone()]) {
+      await assertFails(db.doc(founders).get());
       await assertFails(db.doc(founders).update({ count: 0 }));
       await assertFails(db.doc(founders).set({ count: 600 }));
       await assertFails(db.doc(founders).delete());

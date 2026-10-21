@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { useSignedInUser } from './identity';
-import { subscribeEntitlement } from './entitlementApi';
+import { fetchEntitlement, subscribeEntitlement } from './entitlementApi';
 import { badgeFor, isProEntitlement } from './entitlement';
 import { __resetProForTests, noteProKnown, setProEntitlement } from '../ads/pro';
 
@@ -90,6 +90,18 @@ export function useEntitlement() {
   }, [uid, known]);
   const { entitlement, isPro, loading } = useEntitlementState();
   return { entitlement, isPro, loading };
+}
+
+// Restore purchase: reads the signed-in user's entitlement again and shares
+// what it finds, so every screen (and the ad service) sees a restored plan
+// at once. Resolves to whether they are Pro; with nobody signed in there is
+// nothing to read. A failed read rejects and keeps the last known plan.
+export async function refreshEntitlement() {
+  const { uid } = state;
+  if (!uid) return false;
+  const entitlement = await fetchEntitlement(uid);
+  if (state.uid === uid) publish({ uid, entitlement: entitlement || null, loading: false });
+  return isProEntitlement(entitlement, Date.now());
 }
 
 // Tests only.

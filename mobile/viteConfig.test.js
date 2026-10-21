@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
+const URLS = ['NEXT_PUBLIC_TERMS_URL', 'NEXT_PUBLIC_PRIVACY_URL'];
 const FLAGS = [
   'NEXT_PUBLIC_RESULT_TEXTS',
   'NEXT_PUBLIC_ADS_ENABLED',
@@ -19,7 +20,7 @@ function defined(env) {
     process.stdout.write(JSON.stringify(resolved.define));
   `;
   const base = { ...process.env };
-  FLAGS.forEach((flag) => delete base[flag]);
+  [...FLAGS, ...URLS].forEach((flag) => delete base[flag]);
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     env: { ...base, ...env },
     encoding: 'utf8',
@@ -31,6 +32,7 @@ function defined(env) {
 function expected(...on) {
   return {
     ...Object.fromEntries(FLAGS.map((flag) => [`process.env.${flag}`, on.includes(flag) ? '"1"' : '""'])),
+    ...Object.fromEntries(URLS.map((url) => [`process.env.${url}`, '""'])),
     'process.env.NEXT_PUBLIC_VERCEL_ENV': '""',
   };
 }
@@ -55,4 +57,12 @@ test('the mobile build leaves every flag off by default and exposes nothing else
 
 test('the mobile build keeps NEXT_PUBLIC_VERCEL_ENV empty even from a preview build env', () => {
   expect(defined({ NEXT_PUBLIC_VERCEL_ENV: 'preview' })).toEqual(expected());
+});
+
+test('the mobile build passes the Pro sheet’s Terms and Privacy URLs through', () => {
+  expect(defined({ NEXT_PUBLIC_TERMS_URL: 'https://example.com/terms', NEXT_PUBLIC_PRIVACY_URL: 'https://example.com/privacy' })).toEqual({
+    ...expected(),
+    'process.env.NEXT_PUBLIC_TERMS_URL': '"https://example.com/terms"',
+    'process.env.NEXT_PUBLIC_PRIVACY_URL': '"https://example.com/privacy"',
+  });
 });

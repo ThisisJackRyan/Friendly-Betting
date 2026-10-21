@@ -19,6 +19,9 @@ export default defineConfig(({ mode }) => {
       'process.env.NEXT_PUBLIC_PRO_PAYWALL': JSON.stringify(''),
       'process.env.NEXT_PUBLIC_PRO_EARLY_TYPES': JSON.stringify(env.NEXT_PUBLIC_PRO_EARLY_TYPES ?? ''),
       'process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE': JSON.stringify(env.NEXT_PUBLIC_PRO_MOCK_PURCHASE ?? ''),
+      // The Pro sheet's Terms and Privacy links (each only when set).
+      'process.env.NEXT_PUBLIC_TERMS_URL': JSON.stringify(env.NEXT_PUBLIC_TERMS_URL ?? ''),
+      'process.env.NEXT_PUBLIC_PRIVACY_URL': JSON.stringify(env.NEXT_PUBLIC_PRIVACY_URL ?? ''),
       // The app never shows raw auth codes, even from a preview shell env.
       'process.env.NEXT_PUBLIC_VERCEL_ENV': JSON.stringify(''),
     },
