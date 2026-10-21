@@ -4,23 +4,18 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FiAward, FiRotateCcw, FiSlash, FiUsers, FiX, FiZap } from 'react-icons/fi';
 import ProBadge from './ProBadge';
-import { fetchFounderCount, requestMockPurchase } from './entitlementApi';
+import { requestMockPurchase } from './entitlementApi';
 import { badgeFor } from './entitlement';
 import { refreshEntitlement, useEntitlementState } from './useEntitlement';
 import {
   PRO_COPY,
   PRO_ROW,
-  founderOffer,
   proMockPurchaseEnabled,
   proPrivacyUrl,
   proTermsUrl,
 } from './proConfig';
 
 const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
-
-// How long the plan cards wait for the founder count before showing the Pro
-// card alone.
-export const FOUNDER_COUNT_TIMEOUT_MS = 8000;
 
 // The Pro sheet (UX spec, Oct 20): slides up from the bottom, on top of the
 // page that opened it, and is all of /pro. `highlight` is the benefit row
@@ -34,9 +29,6 @@ export const FOUNDER_COUNT_TIMEOUT_MS = 8000;
 export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone }) {
   const { entitlement, isPro } = useEntitlementState();
   const purchasable = proMockPurchaseEnabled();
-  // undefined while loading, null if the count could not be read in time.
-  const [founders, setFounders] = useState(undefined);
-  const [picked, setPicked] = useState('');
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   // '', 'busy' or 'nothing'.
@@ -51,33 +43,6 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
     setMounted(true);
     return () => {
       live.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let current = true;
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      setFounders(null);
-    }, FOUNDER_COUNT_TIMEOUT_MS);
-    fetchFounderCount()
-      .then((count) => {
-        if (!current) return;
-        clearTimeout(timer);
-        // A count after the timeout adds the Founder card but keeps Pro
-        // picked, so the choice never changes under the user.
-        if (timedOut) setPicked((value) => value || 'pro');
-        setFounders(count);
-      })
-      .catch(() => {
-        if (!current) return;
-        clearTimeout(timer);
-        setFounders(null);
-      });
-    return () => {
-      current = false;
-      clearTimeout(timer);
     };
   }, []);
 
@@ -101,22 +66,16 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
 
   if (!mounted) return null;
 
-  const offer = typeof founders === 'number' ? founderOffer(founders) : null;
-  const founderOpen = Boolean(offer && !offer.soldOut);
-  // The cards wait for the founder count only. A plan that loads later as Pro
-  // still swaps in the success screen.
-  const ready = founders !== undefined;
-  const plan = founderOpen ? picked || 'founder' : 'pro';
+  // A plan that loads later as Pro swaps in the success screen.
   const success = isPro || restored;
 
   const buy = async () => {
-    if (buying || !purchasable || !ready) return;
+    if (buying || !purchasable) return;
     setBuying(true);
     setError('');
     setRestore('');
     try {
-      const result = await requestMockPurchase(plan);
-      if (typeof result?.founderCount === 'number' && live.current) setFounders(result.founderCount);
+      await requestMockPurchase('pro');
       // Read the new plan now rather than wait for the listener.
       await refreshEntitlement().catch(() => false);
     } catch {
@@ -143,12 +102,9 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   };
 
   const badge = badgeFor(entitlement) || { kind: 'pro' };
-  // A Founder whose number is unknown gets the Pro lines.
-  const founderNumber = badge.kind === 'founder' ? badge.number : undefined;
-  let successLine = founderNumber ? PRO_COPY.ownedFounder(founderNumber) : PRO_COPY.owned;
-  if (restored) successLine = founderNumber ? PRO_COPY.restoredFounder(founderNumber) : PRO_COPY.restored;
+  const successLine = restored ? PRO_COPY.restored : PRO_COPY.owned;
 
-  let mainLabel = plan === 'founder' ? PRO_COPY.getFounder : PRO_COPY.getPro;
+  let mainLabel = PRO_COPY.getPro;
   if (buying) mainLabel = PRO_COPY.buying;
   if (!purchasable) mainLabel = PRO_COPY.comingSoon;
 
@@ -171,26 +127,6 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
       </a>,
     );
   }
-
-  const planCard = (id, label, price, note, seats) => (
-    <label className={`pro-plan${plan === id ? ' is-picked' : ''}`}>
-      <input
-        type="radio"
-        name="pro-plan"
-        value={id}
-        checked={plan === id}
-        disabled={buying}
-        onChange={() => setPicked(id)}
-      />
-      <span className="pro-plan-radio" aria-hidden="true" />
-      <span className="pro-plan-text">
-        <span className="pro-plan-label">{label}</span>
-        <span className="pro-plan-note">{note}</span>
-        {seats && <span className="pro-plan-seats">{seats}</span>}
-      </span>
-      <span className="pro-plan-price">{price}</span>
-    </label>
-  );
 
   const sheet = (
     <div className="pro-sheet-layer">
@@ -249,33 +185,10 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
                     );
                   })}
                 </ul>
-                {ready ? (
-                  <div className="pro-plans">
-                    {offer?.soldOut && <p className="pro-sold-out">{PRO_COPY.founderSoldOut}</p>}
-                    {planCard('pro', PRO_COPY.proLabel, PRO_COPY.proPrice, PRO_COPY.proNote)}
-                    {founderOpen
-                      && planCard(
-                        'founder',
-                        PRO_COPY.founderLabel,
-                        PRO_COPY.founderPrice(offer),
-                        PRO_COPY.founderNote,
-                        PRO_COPY.founderSeats(offer),
-                      )}
-                  </div>
-                ) : (
-                  <div className="pro-plans" aria-busy="true">
-                    {[0, 1].map((index) => (
-                      <div key={index} className="pro-plan is-loading" aria-hidden="true">
-                        <span className="pro-plan-radio" />
-                        <span className="pro-plan-text">
-                          <span className="pro-skeleton pro-skeleton-label" />
-                          <span className="pro-skeleton pro-skeleton-note" />
-                        </span>
-                        <span className="pro-skeleton pro-skeleton-price" />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="pro-price">
+                  <p className="pro-price-amount">{PRO_COPY.proPrice}</p>
+                  <p className="pro-price-note">{PRO_COPY.proNote}</p>
+                </div>
                 <p className="pro-fine-print">{PRO_COPY.finePrint}</p>
                 <p className="pro-sheet-links">
                   {links.map((link, index) => (
@@ -305,7 +218,7 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
               <button
                 type="button"
                 className="cta press pro-sheet-main"
-                disabled={!purchasable || !ready || buying}
+                disabled={!purchasable || buying}
                 aria-busy={buying || undefined}
                 onClick={buy}
               >

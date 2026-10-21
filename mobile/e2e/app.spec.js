@@ -826,13 +826,12 @@ test('in the app, Android back on Home minimizes and on My bets goes Home', asyn
 
 // Pro (docs/PRO.md). The entitlement module is swapped like api.js, so the
 // app sees a Pro member without Firestore.
-async function mockEntitlement(page, { plan = null, founders = 0 } = {}) {
+async function mockEntitlement(page, { plan = null } = {}) {
   await page.route('**/src/phone/entitlementApi.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
       export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
-      export const fetchFounderCount = async () => ${JSON.stringify(founders)};
       export const requestMockPurchase = async () => ({ ok: true });`,
   }));
 }
@@ -883,7 +882,7 @@ test('without Pro the same tally has no badge and still shows the ad', async ({ 
 test('the paywall at /pro: a 404 with the flag off, the Pro sheet with it on', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await mockEntitlement(page, { founders: 12 });
+  await mockEntitlement(page);
   await page.goto('/pro');
   await expect(page.getByRole('heading', { name: 'Lost that one.' })).toBeVisible();
 
@@ -893,8 +892,11 @@ test('the paywall at /pro: a 404 with the flag off, the Pro sheet with it on', a
   await expect(sheet).toBeVisible();
   await expect(sheet.getByText('Friends always play free.')).toBeVisible();
   await expect(sheet.locator('.pro-benefits li.is-highlighted')).toHaveText('No ads, ever');
-  await expect(sheet.getByRole('radio', { name: /^Founder/ })).toBeChecked();
-  await expect(sheet.getByText('88 of 100 spots left')).toBeVisible();
+  await expect(sheet.locator('.pro-price-amount')).toHaveText('$3/mo');
+  await expect(sheet.locator('.pro-price-note')).toHaveText('Billed monthly. Cancel anytime.');
+  await expect(sheet.getByRole('radio')).toHaveCount(0);
+  await expect(sheet.getByText('Pro renews at $3/mo until you cancel in Settings.', { exact: true })).toBeVisible();
+  await expect(sheet).not.toContainText('Founder');
   // No mock purchase in this build: the main button waits.
   await expect(sheet.getByRole('button', { name: 'Coming soon' })).toBeDisabled();
   await sheet.getByRole('button', { name: 'Maybe later' }).click();
@@ -913,11 +915,11 @@ for (const size of SHEET_SIZES) {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.setViewportSize({ width: size.width, height: size.height });
-    await mockEntitlement(page, { founders: 12 });
+    await mockEntitlement(page);
     await enablePaywall(page);
     await page.goto('/pro');
     const sheet = page.locator('.pro-sheet');
-    await expect(sheet.getByText('88 of 100 spots left')).toBeVisible();
+    await expect(sheet.locator('.pro-price')).toBeVisible();
     // Let the slide-up finish before measuring.
     await expect.poll(() => sheet.evaluate((el) => el.getAnimations().length)).toBe(0);
     const m = await page.evaluate(() => {
@@ -934,7 +936,11 @@ for (const size of SHEET_SIZES) {
         circle: [circle.width, circle.height, circle.borderRadius],
         rows: Array.from(document.querySelectorAll('.pro-benefits li')).map((li) => li.getBoundingClientRect().height),
         icons: Array.from(document.querySelectorAll('.pro-benefits li svg')).map((svg) => svg.getBoundingClientRect().width),
-        cards: Array.from(document.querySelectorAll('.pro-plan')).map((card) => card.getBoundingClientRect().toJSON()),
+        price: box('.pro-price'),
+        priceSize: getComputedStyle(document.querySelector('.pro-price-amount')).fontSize,
+        lastRow: document.querySelector('.pro-benefits li:last-child').getBoundingClientRect().toJSON(),
+        finePrint: box('.pro-fine-print'),
+        plans: document.querySelectorAll('.pro-plan, .pro-sheet input').length,
         main: box('.pro-sheet-main'),
         later: box('.pro-sheet-later'),
         scrollWidth: document.documentElement.scrollWidth,
@@ -953,8 +959,13 @@ for (const size of SHEET_SIZES) {
     expect(m.circle).toEqual(['36px', '36px', '50%']);
     expect(m.rows).toEqual([44, 44, 44, 44, 44]);
     expect(m.icons).toEqual([24, 24, 24, 24, 24]);
-    expect(m.cards.map((card) => card.height)).toEqual([76, 76]);
-    m.cards.forEach((card) => expect(card.width).toBe(size.width - 2 * size.pad));
+    // One price block under the rows, body width, above the fine print.
+    expect(m.plans).toBe(0);
+    expect(m.price.width).toBe(size.width - 2 * size.pad);
+    expect(m.price.left).toBe(size.pad);
+    expect(m.price.top).toBeGreaterThanOrEqual(m.lastRow.bottom);
+    expect(m.finePrint.top).toBeGreaterThanOrEqual(m.price.bottom);
+    expect(m.priceSize).toBe('22px');
     // Pinned: the main button and Maybe later are on screen without scrolling.
     expect(m.main.height).toBe(56);
     expect(m.later.height).toBeGreaterThanOrEqual(44);
@@ -969,7 +980,7 @@ test('My bets with the paywall on: the Go Pro chip right of the heading, and Fri
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setViewportSize({ width: 393, height: 852 });
   await mockCrew(page);
-  await mockEntitlement(page, { founders: 12 });
+  await mockEntitlement(page);
   await enablePaywall(page);
   await page.goto('/bets');
   const chip = page.locator('.go-pro-chip');

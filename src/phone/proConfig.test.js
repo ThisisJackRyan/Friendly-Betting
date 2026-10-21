@@ -38,11 +38,8 @@ test('a missing or junk count prices the first spot', () => {
 
 test('the copy is built from the pricing, in the spec’s words', () => {
   expect(PRO_COPY.proPrice).toBe('$3/mo');
-  expect(PRO_COPY.founderPrice(founderOffer(0))).toBe('$40 once');
-  expect(PRO_COPY.founderPrice(founderOffer(150))).toBe('$80 once');
-  expect(PRO_COPY.founderSeats(founderOffer(0))).toBe('100 of 100 spots left');
-  expect(PRO_COPY.founderSeats(founderOffer(150))).toBe('450 of 500 spots left');
-  expect(PRO_COPY.finePrint).toBe('Pro renews at $3/mo until you cancel in Settings. Founder is a one-time payment and includes Pro.');
+  expect(PRO_COPY.proNote).toBe('Billed monthly. Cancel anytime.');
+  expect(PRO_COPY.finePrint).toBe('Pro renews at $3/mo until you cancel in Settings.');
   expect(PRO_COPY.founderNumber(7)).toBe('Founder #7');
 });
 

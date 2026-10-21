@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Paywall from './Paywall';
-import ProSheet, { FOUNDER_COUNT_TIMEOUT_MS } from './ProSheet';
+import ProSheet from './ProSheet';
 import EntitlementSync from './EntitlementSync';
-import { fetchEntitlement, fetchFounderCount, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
+import { fetchEntitlement, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { isPro as adServiceIsPro } from '../ads/pro';
 import { navigation } from 'next/navigation';
@@ -22,30 +22,21 @@ const SPEC = {
     'Head-to-head stats with friends',
     'Early access to new stuff',
   ],
-  proLabel: 'Pro',
   proPrice: '$3/mo',
   proNote: 'Billed monthly. Cancel anytime.',
-  founderLabel: 'Founder',
-  founderPrice40: '$40 once',
-  founderPrice80: '$80 once',
-  founderNote: 'Pro for life, plus a Founder badge and number.',
-  soldOut: 'Founder spots are gone.',
   getPro: 'Get Pro',
-  getFounder: 'Get Founder',
   buying: 'Getting you set…',
   comingSoon: 'Coming soon',
   later: 'Maybe later',
-  finePrint: 'Pro renews at $3/mo until you cancel in Settings. Founder is a one-time payment and includes Pro.',
+  finePrint: 'Pro renews at $3/mo until you cancel in Settings.',
   restore: 'Restore purchase',
   restoring: 'Restoring…',
   restored: 'Restored. You’re Pro.',
-  restoredFounder7: 'Restored. You’re Founder #7.',
   nothing: 'Nothing to restore on this account.',
   terms: 'Terms',
   privacy: 'Privacy',
   error: 'Couldn’t finish that. Try again.',
   owned: 'You’re Pro. No more ads.',
-  ownedFounder7: 'You’re Founder #7. No more ads.',
   back: 'Back to my bets',
 };
 
@@ -70,8 +61,6 @@ beforeEach(() => {
   });
   fetchEntitlement.mockReset();
   fetchEntitlement.mockResolvedValue(null);
-  fetchFounderCount.mockReset();
-  fetchFounderCount.mockResolvedValue(0);
   requestMockPurchase.mockReset();
   requestMockPurchase.mockResolvedValue({ ok: true, plan: 'pro' });
   navigation.back.mockReset();
@@ -101,7 +90,6 @@ async function openSheet(props = {}) {
 }
 
 const dialog = () => screen.getByRole('dialog');
-const radio = (name) => screen.getByRole('radio', { name: new RegExp(`^${name}`) });
 const main = () => within(dialog()).getAllByRole('button').find((b) => b.classList.contains('pro-sheet-main'));
 const highlighted = () => Array.from(document.querySelectorAll('.pro-benefits li.is-highlighted')).map((li) => li.textContent);
 
@@ -111,7 +99,6 @@ describe('/pro', () => {
     await openPage();
     expect(screen.getByRole('heading', { name: 'Lost that one.' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(fetchFounderCount).not.toHaveBeenCalled();
   });
 
   test('flag on: the sheet, on the No ads row, titled Go Pro', async () => {
@@ -128,14 +115,14 @@ describe('/pro', () => {
     expect(navigation.back.mock.calls.length + navigation.push.mock.calls.length).toBe(2);
   });
 
-  test('already Pro: skips the cards for the success screen, and Back to my bets goes there', async () => {
+  test('already Pro: skips the price for the success screen, and Back to my bets goes there', async () => {
     subscribeEntitlement.mockImplementation((_uid, onChange) => {
       onChange({ plan: 'pro', expiresAt: null });
       return () => {};
     });
     await openPage();
     expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
-    expect(screen.queryByRole('radio')).toBeNull();
+    expect(document.querySelector('.pro-price')).toBeNull();
     expect(screen.queryByText(SPEC.headline)).toBeNull();
     expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent('Pro');
     await userEvent.click(screen.getByRole('button', { name: SPEC.back }));
@@ -150,77 +137,36 @@ describe('the sheet', () => {
     expect(screen.getByText(SPEC.line)).toBeInTheDocument();
     expect(document.querySelector('.pro-sheet-badge')).toHaveTextContent(/^Pro$/);
     expect(Array.from(document.querySelectorAll('.pro-benefits li')).map((li) => li.textContent)).toEqual(SPEC.benefits);
-    expect(radio(SPEC.proLabel)).toHaveAccessibleName(`${SPEC.proLabel} ${SPEC.proNote} ${SPEC.proPrice}`);
-    expect(radio(SPEC.founderLabel)).toHaveAccessibleName(
-      `${SPEC.founderLabel} ${SPEC.founderNote} 100 of 100 spots left ${SPEC.founderPrice40}`,
-    );
+    expect(document.querySelector('.pro-benefits').nextElementSibling).toBe(document.querySelector('.pro-price'));
+    expect(document.querySelector('.pro-price').textContent).toBe(`${SPEC.proPrice}${SPEC.proNote}`);
     expect(screen.getByText(SPEC.finePrint)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: SPEC.restore })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: SPEC.later })).toBeInTheDocument();
     // No Best deal chip, no em dash, no straight apostrophes on screen.
     expect(dialog().textContent).not.toMatch(/Best deal|—|'/);
+    // One plan, nothing else on offer.
+    expect(dialog().textContent).not.toMatch(/Founder|spots left|\bonce\b|one-time payment/);
   });
 
-  test('Founder is picked by default while spots remain; a tap anywhere on a card picks it', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+  test('one plan: the price block has no label and nothing to pick', async () => {
     await openSheet();
-    expect(radio(SPEC.founderLabel)).toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getFounder);
-    await userEvent.click(screen.getByText(SPEC.proNote));
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    await userEvent.click(screen.getByText(SPEC.founderPrice40));
-    expect(radio(SPEC.founderLabel)).toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getFounder);
-  });
-
-  test.each([
-    [0, SPEC.founderPrice40, '100 of 100 spots left'],
-    [93, SPEC.founderPrice40, '7 of 100 spots left'],
-    [99, SPEC.founderPrice40, '1 of 100 spots left'],
-    [100, SPEC.founderPrice80, '500 of 500 spots left'],
-    [588, SPEC.founderPrice80, '12 of 500 spots left'],
-  ])('%i taken: Founder at %s with %s', async (taken, price, seats) => {
-    fetchFounderCount.mockResolvedValue(taken);
-    await openSheet();
-    expect(screen.getByText(price)).toBeInTheDocument();
-    expect(screen.getByText(seats)).toBeInTheDocument();
-    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
-  });
-
-  test('sold out after 600: no Founder card, Pro picked, the muted line above the Pro card', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    fetchFounderCount.mockResolvedValue(600);
-    await openSheet();
-    expect(screen.queryByRole('radio', { name: /^Founder/ })).toBeNull();
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    const line = screen.getByText(SPEC.soldOut);
-    expect(line).toHaveClass('pro-sold-out');
-    expect(line.nextElementSibling).toBe(radio(SPEC.proLabel).closest('label'));
-  });
-
-  test('loading: grey placeholders in the cards, no seats, no Friendly loader, button disabled', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    fetchFounderCount.mockReturnValue(new Promise(() => {}));
-    await openSheet();
-    expect(document.querySelectorAll('.pro-plan.is-loading')).toHaveLength(2);
-    expect(document.querySelectorAll('.pro-plan.is-loading .pro-skeleton').length).toBeGreaterThan(0);
+    const price = document.querySelector('.pro-price');
+    expect(price.querySelector('.pro-price-amount')).toHaveTextContent(/^\$3\/mo$/);
+    expect(price.querySelector('.pro-price-note')).toHaveTextContent(/^Billed monthly\. Cancel anytime\.$/);
+    expect(price.children).toHaveLength(2);
     expect(screen.queryByRole('radio')).toBeNull();
-    expect(screen.queryByText(/spots left/)).toBeNull();
-    expect(document.querySelector('.friendly-load-mark')).toBeNull();
-    expect(main()).toBeDisabled();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(dialog().querySelectorAll('input, label, .pro-plan, .pro-plans')).toHaveLength(0);
   });
 
-  test('an unreadable count never guesses a price or seats: Pro only', async () => {
+  test('nothing to load: no skeleton, and Get Pro is ready as soon as the sheet shows', async () => {
     process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    fetchFounderCount.mockRejectedValue(new Error('offline'));
     await openSheet();
-    expect(screen.queryByRole('radio', { name: /^Founder/ })).toBeNull();
-    expect(screen.queryByText(/spots left|once/)).toBeNull();
-    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
-    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(document.querySelector('.pro-skeleton, .is-loading, [aria-busy]')).toBeNull();
+    expect(main()).toHaveTextContent(SPEC.getPro);
     expect(main()).toBeEnabled();
+    await userEvent.click(main());
+    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
   });
 
   test('purchases off: the main button is a disabled Coming soon and buys nothing', async () => {
@@ -231,18 +177,15 @@ describe('the sheet', () => {
     expect(requestMockPurchase).not.toHaveBeenCalled();
   });
 
-  test('buying: Getting you set…, with the cards and the X disabled; then the success screen', async () => {
+  test('buying: Getting you set…, with the X disabled; then the success screen', async () => {
     process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
     let finish;
     requestMockPurchase.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const { onClose } = await openSheet();
-    await userEvent.click(radio(SPEC.proLabel));
     await userEvent.click(main());
     expect(requestMockPurchase).toHaveBeenCalledWith('pro');
     expect(main()).toHaveTextContent(SPEC.buying);
     expect(main()).toBeDisabled();
-    expect(radio(SPEC.proLabel)).toBeDisabled();
-    expect(radio(SPEC.founderLabel)).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
     await userEvent.keyboard('{Escape}');
     expect(onClose).not.toHaveBeenCalled();
@@ -283,19 +226,6 @@ describe('the sheet', () => {
     expect(onClose).toHaveBeenCalledTimes(4);
   });
 
-  test('a Founder purchase ends on their number', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    requestMockPurchase.mockResolvedValue({ ok: true, plan: 'founder', founderNumber: 7, founderCount: 7 });
-    fetchEntitlement.mockResolvedValue({ plan: 'founder', founderNumber: 7, expiresAt: null });
-    const { onDone } = await openSheet();
-    await userEvent.click(main());
-    expect(requestMockPurchase).toHaveBeenCalledWith('founder');
-    expect(screen.getByRole('heading', { name: SPEC.ownedFounder7 })).toBeInTheDocument();
-    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent('Founder #7');
-    await userEvent.click(screen.getByRole('button', { name: SPEC.back }));
-    expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
   test('a failed purchase: the red error above the button, and the button resets', async () => {
     process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
     requestMockPurchase.mockRejectedValue(new Error('nope'));
@@ -305,7 +235,7 @@ describe('the sheet', () => {
     expect(alert).toHaveTextContent(SPEC.error);
     expect(alert).toHaveClass('form-error');
     expect(alert.nextElementSibling).toBe(main());
-    expect(main()).toHaveTextContent(SPEC.getFounder);
+    expect(main()).toHaveTextContent(SPEC.getPro);
     expect(main()).toBeEnabled();
   });
 
@@ -326,107 +256,6 @@ describe('the sheet', () => {
   });
 });
 
-describe('waiting for the founder count (fake timers)', () => {
-  let user;
-  let settle;
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    fetchFounderCount.mockReturnValue(new Promise((resolve, reject) => { settle = { resolve, reject }; }));
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  const wait = (ms) => act(async () => { jest.advanceTimersByTime(ms); });
-  const skeleton = () => document.querySelectorAll('.pro-plan.is-loading');
-
-  test('the timeout is 8 seconds', () => {
-    expect(FOUNDER_COUNT_TIMEOUT_MS).toBe(8000);
-  });
-
-  test('loading: the skeleton cards and a disabled button, right up to the timeout', async () => {
-    await openSheet();
-    expect(skeleton()).toHaveLength(2);
-    expect(screen.queryByRole('radio')).toBeNull();
-    expect(main()).toBeDisabled();
-    await wait(FOUNDER_COUNT_TIMEOUT_MS - 1);
-    expect(skeleton()).toHaveLength(2);
-    expect(main()).toBeDisabled();
-  });
-
-  test('success: both cards, Founder picked', async () => {
-    await openSheet();
-    await act(async () => settle.resolve(93));
-    expect(skeleton()).toHaveLength(0);
-    expect(radio(SPEC.founderLabel)).toBeChecked();
-    expect(screen.getByText('7 of 100 spots left')).toBeInTheDocument();
-    expect(main()).toHaveTextContent(SPEC.getFounder);
-    expect(main()).toBeEnabled();
-    // The timer is gone: nothing changes at 8 seconds.
-    await wait(FOUNDER_COUNT_TIMEOUT_MS);
-    expect(radio(SPEC.founderLabel)).toBeChecked();
-  });
-
-  test('failure: the Pro card alone, Pro picked, no price or seats guessed', async () => {
-    await openSheet();
-    await act(async () => settle.reject(new Error('offline')));
-    expect(skeleton()).toHaveLength(0);
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(screen.queryByText(/spots left|once/)).toBeNull();
-    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    expect(main()).toBeEnabled();
-  });
-
-  test('timeout: the Pro card alone, Pro picked', async () => {
-    await openSheet();
-    await wait(FOUNDER_COUNT_TIMEOUT_MS);
-    expect(skeleton()).toHaveLength(0);
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(screen.queryByText(/spots left|once/)).toBeNull();
-    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    expect(main()).toBeEnabled();
-    await user.click(main());
-    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
-  });
-
-  test('a count after the timeout adds the Founder card but keeps Pro picked', async () => {
-    await openSheet();
-    await wait(FOUNDER_COUNT_TIMEOUT_MS);
-    await act(async () => settle.resolve(0));
-    expect(screen.getByText('100 of 100 spots left')).toBeInTheDocument();
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(radio(SPEC.founderLabel)).not.toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    await user.click(radio(SPEC.founderLabel));
-    expect(main()).toHaveTextContent(SPEC.getFounder);
-  });
-
-  test('a sold-out count after the timeout: still Pro alone, now with the sold-out line', async () => {
-    await openSheet();
-    await wait(FOUNDER_COUNT_TIMEOUT_MS);
-    await act(async () => settle.resolve(600));
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(screen.getByText(SPEC.soldOut)).toBeInTheDocument();
-  });
-
-  test('sold out: Pro picked', async () => {
-    await openSheet();
-    await act(async () => settle.resolve(600));
-    expect(screen.getAllByRole('radio')).toHaveLength(1);
-    expect(radio(SPEC.proLabel)).toBeChecked();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-  });
-});
-
 describe('Restore purchase', () => {
   test('re-reads the entitlement: Restoring…, then Restored. You’re Pro.', async () => {
     let finish;
@@ -441,18 +270,6 @@ describe('Restore purchase', () => {
     expect(adServiceIsPro()).toBe(true);
   });
 
-  test('a restored Founder: their number under the large Founder badge', async () => {
-    fetchEntitlement.mockResolvedValue({ plan: 'founder', founderNumber: 7, expiresAt: null });
-    await openSheet();
-    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
-    const line = screen.getByRole('heading', { level: 2 });
-    expect(line.textContent).toBe(SPEC.restoredFounder7);
-    expect(line.textContent).toBe('Restored. You\u2019re Founder #7.');
-    const badge = document.querySelector('.pro-sheet-success-badge');
-    expect(badge.querySelector('.pro-badge')).toHaveTextContent(/^Founder #7$/);
-    expect(badge.nextElementSibling).toBe(line);
-  });
-
   test('a restored Pro member: Restored. You’re Pro. under the Pro badge', async () => {
     fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: null });
     await openSheet();
@@ -463,14 +280,6 @@ describe('Restore purchase', () => {
     const badge = document.querySelector('.pro-sheet-success-badge');
     expect(badge.querySelector('.pro-badge')).toHaveTextContent(/^Pro$/);
     expect(badge.nextElementSibling).toBe(line);
-  });
-
-  test('a restored Founder with no number falls back to Restored. You’re Pro.', async () => {
-    fetchEntitlement.mockResolvedValue({ plan: 'founder', expiresAt: null });
-    await openSheet();
-    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(SPEC.restored);
-    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent(/^Founder$/);
   });
 
   test('nothing found: the muted line above the button', async () => {
@@ -567,9 +376,10 @@ describe('layout rules (phone.css)', () => {
     expect(small).toMatch(/font-size: 28px;/);
   });
 
-  test('rows 44px with 24px icons, cards 76px, main button 56px, Maybe later 44px', () => {
+  test('rows 44px with 24px icons, the price block, main button 56px, Maybe later 44px', () => {
     expect(rule('.pro-benefits li')).toMatch(/height: 44px;/);
-    expect(rule('.pro-plan')).toMatch(/height: 76px;/);
+    expect(rule('.pro-price-amount')).toMatch(/font-size: 22px;/);
+    expect(css).not.toMatch(/\.pro-plan|\.pro-skeleton|\.pro-sold-out/);
     expect(rule('.pro-sheet .pro-sheet-main')).toMatch(/height: 56px;/);
     expect(rule('.pro-sheet-later')).toMatch(/min-height: 44px;/);
     expect(rule('.pro-fine-print')).toMatch(/font-size: 13px;/);

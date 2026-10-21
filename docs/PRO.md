@@ -98,34 +98,29 @@ opened it, portaled to `document.body`. `src/phone/Paywall.jsx` is `/pro` (web
 
 Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in full ink with a
 44px tap area), a green hero with a white `Pro` badge, `All the bets. None of the ads.` and
-`Friends always play free.`, five benefit rows, the plan cards, the fine print and
+`Friends always play free.`, five benefit rows, the price, the fine print and
 `Restore purchase · Terms · Privacy`; pinned above the safe area, the main button and
 `Maybe later`. Every string is in `PRO_COPY` (`proConfig.js`).
 
 - **Highlighted row.** `highlight` (`PRO_ROW`) tints one benefit row: 1 (No ads) from `/pro` and
   the Go Pro links, 3 from a locked Run it back, 4 from the locked Friends (head-to-head) filter.
-- **Plan cards.** Pro `$3/mo` and Founder `$40 once` / `$80 once`, priced by `founderOffer()`
-  from `meta/founders`. Founder is picked while spots remain, with `{n} of 100 spots left` (or
-  `of 500` in tier 2) only once the real count has loaded. After 600, no Founder card, Pro
-  picked, `Founder spots are gone.` above it. Until the count is back the cards are grey
-  placeholders and the main button is disabled. If the read fails or takes longer than
-  `FOUNDER_COUNT_TIMEOUT_MS` (8 seconds, `ProSheet.jsx`), only the Pro card shows, picked (no
-  guessed price or seats). A count that lands after the timeout adds the Founder card but keeps
-  Pro picked.
-- **Main button.** `Get Pro` / `Get Founder`; `Getting you set…` while buying (cards, X and
-  Maybe later disabled); `Coming soon`, disabled, without `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1`. A
-  failed purchase shows `Couldn’t finish that. Try again.` above it.
+- **Price.** One plan, so one block under the benefit rows: `$3/mo` with
+  `Billed monthly. Cancel anytime.` below it. No plan label, no radio, nothing to pick. Nothing
+  loads before it shows (the sheet never waits on a read, so there is no skeleton); a plan that
+  arrives later as Pro swaps in the success screen.
+- **Fine print.** `Pro renews at $3/mo until you cancel in Settings.`
+- **Main button.** `Get Pro`, enabled as soon as the sheet shows; `Getting you set…` while
+  buying (the X, Maybe later, Escape and the scrim do nothing until it ends); `Coming soon`,
+  disabled, without `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1`. A failed purchase shows
+  `Couldn’t finish that. Try again.` above it.
 - **Restore purchase** re-reads `entitlements/{uid}` from the server (`fetchEntitlement` in
   `entitlementApi.js`, via `refreshEntitlement()` in `useEntitlement.js`, which shares the result
-  with every screen and the ad service). Pro found: `Restored. You’re Pro.`, or
-  `Restored. You’re Founder #7.` for a Founder (`Restored. You’re Pro.` if their number is
-  missing); none:
+  with every screen and the ad service). Pro found: `Restored. You’re Pro.`; none:
   `Nothing to restore on this account.` above the button. No store receipts are checked yet.
 - **Terms / Privacy** link to `NEXT_PUBLIC_TERMS_URL` / `NEXT_PUBLIC_PRIVACY_URL` in a new tab,
   each only when set; the dots only sit between links that show.
 - **Success screen.** A Pro member (already Pro on arrival, or just bought or restored) sees a
-  large badge and `You’re Pro. No more ads.` or `You’re Founder #7. No more ads.`, and
-  `Back to my bets`.
+  large Pro badge and `You’re Pro. No more ads.`, and `Back to my bets`.
 
 ### Entry points and locks
 

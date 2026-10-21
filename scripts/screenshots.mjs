@@ -630,7 +630,7 @@ const SHOTS = [
     paywall: true,
     async run(page) {
       await page.goto('/pro');
-      await page.getByText('Founder: $40 once, Pro for life. First 100 only.').waitFor();
+      await page.locator('.pro-price').waitFor();
     },
   },
   {

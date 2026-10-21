@@ -3785,45 +3785,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .pro-benefits li svg { flex: none; color: var(--accent); }
 .pro-benefits li.is-highlighted { background: #e3f1e8; font-weight: 800; }
-.pro-plans { display: flex; flex-direction: column; gap: 10px; }
-.pro-sold-out { margin: 0; color: var(--muted); font-size: 14px; }
-.pro-plan {
-  box-sizing: border-box;
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 76px;
-  padding: 0 16px;
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  background: var(--raised);
-  cursor: pointer;
-}
-.pro-plan.is-picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.pro-plan input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
-.pro-plan:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
-.pro-plan:has(input:disabled) { cursor: default; opacity: 0.7; }
-.pro-plan-radio {
-  flex: none;
-  box-sizing: border-box;
-  width: 22px;
-  height: 22px;
-  border: 2px solid var(--muted);
-  border-radius: 50%;
-}
-.pro-plan.is-picked .pro-plan-radio { border: 7px solid var(--accent); }
-.pro-plan-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.pro-plan-label { font-size: 16px; font-weight: 800; }
-.pro-plan-note { color: var(--muted); font-size: 12px; line-height: 1.3; }
-.pro-plan-seats { color: var(--accent); font-size: 12px; font-weight: 700; }
-.pro-plan-price { flex: none; font-size: 16px; font-weight: 800; }
-.pro-plan.is-loading { cursor: default; }
-.pro-plan.is-loading .pro-plan-radio { border-color: #e4e7e2; }
-.pro-skeleton { display: block; border-radius: 6px; background: #e4e7e2; }
-.pro-skeleton-label { width: 72px; height: 14px; }
-.pro-skeleton-note { width: 70%; height: 10px; margin-top: 6px; }
-.pro-skeleton-price { flex: none; width: 56px; height: 14px; }
+.pro-price { display: flex; flex-direction: column; gap: 2px; }
+.pro-price p { margin: 0; }
+.pro-price-amount { font-size: 22px; font-weight: 800; line-height: 1.2; }
+.pro-price-note { color: var(--muted); font-size: 13px; line-height: 1.4; }
 .pro-fine-print { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .pro-sheet-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin: -8px 0 0; color: var(--muted); font-size: 13px; }
 .pro-sheet-link {
