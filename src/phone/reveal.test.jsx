@@ -90,7 +90,7 @@ describe('the winners line follows the stake', () => {
   test('every line uses the typographic apostrophe and no em dash', () => {
     expect(STAKE_LINES.coffee).toBe('Coffee’s on everyone else.');
     Object.values(STAKE_LINES).forEach((line) => {
-      expect(line).not.toMatch(/['—]/);
+      expect(line).not.toMatch(/['\u2014]/);
     });
   });
 });
