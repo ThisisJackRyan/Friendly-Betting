@@ -21,6 +21,9 @@ import { useProBadge } from './useEntitlement';
 import GoProLink from './GoProLink';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
+import ProSheet from './ProSheet';
+import { ProChip, useProLocked } from './ProLock';
+import { PRO_ROW } from './proConfig';
 
 // Friends swaps the bet list for head to head records.
 const FILTERS = ['All', 'Open', 'Closed', 'Settled', 'Friends'];
@@ -47,7 +50,11 @@ export function MyBetsList({ user }) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [toast, setToast] = useState('');
+  const [proSheet, setProSheet] = useState(false);
   const deleteTrigger = useRef(null);
+  const proTrigger = useRef(null);
+  // Head-to-head stats (the Friends filter) are Pro with the paywall on.
+  const friendsLocked = useProLocked();
   const proBadge = useProBadge(uid);
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
@@ -101,6 +108,11 @@ export function MyBetsList({ user }) {
       setBets(rows || []);
     });
   }, [uid]);
+
+  // A plan that lapses while Friends is open goes back to All.
+  useEffect(() => {
+    if (friendsLocked && filter === 'Friends') setFilter('All');
+  }, [friendsLocked, filter]);
 
   const friends = useMemo(() => friendStats(bets, uid), [bets, uid]);
   const counts = { All: bets?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
@@ -172,17 +184,28 @@ export function MyBetsList({ user }) {
               </div>
               <div className="bets-toolbar">
                 <div className="bet-filters" role="group" aria-label="Filter bets by status">
-                  {FILTERS.map((status) => (
-                    <button
-                      key={status}
-                      type="button"
-                      aria-pressed={filter === status}
-                      onClick={() => setFilter(status)}
-                    >
-                      {status}
-                      <span>{counts[status]}</span>
-                    </button>
-                  ))}
+                  {FILTERS.map((status) => {
+                    const locked = status === 'Friends' && friendsLocked;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        aria-pressed={filter === status}
+                        onClick={(event) => {
+                          if (!locked) {
+                            setFilter(status);
+                            return;
+                          }
+                          proTrigger.current = event.currentTarget;
+                          setProSheet(true);
+                        }}
+                      >
+                        {status}
+                        <span>{counts[status]}</span>
+                        {locked && <ProChip />}
+                      </button>
+                    );
+                  })}
                 </div>
                 {filter !== 'Friends' && (
                   <label className="bet-search">
@@ -290,6 +313,16 @@ export function MyBetsList({ user }) {
             Log out
           </button>
         </>
+      )}
+      {proSheet && (
+        <ProSheet
+          highlight={PRO_ROW.headToHead}
+          onClose={() => {
+            setProSheet(false);
+            proTrigger.current?.focus();
+          }}
+          onDone={() => setProSheet(false)}
+        />
       )}
       {deleting && (
         <DeleteBetDialog busy={deleteBusy} error={deleteError} onConfirm={confirmDelete} onCancel={closeDelete} />

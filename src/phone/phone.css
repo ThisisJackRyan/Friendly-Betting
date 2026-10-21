@@ -3628,6 +3628,22 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .go-pro-link:hover { color: var(--ink, #203b2e); }
 .go-pro-link:focus-visible { outline: 2px solid var(--muted, #5e6b60); outline-offset: 2px; border-radius: 6px; }
 .bets-heading .go-pro-link { margin-top: 2px; }
+/* A locked Pro feature's small outlined chip (ProLock). */
+.bet-filters button .pro-lock-chip { margin-left: 0; font-size: 9px; font-weight: 800; opacity: 1; }
+.pro-lock-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.cta-bar .go-pro-link { display: flex; width: fit-content; margin: 6px auto -10px; }
 /* On the dark hero: the hero's own muted light tone, neutral, not green. */
 .landing-pro { margin-top: 4px; color: rgba(255, 255, 255, 0.75); }
 .landing-pro:hover { color: #fff; }

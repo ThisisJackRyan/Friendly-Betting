@@ -123,7 +123,17 @@ Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in f
   large badge and `You’re Pro. No more ads.` or `You’re Founder #7. No more ads.`, and
   `Back to my bets`.
 
-Entry points: `/pro` directly, and the Go Pro links (`GoProLink`).
+### Entry points and locks
+
+Go Pro (`GoProLink`, to `/pro`), only with the paywall on, never for a Pro member, never on the
+vote or tally pages: a muted text link under the ad thank-you note, under Start a bet on Home,
+and on My bets.
+
+Locked features (`ProLock.jsx`): with the paywall on and no Pro, Run it back (tally reveal) and
+the Friends head-to-head filter on My bets keep their look plus a small outlined `Pro` chip, and
+a tap opens the sheet on their row. With the paywall off they work for everyone. The lock is
+client-side only: the rules don't check Pro for a rematch (it is an ordinary bet create) and
+head-to-head stats are computed from bets the creator can already read.
 
 **Not done: the "4th bet" prompt.** Counting a creator's bets in Create would need a
 new query (My bets' list isn't loaded there), so for now creation is never blocked. TODO: count
@@ -135,7 +145,7 @@ than a prompt.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro`, the Pro sheet and the Go Pro links. Web only: always off in the native app (see below). |
+| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro`, the Pro sheet, the Go Pro entry points and the Pro locks. Web only: always off in the native app (see below). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | off | Early-access types for Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | off | Paywall buttons call the mock route. Previews only. |
 | `NEXT_PUBLIC_TERMS_URL` | unset | The Pro sheet's Terms link. Hidden when unset. |
