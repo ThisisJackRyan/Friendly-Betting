@@ -5,7 +5,8 @@ import { NAME_EDIT_COPY, NAME_PLACEHOLDER } from './nameEditCopy';
 
 // A small add/edit name control under "You’re on ...". onSave(name) changes
 // only the name on the voter's pick; when it throws, the old name stays and
-// the form stays open with an error.
+// the form stays open with an error. If that save lands later anyway (the
+// name shows up as `current`), the form closes.
 export default function NameEdit({ current = '', onSave }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(current);
@@ -14,6 +15,9 @@ export default function NameEdit({ current = '', onSave }) {
   const input = useRef(null);
   const toggle = useRef(null);
   const returnFocus = useRef(false);
+  const alive = useRef(true);
+  // The name of a save that failed or timed out, until the form closes.
+  const failedName = useRef(null);
   const inputId = useId();
 
   useEffect(() => {
@@ -22,12 +26,20 @@ export default function NameEdit({ current = '', onSave }) {
     returnFocus.current = false;
   }, [editing]);
 
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
   const open = () => {
     setValue(current);
     setError('');
     setEditing(true);
   };
   const close = () => {
+    failedName.current = null;
     returnFocus.current = true;
     setEditing(false);
     setError('');
@@ -39,15 +51,25 @@ export default function NameEdit({ current = '', onSave }) {
     if (saving || trimmed === current) return;
     setSaving(true);
     setError('');
+    failedName.current = null;
     try {
       await onSave(trimmed);
-      close();
+      if (alive.current) close();
     } catch {
-      setError(NAME_EDIT_COPY.saveError);
+      if (alive.current) {
+        failedName.current = trimmed;
+        setError(NAME_EDIT_COPY.saveError);
+      }
     } finally {
-      setSaving(false);
+      if (alive.current) setSaving(false);
     }
   };
+
+  // Only while the field still holds that name, so later typing is kept.
+  useEffect(() => {
+    const late = failedName.current;
+    if (editing && !saving && late !== null && current === late && trimmed === late) close();
+  }, [editing, saving, current, trimmed]);
 
   if (!editing) {
     return (

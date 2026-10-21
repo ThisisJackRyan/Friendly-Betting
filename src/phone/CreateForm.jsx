@@ -632,6 +632,7 @@ const CreateForm = () => {
             onResend={() => phone.send()}
             onChangeNumber={() => goBackTo(CREATE_STEP.phone)}
             busy={phone.busy}
+            error={stepNumber === step ? phone.error : ''}
           />
           {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
         </>
