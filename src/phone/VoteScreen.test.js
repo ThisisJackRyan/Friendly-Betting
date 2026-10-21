@@ -107,6 +107,7 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
   expect(await screen.findByText('Maya')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Who is late' })).toBeInTheDocument();
   expect(screen.queryByText(/place bet/i)).not.toBeInTheDocument();
+  expect(screen.getByLabelText(/your name/i)).toHaveAttribute('placeholder', 'ex: John');
 
   await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
   expect(castVote).toHaveBeenCalledWith('abc123', {

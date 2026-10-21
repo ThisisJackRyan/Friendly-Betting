@@ -190,7 +190,7 @@ const VoteScreen = () => {
                   <input
                     id="voter-name"
                     value={name}
-                    placeholder="Maya"
+                    placeholder="ex: John"
                     autoComplete="nickname"
                     onChange={(event) => setName(event.target.value)}
                   />
