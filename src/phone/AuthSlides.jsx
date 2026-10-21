@@ -31,7 +31,6 @@ export function useCreatorPhone() {
   const verifiedRef = useRef(null);
   const [digitsRaw, setDigitsRaw] = useState('');
   const [e164, setE164] = useState('');
-  const [, setVerificationId] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [busy, setBusy] = useState(null);
   const [error, setErrorState] = useState('');
@@ -68,7 +67,6 @@ export function useCreatorPhone() {
     try {
       const id = await sendPhoneCode(next, container);
       verificationIdRef.current = id;
-      setVerificationId(id);
       setE164(next);
       setOtp(['', '', '', '', '', '']);
       attempted.current = '';

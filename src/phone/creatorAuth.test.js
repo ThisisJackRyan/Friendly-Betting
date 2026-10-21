@@ -58,8 +58,9 @@ const {
   sendPhoneCode,
   signOutCreator,
   verifyPhoneCode,
+  SPENT_CODE,
 } = require('./creatorAuth');
-const { PERSON_CHECK_CANCELLED } = require('./creatorSession');
+const { PERSON_CHECK_CANCELLED, VERIFY_CODE_ERROR, phoneError } = require('./creatorSession');
 
 const bodyNodes = [];
 
@@ -474,14 +475,19 @@ test.each([
   });
 });
 
-test('an in-use link with no recoverable credential rethrows the link error', async () => {
+test('an in-use link with no recoverable credential asks for a new code', async () => {
   mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true };
   const taken = new Error('taken');
   taken.code = 'auth/credential-already-in-use';
+  // A legacy err.credential is ignored: only credentialFromError's proof counts.
+  taken.credential = { verificationId: 'vid-1', code: '123456' };
   mockLinkWithCredential.mockRejectedValue(taken);
   mockCredentialFromError.mockReturnValue(null);
 
-  await expect(verifyPhoneCode('vid-1', '123456')).rejects.toBe(taken);
+  const err = await verifyPhoneCode('vid-1', '123456').catch((error) => error);
+  expect(err.code).toBe(SPENT_CODE);
+  expect(err.cause).toBe(taken);
+  expect(phoneError(err, VERIFY_CODE_ERROR).message).toBe('Send a new code.');
   expect(mockSignInWithCredential).not.toHaveBeenCalled();
 });
 
