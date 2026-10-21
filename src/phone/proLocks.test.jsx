@@ -4,7 +4,7 @@ import RunItBack from './RunItBack';
 import { MyBetsList } from './MyBets';
 import EntitlementSync from './EntitlementSync';
 import { saveBet, subscribeMyBets } from './api';
-import { subscribeEntitlement } from './entitlementApi';
+import { fetchEntitlement, subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { buildSettlement } from './settlement';
 import { navigation } from 'next/navigation';
@@ -61,12 +61,24 @@ async function show(element) {
   await act(async () => {});
 }
 
+// Renders into an app root like the real one, so the sheet (portaled to the
+// body) can make it inert.
+async function showInRoot(element) {
+  const root = document.createElement('div');
+  root.id = 'root';
+  document.body.appendChild(root);
+  render(<><EntitlementSync />{element}</>, { container: root });
+  await act(async () => {});
+  return root;
+}
+
 const highlighted = () => Array.from(document.querySelectorAll('.pro-benefits li.is-highlighted')).map((li) => li.textContent);
 const chip = (control) => control.querySelector('.pro-lock-chip');
 
 beforeEach(() => {
   __resetEntitlementForTests();
   subscribeEntitlement.mockReset();
+  fetchEntitlement.mockResolvedValue(null);
   saveBet.mockClear();
   navigation.push.mockReset();
   subscribeMyBets.mockImplementation((_uid, onChange) => {
@@ -161,5 +173,43 @@ describe('head-to-head stats (Friends on My bets)', () => {
     expect(friends()).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Head to head')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('the page behind is inert while the sheet is up, and focus goes back to Friends after a purchase', async () => {
+    setup();
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    fetchEntitlement.mockResolvedValue(PRO);
+    try {
+      const root = await showInRoot(<MyBetsList user={MAYA} />);
+      expect(root).not.toHaveAttribute('inert');
+      await userEvent.click(friends());
+      const sheet = screen.getByRole('dialog', { name: 'All the bets. None of the ads.' });
+      expect(root.contains(sheet)).toBe(false);
+      expect(root).toHaveAttribute('inert');
+      expect(sheet).toHaveFocus();
+
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Get Pro' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Back to my bets' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(root).not.toHaveAttribute('inert');
+      expect(friends()).toHaveFocus();
+    } finally {
+      delete process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE;
+    }
+  });
+
+  test.each([
+    ['the X', () => userEvent.click(screen.getByRole('button', { name: 'Close' }))],
+    ['Maybe later', () => userEvent.click(screen.getByRole('button', { name: 'Maybe later' }))],
+    ['Escape', () => userEvent.keyboard('{Escape}')],
+  ])('closed with %s: the page is live again and focus is back on Friends', async (_label, closeIt) => {
+    setup();
+    const root = await showInRoot(<MyBetsList user={MAYA} />);
+    await userEvent.click(friends());
+    expect(root).toHaveAttribute('inert');
+    await closeIt();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(root).not.toHaveAttribute('inert');
+    expect(friends()).toHaveFocus();
   });
 });

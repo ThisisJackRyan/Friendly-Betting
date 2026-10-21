@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FiAward, FiRotateCcw, FiSlash, FiUsers, FiX, FiZap } from 'react-icons/fi';
+import { useModalBackground } from '../platform/modalBackground';
 import ProBadge from './ProBadge';
 import { requestMockPurchase } from './entitlementApi';
 import { badgeFor } from './entitlement';
@@ -45,6 +46,10 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
       live.current = false;
     };
   }, []);
+
+  // The page behind is inert while the sheet is up (unless the sheet sits
+  // inside it), and focus goes back to the opener when it closes.
+  useModalBackground(dialogRef, mounted);
 
   useEffect(() => {
     // Focus starts on the sheet itself, so Tab reaches the X first.

@@ -108,6 +108,22 @@ describe('/pro', () => {
     expect(document.title).toBe('Go Pro · Friendly');
   });
 
+  test('the page behind /pro is inert while the sheet is up', async () => {
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.appendChild(root);
+    try {
+      const { unmount } = render(<><EntitlementSync /><Paywall /></>, { container: root });
+      await act(async () => {});
+      expect(root.contains(dialog())).toBe(false);
+      expect(root).toHaveAttribute('inert');
+      unmount();
+      expect(root).not.toHaveAttribute('inert');
+    } finally {
+      root.remove();
+    }
+  });
+
   test('the X and Maybe later leave /pro', async () => {
     await openPage();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -260,6 +276,26 @@ describe('the sheet', () => {
     await userEvent.click(screen.getByRole('button', { name: SPEC.later }));
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  test('the app root is inert while the sheet is up, and not after it closes', async () => {
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.appendChild(root);
+    const opener = document.createElement('button');
+    root.appendChild(opener);
+    opener.focus();
+    try {
+      const { unmount } = render(<><EntitlementSync /><ProSheet onClose={() => {}} /></>);
+      await act(async () => {});
+      expect(root).toHaveAttribute('inert');
+      expect(dialog()).toHaveFocus();
+      unmount();
+      expect(root).not.toHaveAttribute('inert');
+      expect(opener).toHaveFocus();
+    } finally {
+      root.remove();
+    }
   });
 
   test('a locked feature opens it on its own row', async () => {
