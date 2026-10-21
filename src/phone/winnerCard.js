@@ -1,6 +1,6 @@
 import { isSettled } from './betStatus';
 import { PROD_ORIGIN } from '../platform/runtime';
-import { REVEAL_COPY, buildReveal } from './reveal';
+import { REVEAL_COPY, buildCardReveal } from './reveal';
 import { settlementOf } from './settlement';
 
 // The shareable winner card: a 1080x1350 PNG of a settled bet's reveal. This
@@ -40,8 +40,10 @@ export function textDirection(text) {
 }
 
 // "& 2 others" joined with no-break spaces, so the count never ends a line
-// on its own ("Sam & 2" / "others won.").
-const keepCount = (headline) => headline.replace(/ & (\d+) (others?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`);
+// on its own ("Sam & 2" / "others won."); "& I" the same way.
+const keepCount = (headline) => headline
+  .replace(/ & (\d+) (others?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`)
+  .replace(/ & I won\.$/, ` &${NBSP}I won.`);
 
 // Each block: its font sizes, largest first, with line height as a multiple
 // of the size, how many lines it may take and the gap after it. The headline
@@ -101,13 +103,13 @@ export function wrapText(text, { width, font: fontSpec, maxLines, measure }) {
 }
 
 // What the card says: the reveal a visitor sees (never "You", since the card
-// goes to the group), with the bet's question on top. Null for anything that
+// goes to the group; buildCardReveal), with the bet's question on top. Null for anything that
 // is not a settled bet with a known result: open, called off, or a legacy
 // count-only bet.
 export function winnerCardText(bet) {
   if (!isSettled(bet)) return null;
   const result = settlementOf(bet);
-  const reveal = buildReveal({ bet, viewerId: null });
+  const reveal = buildCardReveal(bet);
   if (!result || !reveal || reveal.kind === 'legacy' || reveal.kind === 'called-off') return null;
   return {
     question: result.question,
@@ -128,9 +130,8 @@ const cutName = (name, max) => {
 // The reveal's headline, then the same with each name cut shorter.
 function headlineVariants(bet, headline) {
   const result = settlementOf(bet);
-  return [headline, ...NAME_CUTS.map((max) => keepCount(buildReveal({
-    bet: { ...bet, settlement: { ...result, winners: result.winners.map((winner) => ({ ...winner, name: cutName(winner.name, max) })) } },
-    viewerId: null,
+  return [headline, ...NAME_CUTS.map((max) => keepCount(buildCardReveal({
+    ...bet, settlement: { ...result, winners: result.winners.map((winner) => ({ ...winner, name: cutName(winner.name, max) })) },
   }).headline))];
 }
 

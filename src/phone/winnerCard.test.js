@@ -76,6 +76,60 @@ describe('winnerCardText', () => {
   });
 });
 
+describe('the creator among the winners, on the card', () => {
+  // makeBet's creator is createdByID 'jack'.
+  test('a named creator is a winner like any other, alone or in the list', () => {
+    const solo = winnerCardText(settled({ winners: [['jack', 'Jack']], losers: [['zed', 'Zed']], stake: 'Coffee' }));
+    expect(solo.headline).toBe('Jack won.');
+    expect(solo.subline).toBe('Called it solo. Coffee’s on everyone else.');
+    const crew = winnerCardText(settled({ winners: [['maya', 'Maya'], ['jack', 'Jack']], stake: 'Coffee' }));
+    expect(crew.headline).toBe('Maya & Jack won.');
+    expect(crew.subline).toBe('Coffee’s on everyone else.');
+    const many = winnerCardText(settled({ winners: [['maya', 'Maya'], ['jack', 'Jack'], ['sam', 'Sam'], ['kim', 'Kim']] }));
+    expect(many.headline).toBe('Maya, Jack &\u00A02\u00A0others won.');
+  });
+
+  test('an unnamed creator alone: I called it.', () => {
+    const bet = settled({ winners: [['jack', '']], losers: [['zed', 'Zed']], stake: 'Lunch' });
+    const text = winnerCardText(bet);
+    expect(text.headline).toBe('I called it.');
+    expect(text.subline).toBe('Solo win. Lunch is on everyone else.');
+    expect(textOf(buildWinnerCard(bet, { measure }), 'headline')).toEqual(['I called it.']);
+  });
+
+  test.each([
+    [[['maya', 'Maya'], ['jack', '']], 'Maya &\u00A0I won.'],
+    [[['jack', ''], ['maya', 'Maya']], 'Maya &\u00A0I won.'],
+    [[['sam', 'Sam'], ['jack', ''], ['maya', 'Maya']], 'Sam, Maya &\u00A0I won.'],
+  ])('an unnamed creator with others ends the names as I: %j', (winners, headline) => {
+    const bet = settled({ winners, stake: 'Drinks' });
+    expect(winnerCardText(bet).headline).toBe(headline);
+    expect(winnerCardText(bet).subline).toBe('Drinks are on everyone else.');
+    expect(textOf(buildWinnerCard(bet, { measure }), 'headline').join(' ')).toBe(headline);
+  });
+
+  test('with 4 or more winners an unnamed creator counts in the others', () => {
+    const winners = [['sam', 'Sam'], ['maya', 'Maya'], ['jack', ''], ['kim', 'Kim'], ['lee', 'Lee']];
+    expect(winnerCardText(settled({ winners })).headline).toBe('Sam, Maya &\u00A03\u00A0others won.');
+    const four = [['sam', 'Sam'], ['maya', 'Maya'], ['kim', 'Kim'], ['jack', '']];
+    expect(winnerCardText(settled({ winners: four })).headline).toBe('Sam, Maya &\u00A02\u00A0others won.');
+  });
+
+  test('the "& I" stays together when the headline wraps', () => {
+    const bet = settled({ winners: [['a1', 'Bartholomew Maximilian'], ['a2', 'Anastasia Konstantin'], ['jack', '']] });
+    const headline = textOf(buildWinnerCard(bet, { measure }), 'headline');
+    expect(headline.join(' ')).toMatch(/ &\u00A0I won\.$/);
+    expect(headline.some((line) => line.endsWith('&'))).toBe(false);
+  });
+
+  test('the creator\'s own screen still says You called it.', () => {
+    const solo = settled({ winners: [['jack', '']], stake: 'Dinner' });
+    expect(buildReveal({ bet: solo, viewerId: 'jack' })).toMatchObject({ headline: 'You called it.', subline: 'Solo win. Dinner’s on everyone else.' });
+    const crew = settled({ winners: [['maya', 'Maya'], ['jack', '']], stake: 'Dinner' });
+    expect(buildReveal({ bet: crew, viewerId: 'jack' })).toMatchObject({ headline: 'You called it.', subline: 'You & Maya won. Dinner’s on everyone else.' });
+  });
+});
+
 describe('the card\'s winners line follows the stake', () => {
   test.each([
     ['', 'Bragging rights, secured.', ''],
@@ -83,6 +137,8 @@ describe('the card\'s winners line follows the stake', () => {
     ['Coffee', 'Coffee’s on everyone else.', 'Stakes: Coffee'],
     ['Lunch', 'Lunch is on everyone else.', 'Stakes: Lunch'],
     ['Drinks', 'Drinks are on everyone else.', 'Stakes: Drinks'],
+    ['Dinner', 'Dinner’s on everyone else.', 'Stakes: Dinner'],
+    ['$5', 'Time for everyone else to pay up.', 'Stakes: $5'],
     ['Loser buys pizza', 'Time for everyone else to pay up.', 'Stakes: Loser buys pizza'],
   ])('stake %j', (stake, line, stakeText) => {
     const solo = buildWinnerCard(settled({ winners: [['maya', 'Maya']], losers: [['zed', 'Zed']], stake }), { measure });
