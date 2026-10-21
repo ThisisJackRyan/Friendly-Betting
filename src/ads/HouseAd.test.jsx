@@ -1,5 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import HouseAd, { showHouseAd } from './HouseAd';
 
 afterEach(() => {
@@ -13,8 +15,19 @@ test('a neutral full-screen layer with a label and a 44pt close button', () => {
   expect(dialog).toHaveStyle({ position: 'fixed' });
   expect(dialog).toHaveTextContent(/^Ad×$/);
   const close = screen.getByRole('button', { name: 'Close ad' });
-  expect(close).toHaveStyle({ width: '44px', height: '44px' });
+  expect(close).toHaveClass('overlay-close');
   expect(close).toHaveFocus();
+});
+
+test('the close button sits 12px inside the safe area and is 44px square', () => {
+  const css = readFileSync(join(__dirname, '../phone/phone.css'), 'utf8');
+  const rule = css.match(/\n\.overlay-close \{([^}]*)\}/)[1];
+  // Plain values first, for browsers without env().
+  expect(rule).toMatch(/top: 12px;[\s\S]*top: calc\(env\(safe-area-inset-top, 0px\) \+ 12px\);/);
+  expect(rule).toMatch(/right: 12px;[\s\S]*right: calc\(env\(safe-area-inset-right, 0px\) \+ 12px\);/);
+  expect(rule).toMatch(/width: 44px;/);
+  expect(rule).toMatch(/height: 44px;/);
+  expect(rule).not.toMatch(/translate|-\d+px|100vw/);
 });
 
 test('closes once on the button or Escape', async () => {

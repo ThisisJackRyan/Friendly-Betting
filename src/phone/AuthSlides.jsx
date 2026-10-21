@@ -31,7 +31,6 @@ export function useCreatorPhone() {
   const verifiedRef = useRef(null);
   const [digitsRaw, setDigitsRaw] = useState('');
   const [e164, setE164] = useState('');
-  const [, setVerificationId] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [busy, setBusy] = useState(null);
   const [error, setErrorState] = useState('');
@@ -68,7 +67,6 @@ export function useCreatorPhone() {
     try {
       const id = await sendPhoneCode(next, container);
       verificationIdRef.current = id;
-      setVerificationId(id);
       setE164(next);
       setOtp(['', '', '', '', '', '']);
       attempted.current = '';
@@ -415,7 +413,8 @@ function AuthChrome({ title, onBack, children, cta }) {
   );
 }
 
-export default function CreatorAuthFlow({ onCancel, renderDone }) {
+// phoneFooter, if given, sits under the Send code button on the phone step.
+export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = null }) {
   const phone = useCreatorPhone();
   const [step, setStep] = useState(1);
   const [leaving, setLeaving] = useState(null);
@@ -512,7 +511,12 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
       <AuthChrome
         title={AUTH_COPY.phoneTitle}
         onBack={() => onBack(1)}
-        cta={<SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />}
+        cta={(
+          <>
+            <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />
+            {phoneFooter}
+          </>
+        )}
       >
         <PhoneBody
           formatted={phone.formatted}

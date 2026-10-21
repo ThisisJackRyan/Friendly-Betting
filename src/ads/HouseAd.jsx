@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 
 // The web stand-in for an interstitial: a fixed full-screen layer, so the page
-// under it never moves. Closes on the button, Escape, or by itself.
+// under it never moves. Closes on the button, Escape, or by itself. The close
+// button's place and size live in .overlay-close (phone.css), so its focus ring
+// stays on screen too.
 const layer = {
   position: 'fixed',
   inset: 0,
@@ -9,7 +11,7 @@ const layer = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+  padding: 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)',
   background: 'var(--page, #f6f7f2)',
   color: 'var(--ink, #203b2e)',
   fontFamily: 'inherit',
@@ -17,29 +19,11 @@ const layer = {
 
 const label = {
   position: 'absolute',
-  top: 'calc(env(safe-area-inset-top) + 12px)',
-  left: 'calc(env(safe-area-inset-left) + 16px)',
+  top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+  left: 'calc(env(safe-area-inset-left, 0px) + 16px)',
   fontSize: 13,
   fontWeight: 600,
   color: 'var(--muted, #5e6b60)',
-};
-
-const close = {
-  position: 'absolute',
-  top: 'calc(env(safe-area-inset-top) + 4px)',
-  right: 'calc(env(safe-area-inset-right) + 4px)',
-  width: 44,
-  height: 44,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  border: 0,
-  borderRadius: 22,
-  background: 'transparent',
-  color: 'inherit',
-  fontSize: 24,
-  lineHeight: 1,
-  cursor: 'pointer',
 };
 
 const panel = {
@@ -105,7 +89,7 @@ export default function HouseAd({ onClose, autoCloseMs = 0 }) {
   return (
     <div ref={dialog} role="dialog" aria-modal="true" aria-label="Ad" style={layer} data-testid="house-ad">
       <span style={label}>Ad</span>
-      <button ref={button} type="button" aria-label="Close ad" style={close} onClick={() => finish.current()}>
+      <button ref={button} type="button" aria-label="Close ad" className="overlay-close" onClick={() => finish.current()}>
         <span aria-hidden="true">×</span>
       </button>
       <div style={panel} aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import GoProLink from '../phone/GoProLink';
 
 export const AD_THANKS_LINE = 'Thanks for watching. That keeps Friendly free.';
 
@@ -102,10 +103,18 @@ export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
       onKeyDown={(event) => {
         if (event.key !== 'Tab') return;
         event.preventDefault();
-        button.current?.focus();
+        // Tab only moves between the layer's own controls: its button and,
+        // when it's there, the Go Pro link.
+        const controls = [...layer.current.querySelectorAll('button, a[href]')];
+        const at = controls.indexOf(document.activeElement);
+        const step = event.shiftKey ? -1 : 1;
+        const next = at < 0 ? button.current : controls[(at + step + controls.length) % controls.length];
+        next?.focus();
       }}
     >
       <p id="ad-thanks-line" style={line}>{AD_THANKS_LINE}</p>
+      {/* Above the cover button, and its tap goes to /pro without continuing. */}
+      <GoProLink className="ad-thanks-pro" onClick={(event) => event.stopPropagation()} />
       {/* The button's click bubbles to the layer, which continues once. */}
       {label ? (
         <button ref={button} type="button" className="cta press" style={continueButtonStyle}>

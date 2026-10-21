@@ -56,6 +56,7 @@ async function mockRematch(page, { uid = 'jack', patch } = {}) {
       export const createBet = create;
       export const saveBet = async (code, fields) => code ? code : create(fields);
       export const castVote = async () => {};
+      export const renameVote = async () => {};
       export const deleteBet = async () => {};
       export const undoSettle = async () => {};
       export const callOffBet = async () => {};

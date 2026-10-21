@@ -169,6 +169,26 @@ export async function castVote(code, vote) {
   rememberBet(vote.voterId, code);
 }
 
+// Changes only the name on a voter's own pick: same side, same place in the
+// list, same time. Same rule as castVote (an update of `votes` on an open bet).
+export async function renameVote(code, voterId, name) {
+  const ref = doc(db, 'bets', code);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('This bet is gone.');
+    const data = snap.data();
+    if (!votingOpen(data)) throw new Error('This bet is closed.');
+    const votes = Array.isArray(data.votes) ? data.votes : [];
+    if (!voterId || !votes.some((item) => item.voterId === voterId)) {
+      throw new Error('Your pick isn’t in yet.');
+    }
+    const trimmed = (name || '').trim();
+    tx.update(ref, {
+      votes: votes.map((item) => (item.voterId === voterId ? { ...item, name: trimmed } : item)),
+    });
+  });
+}
+
 export async function settleBet(code, winnerId) {
   const ref = doc(db, 'bets', code);
   const settled = await runTransaction(db, async (tx) => {

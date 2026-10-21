@@ -144,6 +144,11 @@ async function mockCrew(page, { votes, share, patch, serverTime = false } = {}) 
         sessionStorage.setItem('crew-bet', JSON.stringify(bet));
         listeners.forEach(cb => cb(bet));
       };
+      export const renameVote = async (code, voterId, name) => {
+        bet = { ...bet, votes: bet.votes.map(v => v.voterId === voterId ? { ...v, name } : v) };
+        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
+        listeners.forEach(cb => cb(bet));
+      };
       export const deleteBet = async () => {};
       export const settleBet = async (code, winnerId) => {
         bet = { ...bet, status: 'closed', winnerId, settledAt: ${serverTime ? 'null' : 123}, settlement: buildSettlement(bet, winnerId) };

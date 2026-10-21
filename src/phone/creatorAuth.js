@@ -16,6 +16,10 @@ const ALREADY_IN_USE = new Set([
   'auth/account-exists-with-different-credential',
 ]);
 
+// The code a spent, unrecoverable phone code is reported with. Its existing
+// PHONE_ERRORS copy is "Send a new code."
+export const SPENT_CODE = 'auth/invalid-verification-id';
+
 let verifier = null;
 let verifierNode = null;
 let verifierSlot = null;
@@ -246,8 +250,11 @@ export async function verifyPhoneCode(verificationId, code) {
     if (ALREADY_IN_USE.has(err?.code)) {
       // The failed link already used up this code, so sign in with the proof
       // Firebase returned on the error. Retrying the code reads as expired.
-      const existing = PhoneAuthProvider.credentialFromError(err) || err.credential;
+      const existing = PhoneAuthProvider.credentialFromError(err);
       if (existing) return signInWithPhone(existing);
+      // No proof to sign in with, and the code is spent: ask for a new one
+      // (phoneError reads this code as "Send a new code.").
+      throw Object.assign(new Error('Phone code already used.'), { code: SPENT_CODE, cause: err });
     }
     throw err;
   }
