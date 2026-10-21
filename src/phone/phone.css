@@ -3571,7 +3571,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .overlay-close:hover { background: var(--wash); }
 
-/* Vote page: add or edit your name after picking, under "You're on ...". */
+/* Vote page: add or edit your name after picking, under "You’re on ...". */
 .name-edit { margin: -16px 0 16px; }
 .name-edit-open { display: flex; flex-direction: column; gap: 10px; margin-top: -12px; }
 .name-edit-toggle {

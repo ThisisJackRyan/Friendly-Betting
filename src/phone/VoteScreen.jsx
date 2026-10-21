@@ -196,7 +196,7 @@ const VoteScreen = () => {
               <div className="voted-in">
                 <p className="youre-on">
                   <FiCheckCircle size={22} aria-hidden="true" />
-                  {"You're on "}
+                  {"You’re on "}
                   <strong>{optionVoteLabel(bet, selected)}</strong>
                 </p>
                 {existing && open && <NameEdit current={renamed ?? storedName} onSave={saveName} />}

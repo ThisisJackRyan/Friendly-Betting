@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { NAME_EDIT_COPY, NAME_PLACEHOLDER } from './nameEditCopy';
 
-// A small add/edit name control under "You're on ...". onSave(name) changes
+// A small add/edit name control under "You’re on ...". onSave(name) changes
 // only the name on the voter's pick; when it throws, the old name stays and
 // the form stays open with an error.
 export default function NameEdit({ current = '', onSave }) {
