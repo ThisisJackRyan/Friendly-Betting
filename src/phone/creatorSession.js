@@ -91,9 +91,10 @@ export function codeSentCopy(e164) {
   return `Code sent to ${maskPhone(e164)}.`;
 }
 
-// Preview and local builds show the raw code under every sentence. Next inlines
-// this at build time and the mobile build defines it as empty.
-function showsRawCodes() {
+// Preview and local builds show the raw code under every sentence, and log
+// auth diagnostics. Next inlines this at build time and the mobile build
+// defines it as empty.
+export function showsRawCodes() {
   const env = process.env.NEXT_PUBLIC_VERCEL_ENV;
   return env === 'preview' || env === 'development';
 }

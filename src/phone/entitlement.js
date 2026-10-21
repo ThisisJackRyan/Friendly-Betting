@@ -1,9 +1,12 @@
 // Pure helpers for entitlements/{uid} (docs/PRO.md). No Firebase imports, so
 // the ad service, the server route and tests can all use them.
 //
-//   { plan: 'pro' | 'founder', source, since, founderNumber?, expiresAt? }
+//   { plan: 'pro', source, since, expiresAt? }
 //
-// Founder is lifetime Pro. A Pro plan with no expiresAt never lapses.
+// A Pro plan with no expiresAt never lapses. Pro is the only plan sold. Docs
+// granted before the founder tier was dropped have plan 'founder' (with a
+// founderNumber and expiresAt null): they still read as lifetime Pro, with
+// the plain Pro badge.
 
 // Millis from a Firestore Timestamp (client or Admin), a Date, a number or
 // a { seconds, nanoseconds } object. null for none, NaN for anything else.
@@ -16,19 +19,19 @@ export function toMillis(value) {
   return NaN;
 }
 
+const LEGACY_FOUNDER_PLAN = 'founder';
+
 export function isProEntitlement(ent, now = Date.now()) {
   if (!ent || typeof ent !== 'object') return false;
-  if (ent.plan === 'founder') return true;
+  if (ent.plan === LEGACY_FOUNDER_PLAN) return true;
   if (ent.plan !== 'pro') return false;
   const expires = toMillis(ent.expiresAt);
   if (expires === null) return true;
   return Number.isFinite(expires) && expires > now;
 }
 
-// What the badge next to the member's own name says, or null for no badge.
+// The badge next to the member's own name, or null for no badge. Every plan,
+// legacy founder docs included, gets the same Pro badge.
 export function badgeFor(ent, now = Date.now()) {
-  if (!isProEntitlement(ent, now)) return null;
-  if (ent.plan !== 'founder') return { kind: 'pro' };
-  const number = Number(ent.founderNumber);
-  return Number.isInteger(number) && number > 0 ? { kind: 'founder', number } : { kind: 'founder' };
+  return isProEntitlement(ent, now) ? { kind: 'pro' } : null;
 }

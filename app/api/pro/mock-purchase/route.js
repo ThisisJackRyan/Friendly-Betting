@@ -18,8 +18,8 @@ export async function POST(request) {
   return withCors(request, await purchase(request));
 }
 
-// Preview only (docs/PRO.md): grants an allowlisted tester Pro or a founder
-// spot with no payment. The uid always comes from the verified ID token, never
+// Preview only (docs/PRO.md): grants an allowlisted tester Pro with no
+// payment. The uid always comes from the verified ID token, never
 // the body.
 async function purchase(request) {
   const header = request.headers.get('authorization') || '';
@@ -41,7 +41,6 @@ async function purchase(request) {
     });
     return json({ ok: true, ...result });
   } catch (err) {
-    if (err?.code === 'sold-out') return json({ error: 'sold-out' }, 409);
     if (err?.code === 'admin-not-configured') return json({ error: 'not-configured' }, 503);
     console.error(`mock purchase failed: ${err?.code || 'error'}`);
     return json({ error: 'server' }, 500);

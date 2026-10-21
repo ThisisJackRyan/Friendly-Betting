@@ -55,7 +55,7 @@ const SETTLED = { ...OPEN, status: 'closed', winnerId: 'a', settledAt: 1, settle
 
 const PLANS = {
   pro: { plan: 'pro', source: 'mock', expiresAt: null },
-  founder: { plan: 'founder', source: 'mock', founderNumber: 7, expiresAt: null },
+  legacyFounder: { plan: 'founder', source: 'mock', founderNumber: 7, expiresAt: null },
   expired: { plan: 'pro', source: 'mock', expiresAt: 1 },
 };
 
@@ -99,10 +99,12 @@ describe('tally', () => {
     expect(screen.getByTitle('Sam')).toHaveTextContent(/^Sam$/);
   });
 
-  test('a founder number shows on the tally', () => {
-    setup({ user: JACK, plan: 'founder', bet: OPEN });
+  test('a legacy founder plan shows the plain Pro badge on the tally, no number', () => {
+    setup({ user: JACK, plan: 'legacyFounder', bet: OPEN });
     show(<TallyScreen />);
-    expect(within(screen.getByTitle('Jack')).getByText('Founder #7')).toBeInTheDocument();
+    expect(within(screen.getByTitle('Jack')).getByText('Pro')).toBeInTheDocument();
+    expect(screen.getByTitle('Jack')).toHaveTextContent(/^JackPro$/);
+    expect(badges()).toHaveLength(1);
   });
 
   test('no badge without a live plan', () => {
@@ -135,10 +137,10 @@ describe('tally', () => {
 
 describe('vote page', () => {
   test('the creator viewing their own bet gets the badge on the inviter line', () => {
-    setup({ user: JACK, plan: 'founder', bet: OPEN });
+    setup({ user: JACK, plan: 'legacyFounder', bet: OPEN });
     show(<VoteScreen />);
     const inviter = document.querySelector('.inviter');
-    expect(inviter).toHaveTextContent('JackFounder #7');
+    expect(inviter).toHaveTextContent('JackPro');
     expect(badges()).toHaveLength(1);
   });
 

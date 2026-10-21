@@ -2,9 +2,14 @@ import { badgeFor, isProEntitlement, toMillis } from './entitlement';
 
 const NOW = 1_000_000;
 
-test('founder is always Pro, whatever expiresAt says', () => {
+// Docs granted before the founder tier was dropped: lifetime Pro, plain badge.
+test('a legacy founder entitlement still reads as Pro, whatever expiresAt says', () => {
+  const legacy = { plan: 'founder', source: 'mock', since: { seconds: 1, nanoseconds: 0 }, founderNumber: 12, expiresAt: null };
+  expect(isProEntitlement(legacy, NOW)).toBe(true);
   expect(isProEntitlement({ plan: 'founder' }, NOW)).toBe(true);
   expect(isProEntitlement({ plan: 'founder', expiresAt: NOW - 1 }, NOW)).toBe(true);
+  expect(badgeFor(legacy, NOW)).toEqual({ kind: 'pro' });
+  expect(badgeFor({ plan: 'founder' }, NOW)).toEqual({ kind: 'pro' });
 });
 
 test('pro is Pro with no expiresAt or one still ahead', () => {
@@ -28,12 +33,9 @@ test('anything else is not Pro', () => {
   });
 });
 
-test('badgeFor names the plan and the founder number', () => {
+test('badgeFor is the Pro badge for any live plan', () => {
   expect(badgeFor({ plan: 'pro' }, NOW)).toEqual({ kind: 'pro' });
-  expect(badgeFor({ plan: 'founder', founderNumber: 12 }, NOW)).toEqual({ kind: 'founder', number: 12 });
-  expect(badgeFor({ plan: 'founder' }, NOW)).toEqual({ kind: 'founder' });
-  expect(badgeFor({ plan: 'founder', founderNumber: 0 }, NOW)).toEqual({ kind: 'founder' });
-  expect(badgeFor({ plan: 'founder', founderNumber: 'x' }, NOW)).toEqual({ kind: 'founder' });
+  expect(badgeFor({ plan: 'pro', expiresAt: NOW + 1 }, NOW)).toEqual({ kind: 'pro' });
 });
 
 test('badgeFor is null without a live plan', () => {

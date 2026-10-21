@@ -56,7 +56,7 @@ test('flag on but not Pro: no early types', () => {
   expect(screen.queryByText('Fake Type')).toBeNull();
 });
 
-test('flag off: no early types, even for a founder', () => {
+test('flag off: no early types, even for a legacy founder plan', () => {
   delete process.env.NEXT_PUBLIC_PRO_EARLY_TYPES;
   picker({ plan: 'founder', founderNumber: 1 });
   expect(screen.getAllByRole('button')).toHaveLength(3);

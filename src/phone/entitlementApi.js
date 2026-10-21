@@ -1,10 +1,9 @@
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { apiUrl } from './resultTexts';
 
 // The only client reads for Pro (docs/PRO.md). The rules let a member read
-// their own entitlements/{uid} and anyone read meta/founders; nothing here
-// writes. Jest mocks this module for every test (src/setupTests.js).
+// their own entitlements/{uid}; nothing here writes. Jest mocks this module for every test (src/setupTests.js).
 
 // onChange(entitlement | null) on every snapshot, onChange(undefined, err) on error.
 export function subscribeEntitlement(uid, onChange) {
@@ -15,16 +14,38 @@ export function subscribeEntitlement(uid, onChange) {
   );
 }
 
-// How many founder spots are taken. 0 before the first one.
-export async function fetchFounderCount() {
-  const snap = await getDoc(doc(db, 'meta', 'founders'));
-  const count = snap.exists() ? Number(snap.data()?.count) : 0;
-  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+// A hung read or purchase gives up after this long, so the Pro sheet is
+// never stuck on it.
+const TIMEOUT_MS = 20000;
+
+function withTimeout(promise, controller) {
+  let timer;
+  const expired = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller?.abort();
+      const err = new Error('Timed out.');
+      err.code = 'timeout';
+      reject(err);
+    }, TIMEOUT_MS);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
 }
 
-// Preview only: asks the mock purchase route to grant `plan` to the signed-in
-// user. The new entitlement arrives through subscribeEntitlement.
-export async function requestMockPurchase(plan) {
+// One fresh read of the user's own entitlement (Restore purchase), from the
+// server rather than the cache. null when there is none.
+export async function fetchEntitlement(uid) {
+  const snap = await withTimeout(getDocFromServer(doc(db, 'entitlements', uid)));
+  return snap.exists() ? snap.data() : null;
+}
+
+// Preview only: asks the mock purchase route to grant `plan` ('pro') to the
+// signed-in user. The new entitlement arrives through subscribeEntitlement.
+export function requestMockPurchase(plan) {
+  const controller = new AbortController();
+  return withTimeout(postMockPurchase(plan, controller.signal), controller);
+}
+
+async function postMockPurchase(plan, signal) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
   const token = await user.getIdToken();
@@ -32,6 +53,7 @@ export async function requestMockPurchase(plan) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ plan }),
+    signal,
   });
   const body = await res.json().catch(() => ({}));
   if (res.ok) return body;
