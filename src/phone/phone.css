@@ -3627,7 +3627,29 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .go-pro-link:hover { color: var(--ink, #203b2e); }
 .go-pro-link:focus-visible { outline: 2px solid var(--muted, #5e6b60); outline-offset: 2px; border-radius: 6px; }
-.bets-heading .go-pro-link { margin-top: 2px; }
+/* My bets: the outlined Go Pro chip right of the heading. 32px to see, 44px
+   to tap (the ::after reaches 6px above and below). */
+.bets-heading > div { flex: 1; min-width: 0; }
+.bets-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.go-pro-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.go-pro-chip::after { content: ''; position: absolute; top: -7.5px; bottom: -7.5px; left: -1.5px; right: -1.5px; }
+.go-pro-chip:hover { background: var(--wash); }
+.go-pro-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 /* A locked Pro feature's small outlined chip (ProLock). */
 .bet-filters button .pro-lock-chip { margin-left: 0; font-size: 9px; font-weight: 800; opacity: 1; }
 .pro-lock-chip {

@@ -127,7 +127,8 @@ Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in f
 
 Go Pro (`GoProLink`, to `/pro`), only with the paywall on, never for a Pro member, never on the
 vote or tally pages: a muted text link under the ad thank-you note, under Start a bet on Home,
-and on My bets.
+and under the phone sign-in on signed-out My bets (there is no My bets header there); an
+outlined chip right of the My bets heading when signed in.
 
 Locked features (`ProLock.jsx`): with the paywall on and no Pro, Run it back (tally reveal) and
 the Friends head-to-head filter on My bets keep their look plus a small outlined `Pro` chip, and

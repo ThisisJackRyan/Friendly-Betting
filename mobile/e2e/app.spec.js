@@ -963,3 +963,33 @@ for (const size of SHEET_SIZES) {
     expect(errors).toEqual([]);
   });
 }
+
+test('My bets with the paywall on: the Go Pro chip right of the heading, and Friends locked', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 393, height: 852 });
+  await mockCrew(page);
+  await mockEntitlement(page, { founders: 12 });
+  await enablePaywall(page);
+  await page.goto('/bets');
+  const chip = page.locator('.go-pro-chip');
+  await expect(chip).toHaveText('Go Pro');
+  const m = await page.evaluate(() => {
+    const chipBox = document.querySelector('.go-pro-chip').getBoundingClientRect();
+    const tap = getComputedStyle(document.querySelector('.go-pro-chip'), '::after');
+    const title = document.querySelector('.bets-heading h1').getBoundingClientRect();
+    return { chip: chipBox.toJSON(), title: title.toJSON(), tapTop: tap.top, tapBottom: tap.bottom };
+  });
+  expect(m.chip.height).toBe(32);
+  expect(m.chip.left).toBeGreaterThan(m.title.left);
+  expect(m.chip.right).toBeLessThanOrEqual(393);
+  expect([m.tapTop, m.tapBottom]).toEqual(['-7.5px', '-7.5px']);
+  await page.screenshot({ path: testInfo.outputPath('my-bets-go-pro-chip.png'), animations: 'disabled', scale: 'css' });
+
+  await page.getByRole('group', { name: 'Filter bets by status' }).getByRole('button', { name: /^Friends/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'All the bets. None of the ads.' });
+  await expect(sheet.locator('.pro-benefits li.is-highlighted')).toHaveText('Head-to-head stats with friends');
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

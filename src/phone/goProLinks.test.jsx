@@ -10,11 +10,15 @@ import { useIdentity, useSignedInUser } from './identity';
 import { subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { navigation } from 'next/navigation';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-// The Go Pro entry points: under the ad thank-you, on My bets (signed out,
-// under the phone sign-in, and signed in) and on Home under Start a bet. Each
-// only with the paywall on and never for a Pro member. Never on the vote or
-// tally page.
+// The Go Pro entry points (UX spec, section 10): a muted link under the ad
+// thank-you and on Home under Start a bet; on My bets an outlined chip right
+// of the heading (signed in), or the muted link under the phone sign-in
+// (signed out, where there is no heading). Each only with the paywall on and
+// never for a Pro member. Never on the vote or tally page. All go to /pro,
+// which opens the Pro sheet on its No ads row.
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -103,20 +107,21 @@ afterEach(() => {
 // Each placement: shown with the paywall on for a non-Pro viewer, hidden for
 // Pro, hidden with the paywall off.
 const PLACEMENTS = [
-  ['the ad thank-you', ANON, () => <AdThanks onContinue={() => {}} label="Text the crew" />],
-  ['signed-out My bets', ANON, () => <MyBets />],
-  ['signed-in My bets', JACK, () => <MyBetsList user={JACK} />],
-  ['Home', ANON, () => <Landing />],
+  ['the ad thank-you', ANON, () => <AdThanks onContinue={() => {}} label="Text the crew" />, 'go-pro-link'],
+  ['signed-out My bets', ANON, () => <MyBets />, 'go-pro-link'],
+  ['signed-in My bets', JACK, () => <MyBetsList user={JACK} />, 'go-pro-chip'],
+  ['Home', ANON, () => <Landing />, 'go-pro-link'],
 ];
 
-describe.each(PLACEMENTS)('on %s', (_label, user, element) => {
-  test('a muted link to /pro with the paywall on, for a non-Pro viewer', async () => {
+describe.each(PLACEMENTS)('on %s', (_label, user, element, kind) => {
+  test(`a ${kind} to /pro with the paywall on, for a non-Pro viewer`, async () => {
     setup({ user });
     await show(element());
     const link = goPro();
     expect(link).toHaveAttribute('href', '/pro');
-    expect(link).toHaveClass('go-pro-link');
-    // A text link, not a button or the green text-link style.
+    expect(link).toHaveTextContent(/^Go Pro$/);
+    expect(link).toHaveClass(kind);
+    // Never a button or the green text-link style.
     expect(link).not.toHaveClass('cta', 'secondary', 'text-link');
   });
 
@@ -170,6 +175,26 @@ test('signed-out My bets: below the phone sign-in', async () => {
   const send = screen.getByRole('button', { name: /send code/i });
   expect(follows(screen.getByRole('textbox', { name: /phone/i }), goPro())).toBe(true);
   expect(follows(send, goPro())).toBe(true);
+});
+
+test('signed-in My bets: an outlined chip right of the heading, not a link under the intro', async () => {
+  setup();
+  await show(<MyBetsList user={JACK} />);
+  const heading = screen.getByRole('heading', { level: 1, name: /My bets/ });
+  expect(heading.parentElement).toHaveClass('bets-title-row');
+  expect(heading.nextElementSibling).toBe(goPro());
+  expect(document.querySelector('.go-pro-link')).toBeNull();
+});
+
+test('the chip: 32px to see, 44px to tap, outlined', () => {
+  const css = readFileSync(join(__dirname, 'phone.css'), 'utf8');
+  const chip = css.match(/\n\.go-pro-chip \{([^}]*)\}/)[1];
+  expect(chip).toMatch(/height: 32px;/);
+  expect(chip).toMatch(/border: 1\.5px solid var\(--ink\);/);
+  expect(chip).not.toMatch(/--accent/);
+  const tap = css.match(/\n\.go-pro-chip::after \{([^}]*)\}/)[1];
+  // 32px plus 6px above and below, from the border box.
+  expect(tap).toMatch(/top: -7\.5px; bottom: -7\.5px;/);
 });
 
 test('Home: below Start a bet', async () => {

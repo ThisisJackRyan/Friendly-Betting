@@ -135,12 +135,14 @@ export function MyBetsList({ user }) {
           <div className="bets-heading">
             <div>
               <p className="eyebrow">YOUR SIDE OF THE STORY</p>
-              <h1 className="screen-title">
-                My bets
-                <ProBadge badge={proBadge} />
-              </h1>
+              <div className="bets-title-row">
+                <h1 className="screen-title">
+                  My bets
+                  <ProBadge badge={proBadge} />
+                </h1>
+                <GoProLink chip />
+              </div>
               <p className="intro-copy">The picks, the stakes, and the “told you so” moments.</p>
-              <GoProLink />
             </div>
             <Link className="cta press" href="/new">
               <FiPlus size={18} aria-hidden="true" />
