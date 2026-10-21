@@ -251,6 +251,37 @@ describe('the sheet', () => {
     expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
   });
 
+  test('buying blocks the X, Maybe later, Escape and the scrim; a failure re-enables all four', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    let fail;
+    requestMockPurchase.mockReturnValue(new Promise((_resolve, reject) => { fail = reject; }));
+    const { onClose } = await openSheet();
+    await userEvent.click(main());
+    expect(main()).toHaveTextContent(SPEC.buying);
+    const x = screen.getByRole('button', { name: 'Close' });
+    const later = screen.getByRole('button', { name: SPEC.later });
+    expect(x).toBeDisabled();
+    expect(later).toBeDisabled();
+    await userEvent.click(x);
+    await userEvent.click(later);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(document.querySelector('.pro-sheet-scrim'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await act(async () => fail(new Error('nope')));
+    expect(screen.getByRole('alert')).toHaveTextContent(SPEC.error);
+    expect(x).toBeEnabled();
+    expect(later).toBeEnabled();
+    await userEvent.click(x);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await userEvent.click(later);
+    expect(onClose).toHaveBeenCalledTimes(2);
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(3);
+    await userEvent.click(document.querySelector('.pro-sheet-scrim'));
+    expect(onClose).toHaveBeenCalledTimes(4);
+  });
+
   test('a Founder purchase ends on their number', async () => {
     process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
     requestMockPurchase.mockResolvedValue({ ok: true, plan: 'founder', founderNumber: 7, founderCount: 7 });
