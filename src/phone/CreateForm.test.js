@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
+import { useCreatorPhone } from './AuthSlides';
 import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
@@ -679,6 +680,167 @@ test('an unmapped verify failure shows the verify line and the raw auth code', a
   expect(code).toHaveClass('muted');
   expect(code.textContent).toBe('auth/missing-client-identifier');
   expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
+});
+
+async function reachCode() {
+  sendPhoneCode.mockResolvedValue('vid-1');
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+  expect(await screen.findByRole('heading', { name: 'Code' })).toBeInTheDocument();
+}
+
+function codeDigits() {
+  return [1, 2, 3, 4, 5, 6].map((n) => screen.getByLabelText(`Digit ${n}`).value).join('');
+}
+
+test('an autofilled code in box 1 verifies once and a Verify tap does not confirm it again', async () => {
+  let finishVerify = () => {};
+  verifyPhoneCode.mockImplementation(() => new Promise((resolve) => {
+    finishVerify = () => resolve({ uid: 'anon-1', providerData: [{ providerId: 'phone' }] });
+  }));
+  await reachCode();
+
+  fireEvent.change(screen.getByLabelText('Digit 1'), { target: { value: '123456' } });
+  expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+  expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+  fireEvent.click(screen.getByRole('button', { name: 'Verifying…' }));
+  expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    finishVerify();
+  });
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+});
+
+test.each(['123456123456', '123456 '])(
+  'a doubled autofill %p in box 1 fills 123456 and verifies once',
+  async (value) => {
+    verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+    await reachCode();
+
+    fireEvent.change(screen.getByLabelText('Digit 1'), { target: { value } });
+    expect(codeDigits()).toBe('123456');
+    expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+    expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+  },
+);
+
+describe('useCreatorPhone verify', () => {
+  const linked = { uid: 'anon-1', providerData: [{ providerId: 'phone' }] };
+
+  async function sentHook() {
+    sendPhoneCode.mockResolvedValue('vid-1');
+    const hook = renderHook(() => useCreatorPhone());
+    act(() => hook.result.current.onNational('5551234567'));
+    await act(async () => {
+      await hook.result.current.send();
+    });
+    return hook;
+  }
+
+  function expiredError() {
+    const err = new Error('Firebase: Error (auth/code-expired).');
+    err.code = 'auth/code-expired';
+    return err;
+  }
+
+  test('a Verify tap after success returns the user without confirming again', async () => {
+    verifyPhoneCode.mockResolvedValue(linked);
+    const { result } = await sentHook();
+    // Held from before the success, so its verifiedUser closure is stale.
+    const { verify } = result.current;
+
+    await act(async () => {
+      await verify('123456');
+    });
+    let again;
+    await act(async () => {
+      again = await verify('123456');
+    });
+
+    expect(again).toBe(linked);
+    expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+    expect(result.current.verifiedUser).toBe(linked);
+  });
+
+  test('a late error after a success is not shown', async () => {
+    verifyPhoneCode.mockResolvedValue(linked);
+    const { result } = await sentHook();
+    await act(async () => {
+      await result.current.verify('123456');
+    });
+
+    verifyPhoneCode.mockRejectedValue(expiredError());
+    act(() => result.current.onOtp(['6', '5', '4', '3', '2', '1'], '654321'));
+    await act(async () => {
+      await result.current.verify('654321');
+    });
+
+    expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe('');
+    expect(result.current.errorCode).toBe('');
+    expect(result.current.verifiedUser).toBe(linked);
+  });
+
+  test('an error from a code that Resend replaced mid-flight is not shown', async () => {
+    let failVerify = () => {};
+    verifyPhoneCode.mockImplementation(() => new Promise((resolve, reject) => {
+      failVerify = reject;
+    }));
+    const { result } = await sentHook();
+    let first;
+    act(() => {
+      first = result.current.verify('123456');
+    });
+
+    sendPhoneCode.mockResolvedValue('vid-2');
+    await act(async () => {
+      await result.current.send();
+    });
+    await act(async () => {
+      failVerify(expiredError());
+      await first;
+    });
+
+    expect(result.current.error).toBe('');
+    expect(result.current.busy).toBe(null);
+
+    verifyPhoneCode.mockResolvedValue(linked);
+    await act(async () => {
+      await result.current.verify('654321');
+    });
+    expect(verifyPhoneCode).toHaveBeenLastCalledWith('vid-2', '654321');
+  });
+
+  test('the failure diagnostic logs only the auth code and message', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      verifyPhoneCode.mockRejectedValue(expiredError());
+      const { result } = await sentHook();
+      await act(async () => {
+        await result.current.verify('123456');
+      });
+
+      const quota = new Error('Firebase: Error (auth/quota-exceeded).');
+      quota.code = 'auth/quota-exceeded';
+      sendPhoneCode.mockRejectedValue(quota);
+      await act(async () => {
+        await result.current.send();
+      });
+
+      expect(warn.mock.calls).toEqual([
+        ['[phone-auth] verify failed', 'auth/code-expired', 'Firebase: Error (auth/code-expired).'],
+        ['[phone-auth] send failed', 'auth/quota-exceeded', 'Firebase: Error (auth/quota-exceeded).'],
+      ]);
+      const logged = JSON.stringify(warn.mock.calls);
+      expect(logged).not.toContain('5551234567');
+      expect(logged).not.toContain('123456');
+      expect(logged).not.toContain('vid-1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 test('a failed person check stays on the phone step with the check still there', async () => {

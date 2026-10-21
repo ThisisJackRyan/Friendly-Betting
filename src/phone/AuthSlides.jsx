@@ -25,9 +25,13 @@ export function useCreatorPhone() {
   const verifying = useRef(false);
   const sending = useRef(false);
   const attempted = useRef('');
+  // Verify reads these, not state, so a stale render never confirms an old
+  // code or confirms twice. Only a successful send replaces the id.
+  const verificationIdRef = useRef('');
+  const verifiedRef = useRef(null);
   const [digitsRaw, setDigitsRaw] = useState('');
   const [e164, setE164] = useState('');
-  const [verificationId, setVerificationId] = useState('');
+  const [, setVerificationId] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [busy, setBusy] = useState(null);
   const [error, setErrorState] = useState('');
@@ -63,6 +67,7 @@ export function useCreatorPhone() {
     setError('');
     try {
       const id = await sendPhoneCode(next, container);
+      verificationIdRef.current = id;
       setVerificationId(id);
       setE164(next);
       setOtp(['', '', '', '', '', '']);
@@ -70,7 +75,11 @@ export function useCreatorPhone() {
       return true;
     } catch (err) {
       // A closed check just puts the button back.
-      if (err?.code !== PERSON_CHECK_CANCELLED) showPhoneError(err, SEND_CODE_ERROR);
+      if (err?.code !== PERSON_CHECK_CANCELLED) {
+        // Code and message only. Never the number, the id, or the SMS code.
+        console.warn('[phone-auth] send failed', err?.code, err?.message);
+        showPhoneError(err, SEND_CODE_ERROR);
+      }
       return false;
     } finally {
       sending.current = false;
@@ -79,25 +88,35 @@ export function useCreatorPhone() {
   };
 
   const verify = async (code) => {
-    if (verifiedUser) return verifiedUser;
+    if (verifiedRef.current) return verifiedRef.current;
     const token = (code || otp.join('')).replace(/\D/g, '');
     if (token.length !== 6) {
       setError('Enter the 6-digit code.');
       return null;
     }
-    if (!verificationId) {
+    const id = verificationIdRef.current;
+    if (!id) {
       setError('Send a new code.');
       return null;
     }
+    // One confirm at a time. A second confirm of the same code reads as expired.
     if (verifying.current) return null;
     verifying.current = true;
     setBusy('verify');
     setError('');
     try {
-      const nextUser = await verifyPhoneCode(verificationId, token);
+      const nextUser = await verifyPhoneCode(id, token);
+      if (verifiedRef.current) return verifiedRef.current;
+      // A success is a real sign-in, so it stands even if Resend ran meanwhile.
+      verifiedRef.current = nextUser;
       setVerifiedUser(nextUser);
       return nextUser;
     } catch (err) {
+      // Already in, or this code belongs to a send that Resend replaced.
+      if (verifiedRef.current) return verifiedRef.current;
+      if (id !== verificationIdRef.current) return null;
+      // Code and message only. Never the number, the id, or the SMS code.
+      console.warn('[phone-auth] verify failed', err?.code, err?.message);
       attempted.current = '';
       showPhoneError(err, VERIFY_CODE_ERROR);
       return null;

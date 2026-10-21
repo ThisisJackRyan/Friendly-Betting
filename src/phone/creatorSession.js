@@ -42,7 +42,10 @@ const PHONE_ERRORS = {
   'auth/too-many-requests': 'Too many tries. Wait a moment.',
   'auth/invalid-verification-code': 'That code doesn\u2019t match.',
   'auth/code-expired': 'That code expired. Resend it.',
+  'auth/session-expired': 'That code expired. Resend it.',
+  'auth/missing-verification-code': 'Enter the 6-digit code.',
   'auth/invalid-verification-id': 'Send a new code.',
+  'auth/missing-verification-id': 'Send a new code.',
   'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
   'auth/quota-exceeded': 'Texting is paused. Try again later.',
   'auth/network-request-failed': PHONE_OFFLINE_ERROR,
@@ -88,11 +91,18 @@ export function codeSentCopy(e164) {
   return `Code sent to ${maskPhone(e164)}.`;
 }
 
+// Preview and local builds show the raw code under every sentence. Next inlines
+// this at build time and the mobile build defines it as empty.
+function showsRawCodes() {
+  const env = process.env.NEXT_PUBLIC_VERCEL_ENV;
+  return env === 'preview' || env === 'development';
+}
+
 export function phoneError(err, fallback) {
   const code = typeof err?.code === 'string' ? err.code.trim() : '';
   if (code && PHONE_ERRORS[code]) {
     // Billing is a project setup miss, so the raw code stays under the sentence.
-    const showCode = code === 'auth/billing-not-enabled';
+    const showCode = code === 'auth/billing-not-enabled' || showsRawCodes();
     return { message: PHONE_ERRORS[code], code: showCode ? code : '' };
   }
   return { message: fallback, code };
