@@ -1880,6 +1880,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .page-intro .intro-copy {
   margin-top: 10px;
   max-width: 52ch;
+  text-wrap: balance;
 }
 .intro-icon {
   display: flex;
