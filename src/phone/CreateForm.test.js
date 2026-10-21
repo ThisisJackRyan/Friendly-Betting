@@ -353,6 +353,19 @@ describe('the draft survives fast typing and taps', () => {
     expect(saveBet.mock.calls[0][1].question).toBe('QA long question typed fast?');
   });
 
+  test('the arriving step takes no taps until its slide lands', async () => {
+    renderForm('/new/money-line');
+    expect(activePane()).not.toHaveClass('is-sliding');
+    await goToStake('QA h2h 3?');
+    // Mid-slide, the spot where Coffee lands still has the pane passing under
+    // it: a tap there would pick whichever chip happens to be there.
+    expect(activePane()).toHaveClass('is-sliding');
+    await landSlide();
+    expect(activePane()).not.toHaveClass('is-sliding');
+    await userEvent.click(screen.getByRole('button', { name: 'Coffee', exact: true }));
+    expect(screen.getByRole('button', { name: 'Coffee', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('three bets in a row in one session each save their own question and stake', async () => {
     const made = [
       ['QA h2h 1?', 'Coffee'],

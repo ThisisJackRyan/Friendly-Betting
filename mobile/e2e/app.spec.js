@@ -29,6 +29,35 @@ test('shared mobile home, create slides, stake and creator gate', async ({ page 
   expect(errors).toEqual([]);
 });
 
+test('a tap where a stake chip lands, while the stake step is still sliding in, never picks another chip', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const toStake = async () => {
+    await page.goto('/new');
+    await page.getByRole('button', { name: /Money Line/ }).click();
+    await page.getByLabel(/Question/).fill('QA h2h 2?');
+  };
+  await toStake();
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.locator('.create-pane.is-leaving')).toHaveCount(0);
+  const coffee = await page.getByRole('button', { name: 'Coffee', exact: true }).boundingBox();
+  for (const ms of [40, 100]) {
+    await toStake();
+    await page.getByRole('button', { name: 'Next', exact: true }).click({ noWaitAfter: true });
+    await page.waitForTimeout(ms);
+    // Mid-slide this spot has Bragging rights (or nothing) passing under it.
+    await page.mouse.click(coffee.x + coffee.width / 2, coffee.y + coffee.height / 2);
+    await expect(page.locator('.create-pane.is-leaving')).toHaveCount(0);
+    const pressed = await page.locator('.stake-suggestions button[aria-pressed="true"]').allTextContents();
+    expect(pressed.filter((name) => name !== 'Coffee')).toEqual([]);
+  }
+  // Once it has landed the same tap picks Coffee.
+  await page.mouse.click(coffee.x + coffee.width / 2, coffee.y + coffee.height / 2);
+  await expect(page.getByRole('button', { name: 'Coffee', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Stake', { exact: true })).toHaveValue('Coffee');
+  expect(errors).toEqual([]);
+});
+
 test('direct routes retain all bet types, My bets and missing-link recovery', async ({ page }) => {
   for (const [type, label] of [['money-line', /Option A/], ['over-under', /Line/], ['prop', /Question/]]) {
     await page.goto(`/new/${type}`);

@@ -1030,6 +1030,10 @@ body {
   pointer-events: none;
 }
 
+.create-pane.is-sliding {
+  pointer-events: none;
+}
+
 .create-pane.is-leaving {
   position: absolute;
   inset: 0;

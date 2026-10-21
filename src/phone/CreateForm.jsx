@@ -682,6 +682,10 @@ const CreateForm = () => {
     if (stepNumber === 1) names.push('create-step-pick');
     if (!active) names.push('is-leaving', `slide-${motion}`);
     else if (hasMoved) names.push('is-entering', `slide-${motion}`);
+    // Until the slide lands, a tap aimed at a control's place would hit
+    // whatever is passing under it (the stake chip to its left, or nothing),
+    // so the arriving step takes no taps until then.
+    if (active && leaving != null) names.push('is-sliding');
     return names.join(' ');
   };
 
