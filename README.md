@@ -52,7 +52,7 @@
 
 ## Free to play
 
-Making your pick is always free.
+Making your pick is always free. Pro is $3/mo: no ads, Run it back, and head-to-head stats. Friends always play free.
 
 The iOS and Android apps are coming soon too. Until then, Friendly works great in your phone’s browser.
 
