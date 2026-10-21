@@ -127,6 +127,11 @@ const TallyScreen = () => {
   const [callOff, setCallOff] = useState({ open: false, busy: false, error: '' });
   const callOffTrigger = useRef(null);
   const resultRef = useRef(null);
+  const inviteButton = useRef(null);
+  // Where focus goes once an ad's thank-you has closed: back to Text the
+  // crew when it opened the ad (once the share is done and the button is
+  // live again), or to the reveal headline after the settle ad.
+  const focusAfterThanks = useRef(null);
   const revealSettlement = useRef(false);
   // Whether this tab just made this bet (see freshBet): undefined until the
   // first mount takes the note, then true until the share sheet opens once.
@@ -195,7 +200,7 @@ const TallyScreen = () => {
       reveal();
       return;
     }
-    await settleAd.run(reveal);
+    await settleAd.run(reveal, { onThanksClose: () => { focusAfterThanks.current = 'reveal'; } });
   };
 
   // Back to open, within the window. Settling again skips the ad too.
@@ -246,7 +251,7 @@ const TallyScreen = () => {
     const text = inviteText();
     setMessage(text);
     setSharing(true);
-    invite.share(() => shareMessage(text))
+    invite.share(() => shareMessage(text), { onThanksClose: () => { focusAfterThanks.current = 'invite'; } })
       .then((result) => {
         if (result != null) setShareState(result);
       })
@@ -291,6 +296,22 @@ const TallyScreen = () => {
 
   // While a settle is held, the open-bet actions stay in place but are inert.
   const locked = saving || Boolean(held);
+
+  const thanksUp = Boolean(invite.thanks || settleAd.thanks);
+  useEffect(() => {
+    const target = focusAfterThanks.current;
+    if (!target || thanksUp) return;
+    if (target === 'invite') {
+      // The button is disabled until its share is done.
+      if (sharing || locked) return;
+      focusAfterThanks.current = null;
+      inviteButton.current?.focus();
+      return;
+    }
+    if (held || !settled) return;
+    focusAfterThanks.current = null;
+    resultRef.current?.querySelector('.reveal-headline')?.focus();
+  });
 
   const final = Boolean(settled);
   useEffect(() => {
@@ -368,7 +389,7 @@ const TallyScreen = () => {
             {votingOpen(bet) && <div className={nudge ? 'tally-share is-nudge' : 'tally-share'}>
               {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
-              <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing || locked} onClick={onShare}>
+              <button ref={inviteButton} type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing || locked} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
                 {INVITE_LABEL}
               </button>

@@ -368,6 +368,31 @@ describe('a settle with no Undo (already saved, from a stale screen)', () => {
     expect(revealRegion()).toHaveTextContent('No won');
   });
 
+  test('focus stays on the thank-you, then moves to the reveal headline when it closes', async () => {
+    await renderTally();
+    jest.useFakeTimers();
+    await settleOnNo();
+    await settle();
+    const control = within(thanks()).getByRole('button');
+    expect(control).toHaveFocus();
+    act(() => { screen.getByRole('button', { name: 'Settling…' }).focus(); });
+    expect(control).toHaveFocus();
+    await act(async () => { jest.advanceTimersByTime(1500); });
+    expect(thanks()).not.toBeInTheDocument();
+    const headline = within(revealRegion()).getByRole('heading', { level: 2 });
+    expect(headline).toHaveClass('reveal-headline');
+    expect(headline).toHaveAttribute('tabindex', '-1');
+    expect(headline).toHaveFocus();
+  });
+
+  test('a tap on the thank-you also puts focus on the reveal headline', async () => {
+    await renderTally();
+    await settleOnNo();
+    await settle();
+    await tap(screen.getByText(AD_THANKS_LINE));
+    expect(document.querySelector('.reveal-headline')).toHaveFocus();
+  });
+
   test.each(['disabled', 'pro', 'capped', 'interval', 'busy', 'timeout', 'error', 'not-loaded'])(
     'an ad skipped as %s reveals directly, with no thank-you',
     async (reason) => {

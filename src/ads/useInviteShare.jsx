@@ -9,6 +9,7 @@ export const THANKS_AUTO_CONTINUE_MS = 1500;
 // The tally's one invite share flow. share(open) runs open() through the ad
 // gate and resolves its result, or null if the screen went away first.
 // Render `thanks` once; it is null unless the thank-you is up.
+// onThanksClose, if given, runs as the thank-you closes, before the share.
 export function useInviteShare({ continueLabel } = {}) {
   const [pending, setPending] = useState(null);
   const mounted = useRef(true);
@@ -25,14 +26,14 @@ export function useInviteShare({ continueLabel } = {}) {
 
   // A skip or timeout can land after the tally is gone: never open the share
   // over another screen.
-  const share = useCallback((open) => runInviteShare({
+  const share = useCallback((open, { onThanksClose } = {}) => runInviteShare({
     share: () => (mounted.current ? open() : null),
     showThanks: (thanks) => {
       if (!mounted.current) {
         thanks.cancel();
         return;
       }
-      current.current = thanks;
+      current.current = { ...thanks, onThanksClose };
       setPending(thanks);
     },
   }), []);
@@ -45,6 +46,7 @@ export function useInviteShare({ continueLabel } = {}) {
       return;
     }
     setPending(null);
+    thanks?.onThanksClose?.();
     // Synchronous, inside the tap when there was one.
     thanks?.proceed();
   }, []);

@@ -6,7 +6,8 @@ import { THANKS_AUTO_CONTINUE_MS } from './useInviteShare';
 // The tally's settle flow after the save. mayShow() is the synchronous
 // precheck. run(reveal) maybe shows an ad and the thank-you, then calls
 // reveal(); it never calls it once the screen has gone away. Render `thanks`
-// once; it is null unless the thank-you is up.
+// once; it is null unless the thank-you is up. onThanksClose, if given, runs
+// as the thank-you closes, right before reveal().
 export function useSettleAd() {
   const [pending, setPending] = useState(null);
   const mounted = useRef(true);
@@ -21,7 +22,7 @@ export function useSettleAd() {
     };
   }, []);
 
-  const run = useCallback((reveal) => {
+  const run = useCallback((reveal, { onThanksClose } = {}) => {
     // Left the tally while the settle was saving: no ad, nothing to reveal.
     if (!mounted.current) return Promise.resolve(false);
     return runSettleAd({
@@ -33,7 +34,7 @@ export function useSettleAd() {
           thanks.cancel();
           return;
         }
-        current.current = thanks;
+        current.current = { ...thanks, onThanksClose };
         setPending(thanks);
       },
     });
@@ -45,6 +46,7 @@ export function useSettleAd() {
     // Same tick as reveal(), so the thank-you and the held screen swap for
     // the reveal in one render.
     setPending(null);
+    thanks?.onThanksClose?.();
     thanks?.proceed();
   }, []);
 

@@ -17,7 +17,8 @@ export default function SettledReveal({ bet, code, reveal, voterId, badge = null
       {reveal.kind === 'legacy' ? <ResultCard bet={bet} voterId={voterId} /> : (
         <section className={`reveal reveal-${reveal.kind}`} aria-label="Settled result">
           {reveal.eyebrow && <p className="reveal-eyebrow">{reveal.eyebrow}</p>}
-          <h2 className="reveal-headline">
+          {/* Focusable from script only: after a settle ad, focus lands here. */}
+          <h2 className="reveal-headline" tabIndex={-1}>
             {reveal.headline}
             {ABOUT_VIEWER.has(reveal.kind) && <ProBadge badge={badge} />}
           </h2>
