@@ -373,3 +373,48 @@ describe('Friends', () => {
     expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
   });
 });
+
+describe('the settled card line, from the creator’s side', () => {
+  const settled = (id, votes, winnerId = 'a') => ({
+    id, createdByID: 'creator', schemaVersion: 2, type: 'money-line', question: `${id}?`,
+    status: 'closed', winnerId, options, votes,
+  });
+  const cardLine = (id) => screen.getByRole('link', { name: new RegExp(`${id}\\?`) }).querySelector('.bet-card-bottom');
+
+  test('the creator as the solo winner reads You called it., never A friend won', () => {
+    // QA h2h1: the creator picked Yes with no name saved, a friend picked No,
+    // settled Yes. The tally says "You called it."
+    subscribeMyBets.mockImplementation((_uid, publish) => {
+      publish([
+        settled('solo', [{ voterId: 'creator', name: '', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }]),
+        settled('named', [{ voterId: 'creator', name: 'Jack', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }]),
+      ]);
+      return () => {};
+    });
+    render(<MyBetsList user={user} />);
+    expect(cardLine('solo')).toHaveTextContent('You called it.');
+    expect(cardLine('solo')).not.toHaveTextContent(/friend won/i);
+    expect(cardLine('named')).toHaveTextContent('You called it.');
+    expect(cardLine('named')).not.toHaveTextContent('Jack won');
+  });
+
+  test('the creator among several winners reads You called it.; a creator who lost sees who won', () => {
+    subscribeMyBets.mockImplementation((_uid, publish) => {
+      publish([
+        settled('crew', [
+          { voterId: 'creator', name: '', optionId: 'a' },
+          { voterId: 'ben', name: 'Ben', optionId: 'a' },
+          { voterId: 'ava', name: 'Ava', optionId: 'b' },
+        ]),
+        settled('lost', [{ voterId: 'creator', name: '', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }], 'b'),
+        settled('sideline', [{ voterId: 'ava', name: '', optionId: 'a' }]),
+      ]);
+      return () => {};
+    });
+    render(<MyBetsList user={user} />);
+    expect(cardLine('crew')).toHaveTextContent('You called it.');
+    expect(cardLine('lost')).toHaveTextContent('Ava won');
+    // The creator didn't pick: the friend's win reads as before.
+    expect(cardLine('sideline')).toHaveTextContent('A friend won');
+  });
+});
