@@ -86,9 +86,10 @@ export function drawWinnerCard(ctx, card) {
   ctx.fillText(footer.text, footer.x, footer.y);
 }
 
-// A PNG Blob of this bet's card, or null when the bet has no card (not
-// settled, called off) or the browser can't draw one. Never throws.
-export async function renderWinnerCard(bet, doc = typeof document !== 'undefined' ? document : null) {
+// A PNG Blob of this bet's card as `viewerId` would share it, or null when
+// the bet has no card (not settled, called off) or the browser can't draw
+// one. Never throws.
+export async function renderWinnerCard(bet, viewerId = null, doc = typeof document !== 'undefined' ? document : null) {
   try {
     if (!doc) return null;
     await fontsReady(doc);
@@ -99,7 +100,7 @@ export async function renderWinnerCard(bet, doc = typeof document !== 'undefined
       ctx.font = font;
       return ctx.measureText(text).width;
     };
-    const card = buildWinnerCard(bet, { measure });
+    const card = buildWinnerCard(bet, { measure, viewerId });
     if (!card) return null;
     canvas.width = card.width;
     canvas.height = card.height;

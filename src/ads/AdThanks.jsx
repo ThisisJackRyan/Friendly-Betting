@@ -55,6 +55,14 @@ export const coverButtonStyle = {
   cursor: 'pointer',
 };
 
+// Whether focus may go back to the page once a thank-you closes: only when
+// nothing else has taken it since. Focus is on the body or nowhere (where it
+// lands as the layer goes), on a node already removed, or still in the layer.
+export function focusIsFree(doc = document) {
+  const active = doc.activeElement;
+  return !active || active === doc.body || !active.isConnected || Boolean(active.closest?.('[data-ad-thanks]'));
+}
+
 export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
   const button = useRef(null);
   const layer = useRef(null);
@@ -89,6 +97,7 @@ export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
       aria-labelledby="ad-thanks-line"
       style={thanksLayerStyle}
       data-testid="ad-thanks"
+      data-ad-thanks=""
       onClick={() => finish.current()}
       onKeyDown={(event) => {
         if (event.key !== 'Tab') return;

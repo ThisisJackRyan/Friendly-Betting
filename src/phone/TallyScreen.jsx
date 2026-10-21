@@ -40,6 +40,7 @@ import { rememberBet } from './notificationStore';
 import { prefersReducedMotion } from './createMotion';
 import { useInviteShare } from '../ads/useInviteShare';
 import { useSettleAd } from '../ads/useSettleAd';
+import { focusIsFree } from '../ads/AdThanks';
 import { useProBadge } from './useEntitlement';
 
 const INVITE_LABEL = 'Text the crew';
@@ -77,7 +78,8 @@ const SHARE_NOTE = {
   manual: 'Copy the message below.',
 };
 
-function SettlePicker({ bet, saving, onPick, onCancel }) {
+// voterId: the creator's, so the preview reads their own win as the reveal will.
+function SettlePicker({ bet, voterId, saving, onPick, onCancel }) {
   const [picked, setPicked] = useState(null);
   const preview = (bet.options || []).some((option) => option.id === picked) ? {
     ...bet, status: 'closed', winnerId: picked, settlement: buildSettlement(bet, picked),
@@ -92,7 +94,7 @@ function SettlePicker({ bet, saving, onPick, onCancel }) {
         </button>
       ))}
       {preview && <>
-        <ResultCard bet={preview} preview />
+        <ResultCard bet={preview} voterId={voterId} preview />
         <p className="field-hint">This locks the result. Friends get the final word when they open FRIENDLY where they made their pick.</p>
         <button type="button" className="cta press" disabled={saving} onClick={() => onPick(picked)}>{saving ? 'Settling…' : 'Settle & notify'}</button>
       </>}
@@ -305,12 +307,14 @@ const TallyScreen = () => {
       // The button is disabled until its share is done.
       if (sharing || locked) return;
       focusAfterThanks.current = null;
-      inviteButton.current?.focus();
+      // Not if the user has put focus somewhere else meanwhile.
+      if (focusIsFree()) inviteButton.current?.focus({ preventScroll: true });
       return;
     }
     if (held || !settled) return;
     focusAfterThanks.current = null;
-    resultRef.current?.querySelector('.reveal-headline')?.focus();
+    // The reveal scrolls itself into place (below); focus must not jump it.
+    if (focusIsFree()) resultRef.current?.querySelector('.reveal-headline')?.focus({ preventScroll: true });
   });
 
   const final = Boolean(settled);
@@ -422,7 +426,7 @@ const TallyScreen = () => {
               </button>
             )}
             {canSettle && settling && (
-              <SettlePicker bet={bet} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
+              <SettlePicker bet={bet} voterId={user?.uid} saving={saving} onPick={confirmSettle} onCancel={() => setSettling(false)} />
             )}
           </>
         )}

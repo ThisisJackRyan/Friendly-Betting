@@ -25,17 +25,20 @@ function whenIdle(work) {
 // the winner card image too. The card is drawn once the screen is idle, so a
 // tap can usually open the share sheet straight away; a tap before that
 // draws it first. In the app the image is only offered when its share sheet
-// takes a PNG file: the app has no download to fall back on.
-export default function ResultShare({ bet, code }) {
+// takes a PNG file: the app has no download to fall back on. The card is
+// the one `voterId`, the viewer, would share (winnerCardText).
+export default function ResultShare({ bet, code, voterId = null }) {
   const [state, setState] = useState('');
   const [busy, setBusy] = useState('');
   const [imageShareable, setImageShareable] = useState(() => !isNativeApp());
   const card = useRef(null);
   const message = formatResultMessage(bet, voteUrl(bet.code || code));
-  const cardText = winnerCardText(bet);
-  const cardKey = cardText ? JSON.stringify(cardText) : '';
+  const viewerId = voterId || null;
+  const cardText = winnerCardText(bet, viewerId);
+  // A card drawn for one viewer is never shared by another.
+  const cardKey = cardText ? JSON.stringify([viewerId, cardText]) : '';
   const drawCard = () => {
-    if (!card.current) card.current = renderWinnerCard(bet).catch(() => null);
+    if (!card.current) card.current = renderWinnerCard(bet, viewerId).catch(() => null);
     return card.current;
   };
 
@@ -47,7 +50,7 @@ export default function ResultShare({ bet, code }) {
     card.current = null;
     if (!cardKey || !imageShareable) return undefined;
     return whenIdle(drawCard);
-    // The card only changes when its text does.
+    // The card only changes when its text or its viewer does.
   }, [cardKey, imageShareable]);
 
   const share = async () => {

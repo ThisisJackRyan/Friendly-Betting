@@ -42,7 +42,7 @@ const drawn = (calls) => calls.filter(([op]) => op === 'fillText').map(([, text]
 
 test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   const { doc, canvas, calls } = fakeDoc({ fonts: { load: jest.fn(async () => []) } });
-  const blob = await renderWinnerCard(settledBet, doc);
+  const blob = await renderWinnerCard(settledBet, null, doc);
   expect(blob.type).toBe('image/png');
   expect([canvas.width, canvas.height]).toEqual([1080, 1350]);
   expect(calls[0]).toEqual(['fillRect', 0, 0, 1080, 1350]);
@@ -59,7 +59,7 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
 
 test('still draws when the font fails to load, in the fallback fonts', async () => {
   const { doc, calls } = fakeDoc({ fonts: { load: jest.fn(async () => { throw new Error('offline'); }) } });
-  const blob = await renderWinnerCard(settledBet, doc);
+  const blob = await renderWinnerCard(settledBet, null, doc);
   expect(blob).not.toBeNull();
   expect(drawn(calls)).toContain('Maya won.');
 });
@@ -68,7 +68,7 @@ test('a font that never answers only holds the card up briefly', async () => {
   jest.useFakeTimers();
   try {
     const { doc } = fakeDoc({ fonts: { load: () => new Promise(() => {}) } });
-    const pending = renderWinnerCard(settledBet, doc);
+    const pending = renderWinnerCard(settledBet, null, doc);
     await jest.advanceTimersByTimeAsync(1600);
     await expect(pending).resolves.not.toBeNull();
   } finally {
@@ -78,7 +78,7 @@ test('a font that never answers only holds the card up briefly', async () => {
 
 test('works without document.fonts at all', async () => {
   const { doc } = fakeDoc({});
-  await expect(renderWinnerCard(settledBet, doc)).resolves.not.toBeNull();
+  await expect(renderWinnerCard(settledBet, null, doc)).resolves.not.toBeNull();
 });
 
 test.each([
@@ -88,12 +88,12 @@ test.each([
   ['toBlob gives nothing', settledBet, { blob: null }],
 ])('null, never a throw, for %s', async (_label, bet, options) => {
   const { doc } = fakeDoc(options);
-  await expect(renderWinnerCard(bet, doc)).resolves.toBeNull();
+  await expect(renderWinnerCard(bet, null, doc)).resolves.toBeNull();
 });
 
 test('null when creating the canvas throws, or there is no document', async () => {
-  await expect(renderWinnerCard(settledBet, { createElement: () => { throw new Error('nope'); } })).resolves.toBeNull();
-  await expect(renderWinnerCard(settledBet, null)).resolves.toBeNull();
+  await expect(renderWinnerCard(settledBet, null, { createElement: () => { throw new Error('nope'); } })).resolves.toBeNull();
+  await expect(renderWinnerCard(settledBet, null, null)).resolves.toBeNull();
 });
 
 test('drawWinnerCard draws the rule only when there is one', () => {
@@ -140,4 +140,20 @@ test('a right-to-left line is set rtl from the right edge; left-to-right lines s
   expect(line(hebrew)).toEqual([hebrew, 984, 400, 'rtl', 'right']);
   expect(line('Stakes: $20')).toEqual(['Stakes: $20', 96, 500, 'ltr', 'left']);
   expect(line('friendly-bets.com')).toEqual(['friendly-bets.com', 96, 1254, 'ltr', 'left']);
+});
+
+test('draws I only on the card the creator shares', async () => {
+  const bet = { ...open, votes: [{ voterId: 'jack', name: '', optionId: 'a' }, ...open.votes] };
+  const settled = { ...bet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(bet, 'a') };
+  const lines = async (viewerId) => {
+    const { doc, calls } = fakeDoc();
+    await renderWinnerCard(settled, viewerId, doc);
+    return drawn(calls).join('\n');
+  };
+  expect(await lines('jack')).toContain('Maya & I won.');
+  await Promise.all(['maya', 'zed', null, undefined, ''].map(async (viewerId) => {
+    const text = await lines(viewerId);
+    expect(text).toContain('Maya & 1 other won.');
+    ['I called it.', '& I won.', '& I won.'].forEach((line) => expect(text).not.toContain(line));
+  }));
 });

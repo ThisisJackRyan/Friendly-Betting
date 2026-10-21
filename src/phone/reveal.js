@@ -8,10 +8,11 @@ export const STAKE_LINES = {
   coffee: 'Coffee\u2019s on everyone else.',
   lunch: 'Lunch is on everyone else.',
   drinks: 'Drinks are on everyone else.',
+  dinner: 'Dinner\u2019s on everyone else.',
   custom: 'Time for everyone else to pay up.',
 };
 
-const STAKE_KINDS = { 'bragging rights': 'bragging', coffee: 'coffee', lunch: 'lunch', drinks: 'drinks' };
+const STAKE_KINDS = { 'bragging rights': 'bragging', coffee: 'coffee', lunch: 'lunch', drinks: 'drinks', dinner: 'dinner' };
 
 // A stake is stored as the text the creator picked or typed: a Create chip
 // saves its label ("Bragging rights", "Coffee"), and the settlement snapshot
@@ -41,6 +42,9 @@ export const REVEAL_COPY = {
   youWon: 'You called it.',
   youWonWith: (names, line) => `${names} won. ${line}`,
   youSolo: (line) => `Solo win. ${line}`,
+  // The Share as image card, when the creator won without a name.
+  creatorSolo: 'I called it.',
+  creator: 'I',
   youLost: 'Not your day. Get ’em next time.',
   calledOff: 'This bet was called off.',
   calledOffSub: 'Nobody won this one.',
@@ -117,4 +121,25 @@ export function buildReveal({ bet, viewerId }) {
   // plain stake line.
   const subline = names && winners.length === 1 ? REVEAL_COPY.solo(line) : line;
   return { ...base, kind: 'winners', headline, subline };
+}
+
+// The reveal for the Share as image card: what a visitor sees, written for
+// the group, never "You". The one difference is the creator sharing a card
+// they won without a name: they are "I". Alone: "I called it." With up to
+// two others, all named, "I" ends the names ("Maya & I won."); otherwise the
+// creator counts toward the others like any unnamed winner. Anyone else
+// sharing it, signed in or not, gets the visitor's card.
+export function buildCardReveal(bet, viewerId = null) {
+  const reveal = buildReveal({ bet, viewerId: null });
+  const winners = settlementOf(bet)?.winners || [];
+  const creatorId = bet?.createdByID;
+  if (!viewerId || viewerId !== creatorId) return reveal;
+  const creator = winners.find((winner) => winner.voterId === creatorId);
+  if (reveal?.kind !== 'winners' || !creator || String(creator.name || '').trim()) return reveal;
+  const line = stakeLine(settlementOf(bet).stake);
+  const others = winners.filter((winner) => winner !== creator);
+  if (!others.length) return { ...reveal, headline: REVEAL_COPY.creatorSolo, subline: REVEAL_COPY.youSolo(line) };
+  const names = others.map((winner) => String(winner.name || '').trim());
+  if (winners.length > 3 || !names.every(Boolean)) return reveal;
+  return { ...reveal, headline: REVEAL_COPY.won(joinNames([...names, REVEAL_COPY.creator])), subline: line };
 }

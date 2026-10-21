@@ -66,7 +66,9 @@ describe('the winners line follows the stake', () => {
     ['typed drinks with a bang', 'DRINKS!', 'Drinks are on everyone else.'],
     ['a custom stake', 'Loser buys pizza', 'Time for everyone else to pay up.'],
     ['a money stake', '$5', 'Time for everyone else to pay up.'],
-    ['Dinner, a chip with no line of its own', 'Dinner', 'Time for everyone else to pay up.'],
+    ['Dinner', 'Dinner', 'Dinner’s on everyone else.'],
+    ['a typed dinner, any case, spacing and period', ' dinner.  ', 'Dinner’s on everyone else.'],
+    ['typed DINNER with a bang', 'DINNER!', 'Dinner’s on everyone else.'],
   ];
 
   test.each(STAKES)('%s', (_label, stake, line) => {
@@ -89,6 +91,7 @@ describe('the winners line follows the stake', () => {
 
   test('every line uses the typographic apostrophe and no em dash', () => {
     expect(STAKE_LINES.coffee).toBe('Coffee’s on everyone else.');
+    expect(STAKE_LINES.dinner).toBe('Dinner\u2019s on everyone else.');
     Object.values(STAKE_LINES).forEach((line) => {
       expect(line).not.toMatch(/['\u2014]/);
     });
