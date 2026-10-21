@@ -3610,7 +3610,31 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .pro-badge-founder { background: var(--ink); }
 .screen-title .pro-badge,
 .reveal-headline .pro-badge { font-size: 12px; }
-.pro-link { display: inline-block; margin-top: 6px; }
+/* Go Pro entry points (GoProLink): a muted text link, never accent green and
+   never a button, so it stays quieter than the screen's main action. 44px tall
+   to tap. Off the bettor pages (vote, tally). */
+.go-pro-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--muted, #5e6b60);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.go-pro-link:hover { color: var(--ink, #203b2e); }
+.go-pro-link:focus-visible { outline: 2px solid var(--muted, #5e6b60); outline-offset: 2px; border-radius: 6px; }
+.bets-heading .go-pro-link { margin-top: 2px; }
+.cta-bar .go-pro-link { display: flex; width: fit-content; margin: 6px auto -10px; }
+/* On the dark hero: the hero's own muted light tone, neutral, not green. */
+.landing-pro { margin-top: 4px; color: rgba(255, 255, 255, 0.75); }
+.landing-pro:hover { color: #fff; }
+.landing-pro:focus-visible { outline-color: rgba(255, 255, 255, 0.75); }
+/* On the ad thank-you: above its full-layer cover button. */
+.ad-thanks-pro { position: relative; z-index: 1; margin-top: -12px; font-size: 14px; }
 .paywall { display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; }
 .paywall .screen-title { margin: 8px 0 0; }
 .paywall-lines {

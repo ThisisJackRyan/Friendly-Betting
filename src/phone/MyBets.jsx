@@ -17,8 +17,8 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
 import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
-import { useEntitlementState, useProBadge } from './useEntitlement';
-import { PRO_COPY, proPaywallEnabled } from './proConfig';
+import { useProBadge } from './useEntitlement';
+import GoProLink from './GoProLink';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
 
@@ -49,7 +49,6 @@ export function MyBetsList({ user }) {
   const [toast, setToast] = useState('');
   const deleteTrigger = useRef(null);
   const proBadge = useProBadge(uid);
-  const { isPro } = useEntitlementState();
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
 
@@ -129,11 +128,7 @@ export function MyBetsList({ user }) {
                 <ProBadge badge={proBadge} />
               </h1>
               <p className="intro-copy">The picks, the stakes, and the “told you so” moments.</p>
-              {proPaywallEnabled() && uid && !isPro && (
-                <Link className="text-link pro-link" href="/pro">
-                  {PRO_COPY.link}
-                </Link>
-              )}
+              <GoProLink />
             </div>
             <Link className="cta press" href="/new">
               <FiPlus size={18} aria-hidden="true" />
@@ -316,6 +311,7 @@ const MyBets = () => {
     return (
       <CreatorAuthFlow
         onCancel={() => router.push('/')}
+        phoneFooter={<GoProLink />}
         renderDone={(next) => <MyBetsList key={next.uid} user={next} />}
       />
     );

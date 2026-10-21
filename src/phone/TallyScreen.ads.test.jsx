@@ -170,6 +170,34 @@ describe('Text the crew', () => {
     expect(inviteButton()).toHaveFocus();
   });
 
+  test('with the paywall on, the thank-you carries Go Pro and focus still returns to Text the crew', async () => {
+    const flag = process.env.NEXT_PUBLIC_PRO_PAYWALL;
+    process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+    try {
+      let finishShare;
+      shareMessage.mockImplementation((text) => new Promise((resolve) => {
+        shareCalls.push({ kind: 'message', text, inClick: mockInClick() });
+        finishShare = () => resolve('copied');
+      }));
+      await renderTally();
+      // Not on the tally itself.
+      expect(screen.queryByRole('link', { name: 'Go Pro' })).toBeNull();
+      await tap(inviteButton());
+      await settle();
+      expect(within(thanks()).getByRole('link', { name: 'Go Pro' })).toHaveAttribute('href', '/pro');
+      const thanksButton = within(thanks()).getByRole('button', { name: 'Text the crew' });
+      expect(thanksButton).toHaveFocus();
+      await tap(thanksButton);
+      expect(thanks()).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Go Pro' })).toBeNull();
+      await act(async () => { finishShare(); });
+      expect(inviteButton()).toHaveFocus();
+    } finally {
+      if (flag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+      else process.env.NEXT_PUBLIC_PRO_PAYWALL = flag;
+    }
+  });
+
   test('focus the user moved elsewhere while the share was open stays there, and the return does not scroll', async () => {
     let finishShare;
     shareMessage.mockImplementation(() => new Promise((resolve) => {

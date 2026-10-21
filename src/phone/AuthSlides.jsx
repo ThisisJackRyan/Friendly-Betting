@@ -413,7 +413,8 @@ function AuthChrome({ title, onBack, children, cta }) {
   );
 }
 
-export default function CreatorAuthFlow({ onCancel, renderDone }) {
+// phoneFooter, if given, sits under the Send code button on the phone step.
+export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = null }) {
   const phone = useCreatorPhone();
   const [step, setStep] = useState(1);
   const [leaving, setLeaving] = useState(null);
@@ -510,7 +511,12 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
       <AuthChrome
         title={AUTH_COPY.phoneTitle}
         onBack={() => onBack(1)}
-        cta={<SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />}
+        cta={(
+          <>
+            <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />
+            {phoneFooter}
+          </>
+        )}
       >
         <PhoneBody
           formatted={phone.formatted}
