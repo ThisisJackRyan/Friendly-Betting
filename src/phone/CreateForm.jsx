@@ -54,6 +54,18 @@ function stepFromHash(hash) {
 
 const SKIP_WHEN_CREATOR = [CREATE_STEP.phone, CREATE_STEP.code];
 
+const EMPTY_FIELDS = {
+  question: '',
+  stake: '',
+  closes: DEFAULT_CLOSES,
+  optionA: 'Yes',
+  optionB: 'No',
+  line: '',
+  overLabel: 'Over',
+  underLabel: 'Under',
+  propOptions: ['', ''],
+};
+
 function draftInput(state) {
   return {
     question: state.question,
@@ -93,15 +105,13 @@ const CreateForm = () => {
   const [hasMoved, setHasMoved] = useState(false);
   const [exitHome, setExitHome] = useState(false);
   const [type, setType] = useState(routeType);
-  const [question, setQuestion] = useState('');
-  const [stake, setStake] = useState('');
-  const [closes, setCloses] = useState(DEFAULT_CLOSES);
-  const [optionA, setOptionA] = useState('Yes');
-  const [optionB, setOptionB] = useState('No');
-  const [line, setLine] = useState('');
-  const [overLabel, setOverLabel] = useState('Over');
-  const [underLabel, setUnderLabel] = useState('Under');
-  const [propOptions, setPropOptions] = useState(['', '']);
+  // The draft renders from state, and every edit also lands in fieldsRef at
+  // once, in its own event. Next and Text friends read the ref, so a tap that
+  // comes before React re-renders still sends every character and the stake
+  // just picked. Only setField writes the draft: no effect ever does.
+  const [fields, setFields] = useState(EMPTY_FIELDS);
+  const fieldsRef = useRef(EMPTY_FIELDS);
+  const { question, stake, closes, optionA, optionB, line, overLabel, underLabel, propOptions } = fields;
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -109,18 +119,15 @@ const CreateForm = () => {
   const mountedRef = useRef(false);
 
   const meta = TYPE_META[type] || null;
-  const input = draftInput({
-    question,
-    stake,
-    closes,
-    optionA,
-    optionB,
-    line,
-    overLabel,
-    underLabel,
-    propOptions,
-  });
-  const draft = type ? buildDraft(type, input) : { ok: false, error: 'Pick a bet type.' };
+  const draft = type ? buildDraft(type, draftInput(fields)) : { ok: false, error: 'Pick a bet type.' };
+
+  const setField = (key, value) => {
+    setError('');
+    const current = fieldsRef.current;
+    const next = { ...current, [key]: typeof value === 'function' ? value(current[key]) : value };
+    fieldsRef.current = next;
+    setFields(next);
+  };
 
   useLayoutEffect(() => {
     setPinPhoneTabs(false);
@@ -231,7 +238,7 @@ const CreateForm = () => {
   // saved, this Create is done: the button stays busy until the tally shows.
   const makeBet = async (creator) => {
     if (savingRef.current || leavingRef.current) return;
-    const ready = buildDraft(type, input);
+    const ready = buildDraft(type, draftInput(fieldsRef.current));
     if (!ready.ok) {
       setError(ready.error);
       return;
@@ -357,25 +364,23 @@ const CreateForm = () => {
   };
 
   const updateProp = (index, value) => {
-    setError('');
-    setPropOptions((current) => current.map((item, i) => (i === index ? value : item)));
+    setField('propOptions', (current) => current.map((item, i) => (i === index ? value : item)));
   };
 
   const addProp = () => {
-    setError('');
-    setPropOptions((current) => (current.length >= 4 ? current : [...current, '']));
+    setField('propOptions', (current) => (current.length >= 4 ? current : [...current, '']));
   };
 
   const removeProp = (index) => {
-    setError('');
-    setPropOptions((current) =>
+    setField('propOptions', (current) =>
       current.length <= 2 ? current : current.filter((_, i) => i !== index),
     );
   };
 
   const onDetailsNext = () => {
-    if (!draft.ok) {
-      setError(draft.error);
+    const ready = type ? buildDraft(type, draftInput(fieldsRef.current)) : draft;
+    if (!ready.ok) {
+      setError(ready.error);
       return;
     }
     go(3);
@@ -426,10 +431,7 @@ const CreateForm = () => {
               aria-required="true"
               value={question}
               placeholder={COPY.questionPlaceholder}
-              onChange={(event) => {
-                setError('');
-                setQuestion(event.target.value);
-              }}
+              onChange={(event) => setField('question', event.target.value)}
             />
           </label>
 
@@ -440,10 +442,7 @@ const CreateForm = () => {
                 <input
                   id="option-a"
                   value={optionA}
-                  onChange={(event) => {
-                    setError('');
-                    setOptionA(event.target.value);
-                  }}
+                  onChange={(event) => setField('optionA', event.target.value)}
                 />
               </label>
               <label className="field" htmlFor="option-b">
@@ -451,10 +450,7 @@ const CreateForm = () => {
                 <input
                   id="option-b"
                   value={optionB}
-                  onChange={(event) => {
-                    setError('');
-                    setOptionB(event.target.value);
-                  }}
+                  onChange={(event) => setField('optionB', event.target.value)}
                 />
               </label>
             </div>
@@ -471,10 +467,7 @@ const CreateForm = () => {
                   inputMode="decimal"
                   value={line}
                   placeholder={COPY.linePlaceholder}
-                  onChange={(event) => {
-                    setError('');
-                    setLine(event.target.value);
-                  }}
+                  onChange={(event) => setField('line', event.target.value)}
                 />
               </label>
               <div className="field-pair">
@@ -483,10 +476,7 @@ const CreateForm = () => {
                   <input
                     id="over-label"
                     value={overLabel}
-                    onChange={(event) => {
-                      setError('');
-                      setOverLabel(event.target.value);
-                    }}
+                    onChange={(event) => setField('overLabel', event.target.value)}
                   />
                 </label>
                 <label className="field" htmlFor="under-label">
@@ -494,10 +484,7 @@ const CreateForm = () => {
                   <input
                     id="under-label"
                     value={underLabel}
-                    onChange={(event) => {
-                      setError('');
-                      setUnderLabel(event.target.value);
-                    }}
+                    onChange={(event) => setField('underLabel', event.target.value)}
                   />
                 </label>
               </div>
@@ -565,10 +552,7 @@ const CreateForm = () => {
                 type="button"
                 className={stake === suggestion ? 'selected' : ''}
                 aria-pressed={stake === suggestion}
-                onClick={() => {
-                  setStake(suggestion);
-                  setError('');
-                }}
+                onClick={() => setField('stake', suggestion)}
               >
                 {suggestion}
               </button>
@@ -581,10 +565,7 @@ const CreateForm = () => {
                 id="stake"
                 value={stake}
                 placeholder={COPY.stakePlaceholder}
-                onChange={(event) => {
-                  setError('');
-                  setStake(event.target.value);
-                }}
+                onChange={(event) => setField('stake', event.target.value)}
               />
             </label>
             <label className="field" htmlFor="closes">
@@ -595,10 +576,7 @@ const CreateForm = () => {
                 id="closes"
                 type="datetime-local"
                 value={closes}
-                onChange={(event) => {
-                  setError('');
-                  setCloses(event.target.value);
-                }}
+                onChange={(event) => setField('closes', event.target.value)}
               />
             </label>
           </div>
