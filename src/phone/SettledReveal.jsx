@@ -26,7 +26,7 @@ export default function SettledReveal({ bet, code, reveal, voterId, badge = null
           {reveal.stake && <p className="reveal-stake">{REVEAL_COPY.stake(reveal.stake)}</p>}
         </section>
       )}
-      {reveal.kind !== 'called-off' && <ResultShare bet={bet} code={code} />}
+      {reveal.kind !== 'called-off' && <ResultShare bet={bet} code={code} voterId={voterId} />}
       {children}
       {reveal.startBet && (
         <Link className="cta press reveal-start" href="/new">

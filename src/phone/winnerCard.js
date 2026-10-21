@@ -102,14 +102,14 @@ export function wrapText(text, { width, font: fontSpec, maxLines, measure }) {
   return lines;
 }
 
-// What the card says: the reveal a visitor sees (never "You", since the card
-// goes to the group; buildCardReveal), with the bet's question on top. Null for anything that
-// is not a settled bet with a known result: open, called off, or a legacy
-// count-only bet.
-export function winnerCardText(bet) {
+// What the card says when `viewerId` shares it: the reveal a visitor sees
+// (never "You", since the card goes to the group; buildCardReveal), with the
+// bet's question on top. Null for anything that is not a settled bet with a
+// known result: open, called off, or a legacy count-only bet.
+export function winnerCardText(bet, viewerId = null) {
   if (!isSettled(bet)) return null;
   const result = settlementOf(bet);
-  const reveal = buildCardReveal(bet);
+  const reveal = buildCardReveal(bet, viewerId);
   if (!result || !reveal || reveal.kind === 'legacy' || reveal.kind === 'called-off') return null;
   return {
     question: result.question,
@@ -128,18 +128,19 @@ const cutName = (name, max) => {
 };
 
 // The reveal's headline, then the same with each name cut shorter.
-function headlineVariants(bet, headline) {
+function headlineVariants(bet, headline, viewerId) {
   const result = settlementOf(bet);
   return [headline, ...NAME_CUTS.map((max) => keepCount(buildCardReveal({
     ...bet, settlement: { ...result, winners: result.winners.map((winner) => ({ ...winner, name: cutName(winner.name, max) })) },
-  }).headline))];
+  }, viewerId).headline))];
 }
 
-// The full layout: positioned lines plus the brand, rule and footer.
-export function buildWinnerCard(bet, { measure }) {
-  const text = winnerCardText(bet);
+// The full layout, as `viewerId` would share it: positioned lines plus the
+// brand, rule and footer.
+export function buildWinnerCard(bet, { measure, viewerId = null }) {
+  const text = winnerCardText(bet, viewerId);
   if (!text) return null;
-  const variants = { headline: headlineVariants(bet, text.headline) };
+  const variants = { headline: headlineVariants(bet, text.headline, viewerId) };
   const { width, height, pad } = CARD;
   const inner = width - pad * 2;
   const lines = [];

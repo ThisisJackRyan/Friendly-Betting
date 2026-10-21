@@ -124,15 +124,17 @@ export function buildReveal({ bet, viewerId }) {
 }
 
 // The reveal for the Share as image card: what a visitor sees, written for
-// the group, never "You". The one difference is a creator who won without a
-// name: they shared the card, so they are "I". Alone: "I called it." With up
-// to two others, all named, "I" ends the names ("Maya & I won."); otherwise
-// the creator counts toward the others like any unnamed winner.
-export function buildCardReveal(bet) {
+// the group, never "You". The one difference is the creator sharing a card
+// they won without a name: they are "I". Alone: "I called it." With up to
+// two others, all named, "I" ends the names ("Maya & I won."); otherwise the
+// creator counts toward the others like any unnamed winner. Anyone else
+// sharing it, signed in or not, gets the visitor's card.
+export function buildCardReveal(bet, viewerId = null) {
   const reveal = buildReveal({ bet, viewerId: null });
   const winners = settlementOf(bet)?.winners || [];
   const creatorId = bet?.createdByID;
-  const creator = creatorId && winners.find((winner) => winner.voterId === creatorId);
+  if (!viewerId || viewerId !== creatorId) return reveal;
+  const creator = winners.find((winner) => winner.voterId === creatorId);
   if (reveal?.kind !== 'winners' || !creator || String(creator.name || '').trim()) return reveal;
   const line = stakeLine(settlementOf(bet).stake);
   const others = winners.filter((winner) => winner !== creator);

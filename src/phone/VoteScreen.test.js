@@ -925,3 +925,57 @@ test('a settle undone live takes Share as image away and the options come back',
   expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
 });
+
+// The Share as image card is drawn for whoever is looking: only the creator's
+// own card may speak as the creator ("I").
+describe('the winner card follows the viewer', () => {
+  const { winnerCardText } = jest.requireActual('./winnerCard');
+  const settle = (votes) => {
+    const bet = { ...openBet, votes };
+    return { ...bet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(bet, 'a') };
+  };
+  // openBet's creator is user-1, here a winner who skipped their name.
+  const BETS = [
+    ['solo', settle([{ voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'anon-2', name: 'Zed', optionId: 'b' }]), 'I called it.'],
+    ['with Maya', settle([{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'anon-2', name: 'Zed', optionId: 'b' }]), 'Maya & I won.'],
+  ];
+  const CREATOR_LINES = ['I called it.', '& I won.', '& I won.'];
+  const VIEWERS = [
+    ['a voter who lost', { uid: 'anon-2', isAnonymous: true, providerData: [] }],
+    ['a voter who won', { uid: 'maya', isAnonymous: true, providerData: [] }],
+    ['a logged-out visitor', null],
+  ];
+  const SCREENS = [['/b/', VoteScreen], ['/t/', TallyScreen]];
+
+  async function drawnCard() {
+    expect(await screen.findByRole('button', { name: 'Share as image' })).toBeInTheDocument();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+    const [[drawnBet, viewerId]] = renderWinnerCard.mock.calls;
+    return { viewerId, text: winnerCardText(drawnBet, viewerId) };
+  }
+
+  describe.each(SCREENS)('on %s', (prefix, Screen) => {
+    describe.each(BETS)('an unnamed creator %s', (_bet, bet) => {
+      test.each(VIEWERS)('%s never gets the creator\'s I', async (_viewer, user) => {
+        useIdentity.mockReturnValue(user);
+        subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+        renderAt(`${prefix}abc123`, <Screen />);
+        const { viewerId, text } = await drawnCard();
+        expect(viewerId).toBe(user ? user.uid : null);
+        expect(text.headline).toBe(winnerCardText(bet).headline);
+        const all = Object.values(text).join('\n');
+        CREATOR_LINES.forEach((line) => expect(all).not.toContain(line));
+      });
+    });
+
+    test.each(BETS)('the creator\'s own card, %s, still says I', async (_bet, bet, headline) => {
+      useIdentity.mockReturnValue(phoneCreator);
+      subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+      renderAt(`${prefix}abc123`, <Screen />);
+      const { viewerId, text } = await drawnCard();
+      expect(viewerId).toBe('user-1');
+      expect(text.headline).toBe(headline);
+    });
+  });
+});

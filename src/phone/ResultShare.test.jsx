@@ -49,9 +49,31 @@ test('a settled bet offers Share as image under Share the result, and draws the 
   expect(renderWinnerCard).not.toHaveBeenCalled();
   await act(async () => idle());
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
-  expect(renderWinnerCard).toHaveBeenCalledWith(settledBet);
+  expect(renderWinnerCard).toHaveBeenCalledWith(settledBet, null);
   unmount();
   expect(window.cancelIdleCallback).toHaveBeenCalledWith(7);
+});
+
+test('the card is drawn for the viewer, and one drawn for another viewer is never shared', async () => {
+  let idle;
+  window.requestIdleCallback = jest.fn((work) => { idle = work; return 7; });
+  window.cancelIdleCallback = jest.fn();
+  const forMaya = new Blob(['maya'], { type: 'image/png' });
+  const forZed = new Blob(['zed'], { type: 'image/png' });
+  renderWinnerCard.mockImplementation(async (_bet, viewerId) => (viewerId === 'maya' ? forMaya : forZed));
+  const { rerender } = render(<ResultShare bet={settledBet} code="abc123" voterId="maya" />);
+  await act(async () => idle());
+  expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+  expect(renderWinnerCard).toHaveBeenLastCalledWith(settledBet, 'maya');
+  // Same card text for both (neither is the creator), but a fresh card.
+  rerender(<ResultShare bet={settledBet} code="abc123" voterId="zed" />);
+  await userEvent.click(imageButton());
+  expect(renderWinnerCard).toHaveBeenCalledTimes(2);
+  expect(renderWinnerCard).toHaveBeenLastCalledWith(settledBet, 'zed');
+  expect(shareImage).toHaveBeenCalledWith(forZed);
+  rerender(<ResultShare bet={settledBet} code="abc123" />);
+  await userEvent.click(imageButton());
+  expect(renderWinnerCard).toHaveBeenLastCalledWith(settledBet, null);
 });
 
 test('without requestIdleCallback the card is drawn shortly after, and tapping shares that one', async () => {
