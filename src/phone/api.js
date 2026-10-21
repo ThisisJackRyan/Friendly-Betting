@@ -171,6 +171,9 @@ export async function castVote(code, vote) {
 
 // Changes only the name on a voter's own pick: same side, same place in the
 // list, same time. Same rule as castVote (an update of `votes` on an open bet).
+// A transaction, since it rewrites the whole list and a plain update could
+// drop a pick another voter adds meanwhile. Its promise can answer late;
+// VoteScreen also takes the live snapshot as the confirmation.
 export async function renameVote(code, voterId, name) {
   const ref = doc(db, 'bets', code);
   await runTransaction(db, async (tx) => {

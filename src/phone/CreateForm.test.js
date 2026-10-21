@@ -3,7 +3,7 @@ import path from 'path';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
-import { useCreatorPhone } from './AuthSlides';
+import { CodeBody, useCreatorPhone } from './AuthSlides';
 import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
@@ -725,6 +725,204 @@ test.each(['123456123456', '123456 '])(
     expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
   },
 );
+
+describe('the code boxes', () => {
+  const cell = (n) => screen.getByLabelText(`Digit ${n}`);
+  const linked = { uid: 'anon-1', providerData: [{ providerId: 'phone' }] };
+
+  function noMatch() {
+    const err = new Error('Firebase: Error (auth/invalid-verification-code).');
+    err.code = 'auth/invalid-verification-code';
+    return err;
+  }
+
+  test('fast typing that lands before a re-render fills every box in order', async () => {
+    verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+    await reachCode();
+
+    act(() => {
+      '123456'.split('').forEach((digit, index) => {
+        fireEvent.change(cell(index + 1), { target: { value: digit } });
+      });
+    });
+    expect(codeDigits()).toBe('123456');
+    expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+    expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+  });
+
+  test('keys that land before the parent re-renders build on each other', () => {
+    const onOtp = jest.fn();
+    render(<CodeBody e164="+15550100000" otp={['', '', '', '', '', '']} onOtp={onOtp} busy={null} />);
+    '123456'.split('').forEach((digit, index) => {
+      fireEvent.change(cell(index + 1), { target: { value: digit } });
+    });
+    expect(onOtp.mock.calls.map(([next]) => next.join(''))).toEqual(['1', '12', '123', '1234', '12345', '123456']);
+    expect(onOtp).toHaveBeenLastCalledWith(['1', '2', '3', '4', '5', '6'], '123456');
+  });
+
+  test('typing moves focus along, one box at a time', async () => {
+    await reachCode();
+    await userEvent.click(cell(1));
+    await userEvent.keyboard('1234');
+    expect(codeDigits()).toBe('1234');
+    expect(cell(5)).toHaveFocus();
+    expect(verifyPhoneCode).not.toHaveBeenCalled();
+  });
+
+  test('typing into a filled box replaces its digit, wherever the caret was', async () => {
+    await reachCode();
+    act(() => {
+      '1234'.split('').forEach((digit, index) => {
+        fireEvent.change(cell(index + 1), { target: { value: digit } });
+      });
+    });
+
+    // The caret before the 4 (seen on iPhone): the value reads "54".
+    fireEvent.change(cell(4), { target: { value: '54', selectionStart: 1, selectionEnd: 1 } });
+    expect(codeDigits()).toBe('1235');
+    expect(cell(5)).toHaveValue('');
+    expect(cell(5)).toHaveFocus();
+
+    // The caret after it: "37" in box 3 still means 7.
+    fireEvent.change(cell(3), { target: { value: '37', selectionStart: 2, selectionEnd: 2 } });
+    expect(codeDigits()).toBe('1275');
+
+    // A tap selects the digit, so the next key replaces it.
+    await userEvent.click(cell(2));
+    expect(cell(2).selectionStart).toBe(0);
+    expect(cell(2).selectionEnd).toBe(1);
+    await userEvent.keyboard('9');
+    expect(codeDigits()).toBe('1975');
+    expect(cell(3)).toHaveFocus();
+    expect(verifyPhoneCode).not.toHaveBeenCalled();
+  });
+
+  test.each(['123 456', '123-456', ' 1 2 3 4 5 6 '])(
+    'a pasted code %p in a middle box fills from box 1',
+    async (text) => {
+      verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+      await reachCode();
+      fireEvent.change(cell(1), { target: { value: '9' } });
+
+      fireEvent.paste(cell(4), { clipboardData: { getData: () => text } });
+      expect(codeDigits()).toBe('123456');
+      expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+      expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+    },
+  );
+
+  test('a short paste fills from the box it lands in', async () => {
+    await reachCode();
+    fireEvent.paste(cell(3), { clipboardData: { getData: () => '7-8' } });
+    expect([1, 2, 3, 4, 5, 6].map((n) => cell(n).value)).toEqual(['', '', '7', '8', '', '']);
+    expect(cell(5)).toHaveFocus();
+  });
+
+  test('an autofilled code in box 1 replaces a digit already there', async () => {
+    verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+    await reachCode();
+    fireEvent.change(cell(1), { target: { value: '9' } });
+
+    fireEvent.change(cell(1), { target: { value: '9123456' } });
+    expect(codeDigits()).toBe('123456');
+    expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+  });
+
+  test('an autofill that replaces the box text fills from box 1', async () => {
+    verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+    await reachCode();
+    fireEvent.change(cell(1), { target: { value: '5' } });
+
+    fireEvent.input(cell(1), { target: { value: '654325' }, inputType: 'insertReplacementText' });
+    expect(codeDigits()).toBe('654325');
+    expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '654325');
+  });
+
+  test('Backspace clears a filled box, then the one before it', async () => {
+    await reachCode();
+    await userEvent.click(cell(1));
+    await userEvent.keyboard('1234');
+    await userEvent.click(cell(3));
+
+    await userEvent.keyboard('{Backspace}');
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '2', '', '4']);
+    expect(cell(3)).toHaveFocus();
+
+    await userEvent.keyboard('{Backspace}');
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '', '', '4']);
+    expect(cell(2)).toHaveFocus();
+
+    await userEvent.keyboard('5');
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '5', '', '4']);
+    expect(cell(3)).toHaveFocus();
+  });
+
+  test('after a wrong code, focus comes back and a fixed or retyped code verifies', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      verifyPhoneCode.mockRejectedValueOnce(noMatch()).mockRejectedValueOnce(noMatch());
+      verifyPhoneCode.mockResolvedValue(linked);
+      await reachCode();
+
+      await userEvent.click(cell(1));
+      await userEvent.keyboard('123556');
+      expect(await screen.findByRole('alert')).toHaveTextContent('That code doesn’t match.');
+      expect(verifyPhoneCode).toHaveBeenLastCalledWith('vid-1', '123556');
+      expect(cell(6)).toBeEnabled();
+      expect(cell(6)).toHaveFocus();
+
+      // The same code again still gets a try.
+      await userEvent.keyboard('{Backspace}');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await userEvent.keyboard('6');
+      await screen.findByRole('alert');
+      expect(verifyPhoneCode).toHaveBeenCalledTimes(2);
+      expect(verifyPhoneCode).toHaveBeenLastCalledWith('vid-1', '123556');
+      expect(cell(6)).toHaveFocus();
+
+      // Tapping the wrong box and typing over it fixes it.
+      await userEvent.click(cell(4));
+      await userEvent.keyboard('4');
+      expect(verifyPhoneCode).toHaveBeenCalledTimes(3);
+      expect(verifyPhoneCode).toHaveBeenLastCalledWith('vid-1', '123456');
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+    } finally {
+      console.warn.mockRestore();
+    }
+  });
+
+  test('a failed Resend puts the button back right away with the error', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await reachCode();
+      let fail = () => {};
+      sendPhoneCode.mockImplementation(() => new Promise((resolve, reject) => {
+        fail = reject;
+      }));
+      await userEvent.click(screen.getByRole('button', { name: 'Resend' }));
+      expect(screen.getByRole('button', { name: AUTH_COPY.sending })).toBeDisabled();
+
+      const err = new Error('Firebase: Error (auth/captcha-check-failed).');
+      err.code = 'auth/captcha-check-failed';
+      await act(async () => {
+        fail(err);
+      });
+      const resend = screen.getByRole('button', { name: 'Resend' });
+      expect(resend).toBeEnabled();
+      expect(screen.queryByRole('button', { name: AUTH_COPY.sending })).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t confirm you’re a person. Try again.');
+      expect(screen.getByRole('heading', { name: 'Code' })).toBeInTheDocument();
+      expect(cell(1)).toBeEnabled();
+
+      sendPhoneCode.mockResolvedValue('vid-2');
+      await userEvent.click(resend);
+      expect(sendPhoneCode).toHaveBeenCalledTimes(3);
+      expect(await screen.findByRole('button', { name: 'Resend' })).toBeEnabled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
 
 describe('useCreatorPhone verify', () => {
   const linked = { uid: 'anon-1', providerData: [{ providerId: 'phone' }] };
