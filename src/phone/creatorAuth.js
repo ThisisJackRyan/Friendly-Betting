@@ -244,7 +244,10 @@ export async function verifyPhoneCode(verificationId, code) {
     return result.user;
   } catch (err) {
     if (ALREADY_IN_USE.has(err?.code)) {
-      return signInWithPhone(err.credential || credential);
+      // The failed link already used up this code, so sign in with the proof
+      // Firebase returned on the error. Retrying the code reads as expired.
+      const existing = PhoneAuthProvider.credentialFromError(err) || err.credential;
+      if (existing) return signInWithPhone(existing);
     }
     throw err;
   }

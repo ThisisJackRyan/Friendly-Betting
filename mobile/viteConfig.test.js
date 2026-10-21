@@ -27,9 +27,12 @@ function defined(env) {
   return JSON.parse(out);
 }
 
-// Every flag off, with `on` set to "1".
+// Every flag off, with `on` set to "1". NEXT_PUBLIC_VERCEL_ENV is always empty in the app.
 function expected(...on) {
-  return Object.fromEntries(FLAGS.map((flag) => [`process.env.${flag}`, on.includes(flag) ? '"1"' : '""']));
+  return {
+    ...Object.fromEntries(FLAGS.map((flag) => [`process.env.${flag}`, on.includes(flag) ? '"1"' : '""'])),
+    'process.env.NEXT_PUBLIC_VERCEL_ENV': '""',
+  };
 }
 
 // Off in the native app until store IAP is wired (docs/PRO.md).
@@ -48,4 +51,8 @@ test('the mobile build keeps the Pro paywall off even when the build env sets it
 
 test('the mobile build leaves every flag off by default and exposes nothing else', () => {
   expect(defined({})).toEqual(expected());
+});
+
+test('the mobile build keeps NEXT_PUBLIC_VERCEL_ENV empty even from a preview build env', () => {
+  expect(defined({ NEXT_PUBLIC_VERCEL_ENV: 'preview' })).toEqual(expected());
 });

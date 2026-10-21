@@ -1,5 +1,6 @@
 const mockVerifyPhoneNumber = jest.fn();
 const mockCredential = jest.fn((verificationId, code) => ({ verificationId, code }));
+const mockCredentialFromError = jest.fn(() => null);
 const mockLinkWithCredential = jest.fn();
 const mockSignInWithCredential = jest.fn();
 const mockSignOut = jest.fn();
@@ -14,6 +15,7 @@ jest.mock('firebase/auth', () => {
     this.verifyPhoneNumber = mockVerifyPhoneNumber;
   }
   PhoneAuthProvider.credential = (verificationId, code) => mockCredential(verificationId, code);
+  PhoneAuthProvider.credentialFromError = (err) => mockCredentialFromError(err);
   return {
     PhoneAuthProvider,
     RecaptchaVerifier: jest.fn((auth, container, params) => {
@@ -64,6 +66,8 @@ const bodyNodes = [];
 beforeEach(() => {
   mockVerifyPhoneNumber.mockReset();
   mockCredential.mockClear();
+  mockCredentialFromError.mockReset();
+  mockCredentialFromError.mockReturnValue(null);
   mockLinkWithCredential.mockReset();
   mockSignInWithCredential.mockReset();
   mockSignOut.mockReset();
@@ -404,14 +408,25 @@ test('an anonymous creator is upgraded with linkWithCredential', async () => {
   expect(user.uid).toBe('anon-1');
 });
 
-test('a phone already in use signs into that account', async () => {
+// Like Firebase: a failed link spends the code and returns a one-time proof.
+function takenError(code) {
+  const err = new Error('taken');
+  err.code = code;
+  err.customData = {
+    _tokenResponse: { phoneNumber: '+15551234567', temporaryProof: 'proof-1' },
+  };
+  return err;
+}
+
+const proofCredential = { phoneNumber: '+15551234567', temporaryProof: 'proof-1' };
+
+test('a phone already in use signs into that account with the proof', async () => {
   const anon = { uid: 'anon-1', isAnonymous: true };
   const credential = { verificationId: 'vid-1', code: '123456' };
   mockAuthState.currentUser = anon;
   mockCredential.mockReturnValue(credential);
-  const taken = new Error('taken');
-  taken.code = 'auth/credential-already-in-use';
-  taken.credential = credential;
+  const taken = takenError('auth/credential-already-in-use');
+  mockCredentialFromError.mockReturnValue(proofCredential);
   mockLinkWithCredential.mockRejectedValue(taken);
   mockSignInWithCredential.mockResolvedValue({
     user: { uid: 'creator-9', phoneNumber: '+15551234567' },
@@ -420,8 +435,54 @@ test('a phone already in use signs into that account', async () => {
   const user = await verifyPhoneCode('vid-1', '123456');
 
   expect(mockLinkWithCredential).toHaveBeenCalledWith(anon, credential);
-  expect(mockSignInWithCredential).toHaveBeenCalledWith(mockAuthState, credential);
+  expect(mockCredentialFromError).toHaveBeenCalledWith(taken);
+  expect(mockSignInWithCredential).toHaveBeenCalledWith(mockAuthState, proofCredential);
   expect(user.uid).toBe('creator-9');
+});
+
+test('an account-exists error signs in with the temporaryProof, not the spent code', async () => {
+  mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true };
+  const taken = takenError('auth/account-exists-with-different-credential');
+  mockCredentialFromError.mockImplementation((err) => {
+    const response = err.customData?._tokenResponse;
+    return response ? { ...response } : null;
+  });
+  mockLinkWithCredential.mockRejectedValue(taken);
+  mockSignInWithCredential.mockResolvedValue({ user: { uid: 'creator-9' } });
+
+  const user = await verifyPhoneCode('vid-1', '123456');
+
+  expect(mockSignInWithCredential).toHaveBeenCalledTimes(1);
+  expect(mockSignInWithCredential).toHaveBeenCalledWith(mockAuthState, proofCredential);
+  expect(user.uid).toBe('creator-9');
+});
+
+test.each([
+  'auth/credential-already-in-use',
+  'auth/account-exists-with-different-credential',
+])('after a failed %s link the original credential is never reused', async (code) => {
+  mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true };
+  mockLinkWithCredential.mockRejectedValue(takenError(code));
+  mockCredentialFromError.mockReturnValue(proofCredential);
+  mockSignInWithCredential.mockResolvedValue({ user: { uid: 'creator-9' } });
+
+  await verifyPhoneCode('vid-1', '123456');
+
+  mockSignInWithCredential.mock.calls.forEach(([, credential]) => {
+    expect(credential).not.toEqual(expect.objectContaining({ verificationId: 'vid-1' }));
+    expect(credential).not.toEqual(expect.objectContaining({ code: '123456' }));
+  });
+});
+
+test('an in-use link with no recoverable credential rethrows the link error', async () => {
+  mockAuthState.currentUser = { uid: 'anon-1', isAnonymous: true };
+  const taken = new Error('taken');
+  taken.code = 'auth/credential-already-in-use';
+  mockLinkWithCredential.mockRejectedValue(taken);
+  mockCredentialFromError.mockReturnValue(null);
+
+  await expect(verifyPhoneCode('vid-1', '123456')).rejects.toBe(taken);
+  expect(mockSignInWithCredential).not.toHaveBeenCalled();
 });
 
 test('with no session, verify signs in with the phone credential', async () => {
