@@ -42,16 +42,13 @@ match /entitlements/{uid} {
   allow get: if request.auth != null && request.auth.uid == uid;
   allow list, create, update, delete: if false;
 }
-match /meta/founders {
-  allow get: if true;
-  allow list, create, update, delete: if false;
-}
 ```
 
-A member gets only their own entitlement, one doc at a time (no query can list them); no client can grant, extend, edit or delete one,
-founder numbers included. The founder count is public (it is not sensitive and the paywall
-needs it), and client-unwritable. The rest of `meta` stays closed by default. Covered in
-`rules/firestore.rules.test.js` (`pro entitlements`, `founder counter`).
+A member gets only their own entitlement, one doc at a time (no query can list them); no client can grant, extend, edit or delete one.
+The read checks no fields, so legacy founder docs still read. There is no `meta/founders` rule
+any more: like the rest of `meta` it is closed by default. Covered in
+`rules/firestore.rules.test.js` (`pro entitlements`, `meta`). The rules file is not
+auto-deployed (see the note at its top).
 
 ## Client
 
