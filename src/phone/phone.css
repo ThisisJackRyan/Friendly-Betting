@@ -3543,6 +3543,33 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .toast-region { bottom: 24px; }
 }
 
+/* The close X on a full-screen layer (the house ad). 12px in from the corner,
+   inside the safe area: the plain values first for browsers without env().
+   44px square, so its focus ring (2px at a 4px offset) still clears the edge. */
+.overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.overlay-close:hover { background: var(--wash); }
+
 /* Pro: the badge after a member's own name, and the paywall at /pro. */
 .pro-badge {
   display: inline-block;
