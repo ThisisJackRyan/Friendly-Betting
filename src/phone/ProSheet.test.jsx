@@ -1,0 +1,414 @@
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import Paywall from './Paywall';
+import ProSheet from './ProSheet';
+import EntitlementSync from './EntitlementSync';
+import { fetchEntitlement, fetchFounderCount, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
+import { __resetEntitlementForTests } from './useEntitlement';
+import { isPro as adServiceIsPro } from '../ads/pro';
+import { navigation } from 'next/navigation';
+
+// The Pro sheet and /pro (UX spec, Oct 20). Every string below is the spec's,
+// byte for byte (curly apostrophes, the … character).
+const SPEC = {
+  headline: 'All the bets. None of the ads.',
+  line: 'Friends always play free.',
+  benefits: [
+    'No ads, ever',
+    'A Pro badge on your bets',
+    'Run it back in one tap',
+    'Head-to-head stats with friends',
+    'Early access to new stuff',
+  ],
+  proLabel: 'Pro',
+  proPrice: '$3/mo',
+  proNote: 'Billed monthly. Cancel anytime.',
+  founderLabel: 'Founder',
+  founderPrice40: '$40 once',
+  founderPrice80: '$80 once',
+  founderNote: 'Pro for life, plus a Founder badge and number.',
+  soldOut: 'Founder spots are gone.',
+  getPro: 'Get Pro',
+  getFounder: 'Get Founder',
+  buying: 'Getting you set…',
+  comingSoon: 'Coming soon',
+  later: 'Maybe later',
+  finePrint: 'Pro renews at $3/mo until you cancel in Settings. Founder is a one-time payment and includes Pro.',
+  restore: 'Restore purchase',
+  restoring: 'Restoring…',
+  restored: 'Restored. You’re Pro.',
+  nothing: 'Nothing to restore on this account.',
+  terms: 'Terms',
+  privacy: 'Privacy',
+  error: 'Couldn’t finish that. Try again.',
+  owned: 'You’re Pro. No more ads.',
+  ownedFounder7: 'You’re Founder #7. No more ads.',
+  back: 'Back to my bets',
+};
+
+jest.mock('next/navigation');
+jest.mock('next/link');
+jest.mock('./identity', () => {
+  const jack = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
+  return { useIdentity: () => jack, useSignedInUser: () => jack };
+});
+
+const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE', 'NEXT_PUBLIC_TERMS_URL', 'NEXT_PUBLIC_PRIVACY_URL'];
+const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
+let emitPlan;
+
+beforeEach(() => {
+  __resetEntitlementForTests();
+  subscribeEntitlement.mockReset();
+  subscribeEntitlement.mockImplementation((_uid, onChange) => {
+    emitPlan = (plan) => act(() => onChange(plan));
+    onChange(null);
+    return () => {};
+  });
+  fetchEntitlement.mockReset();
+  fetchEntitlement.mockResolvedValue(null);
+  fetchFounderCount.mockReset();
+  fetchFounderCount.mockResolvedValue(0);
+  requestMockPurchase.mockReset();
+  requestMockPurchase.mockResolvedValue({ ok: true, plan: 'pro' });
+  navigation.back.mockReset();
+  navigation.push.mockReset();
+  FLAGS.forEach((flag) => delete process.env[flag]);
+  process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+});
+
+afterEach(() => {
+  FLAGS.forEach((flag) => {
+    if (saved[flag] === undefined) delete process.env[flag];
+    else process.env[flag] = saved[flag];
+  });
+});
+
+async function openPage() {
+  render(<><EntitlementSync /><Paywall /></>);
+  await act(async () => {});
+}
+
+async function openSheet(props = {}) {
+  const onClose = jest.fn();
+  const onDone = jest.fn();
+  render(<><EntitlementSync /><ProSheet onClose={onClose} onDone={onDone} {...props} /></>);
+  await act(async () => {});
+  return { onClose, onDone };
+}
+
+const dialog = () => screen.getByRole('dialog');
+const radio = (name) => screen.getByRole('radio', { name: new RegExp(`^${name}`) });
+const main = () => within(dialog()).getAllByRole('button').find((b) => b.classList.contains('pro-sheet-main'));
+const highlighted = () => Array.from(document.querySelectorAll('.pro-benefits li.is-highlighted')).map((li) => li.textContent);
+
+describe('/pro', () => {
+  test('flag off: the 404 page, and nothing is read', async () => {
+    delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+    await openPage();
+    expect(screen.getByRole('heading', { name: 'Lost that one.' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(fetchFounderCount).not.toHaveBeenCalled();
+  });
+
+  test('flag on: the sheet, on the No ads row, titled Go Pro', async () => {
+    await openPage();
+    expect(dialog()).toHaveAccessibleName(SPEC.headline);
+    expect(highlighted()).toEqual([SPEC.benefits[0]]);
+    expect(document.title).toBe('Go Pro · Friendly');
+  });
+
+  test('the X and Maybe later leave /pro', async () => {
+    await openPage();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await userEvent.click(screen.getByRole('button', { name: SPEC.later }));
+    expect(navigation.back.mock.calls.length + navigation.push.mock.calls.length).toBe(2);
+  });
+
+  test('already Pro: skips the cards for the success screen, and Back to my bets goes there', async () => {
+    subscribeEntitlement.mockImplementation((_uid, onChange) => {
+      onChange({ plan: 'pro', expiresAt: null });
+      return () => {};
+    });
+    await openPage();
+    expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByText(SPEC.headline)).toBeNull();
+    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent('Pro');
+    await userEvent.click(screen.getByRole('button', { name: SPEC.back }));
+    expect(navigation.push).toHaveBeenCalledWith('/bets');
+  });
+});
+
+describe('the sheet', () => {
+  test('the spec copy, verbatim and in order', async () => {
+    await openSheet();
+    expect(screen.getByRole('heading', { level: 2, name: SPEC.headline })).toBeInTheDocument();
+    expect(screen.getByText(SPEC.line)).toBeInTheDocument();
+    expect(document.querySelector('.pro-sheet-badge')).toHaveTextContent(/^Pro$/);
+    expect(Array.from(document.querySelectorAll('.pro-benefits li')).map((li) => li.textContent)).toEqual(SPEC.benefits);
+    expect(radio(SPEC.proLabel)).toHaveAccessibleName(`${SPEC.proLabel} ${SPEC.proNote} ${SPEC.proPrice}`);
+    expect(radio(SPEC.founderLabel)).toHaveAccessibleName(
+      `${SPEC.founderLabel} ${SPEC.founderNote} 100 of 100 spots left ${SPEC.founderPrice40}`,
+    );
+    expect(screen.getByText(SPEC.finePrint)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SPEC.restore })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SPEC.later })).toBeInTheDocument();
+    // No Best deal chip, no em dash, no straight apostrophes on screen.
+    expect(dialog().textContent).not.toMatch(/Best deal|—|'/);
+  });
+
+  test('Founder is picked by default while spots remain; a tap anywhere on a card picks it', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    await openSheet();
+    expect(radio(SPEC.founderLabel)).toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getFounder);
+    await userEvent.click(screen.getByText(SPEC.proNote));
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getPro);
+    await userEvent.click(screen.getByText(SPEC.founderPrice40));
+    expect(radio(SPEC.founderLabel)).toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getFounder);
+  });
+
+  test.each([
+    [0, SPEC.founderPrice40, '100 of 100 spots left'],
+    [93, SPEC.founderPrice40, '7 of 100 spots left'],
+    [99, SPEC.founderPrice40, '1 of 100 spots left'],
+    [100, SPEC.founderPrice80, '500 of 500 spots left'],
+    [588, SPEC.founderPrice80, '12 of 500 spots left'],
+  ])('%i taken: Founder at %s with %s', async (taken, price, seats) => {
+    fetchFounderCount.mockResolvedValue(taken);
+    await openSheet();
+    expect(screen.getByText(price)).toBeInTheDocument();
+    expect(screen.getByText(seats)).toBeInTheDocument();
+    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
+  });
+
+  test('sold out after 600: no Founder card, Pro picked, the muted line above the Pro card', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    fetchFounderCount.mockResolvedValue(600);
+    await openSheet();
+    expect(screen.queryByRole('radio', { name: /^Founder/ })).toBeNull();
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getPro);
+    const line = screen.getByText(SPEC.soldOut);
+    expect(line).toHaveClass('pro-sold-out');
+    expect(line.nextElementSibling).toBe(radio(SPEC.proLabel).closest('label'));
+  });
+
+  test('loading: grey placeholders in the cards, no seats, no Friendly loader, button disabled', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    fetchFounderCount.mockReturnValue(new Promise(() => {}));
+    await openSheet();
+    expect(document.querySelectorAll('.pro-plan.is-loading')).toHaveLength(2);
+    expect(document.querySelectorAll('.pro-plan.is-loading .pro-skeleton').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByText(/spots left/)).toBeNull();
+    expect(document.querySelector('.friendly-load-mark')).toBeNull();
+    expect(main()).toBeDisabled();
+  });
+
+  test('an unreadable count never guesses a price or seats: Pro only', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    fetchFounderCount.mockRejectedValue(new Error('offline'));
+    await openSheet();
+    expect(screen.queryByRole('radio', { name: /^Founder/ })).toBeNull();
+    expect(screen.queryByText(/spots left|once/)).toBeNull();
+    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(main()).toBeEnabled();
+  });
+
+  test('purchases off: the main button is a disabled Coming soon and buys nothing', async () => {
+    await openSheet();
+    expect(main()).toHaveTextContent(SPEC.comingSoon);
+    expect(main()).toBeDisabled();
+    await userEvent.click(main());
+    expect(requestMockPurchase).not.toHaveBeenCalled();
+  });
+
+  test('buying: Getting you set…, with the cards and the X disabled; then the success screen', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    let finish;
+    requestMockPurchase.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const { onClose } = await openSheet();
+    await userEvent.click(radio(SPEC.proLabel));
+    await userEvent.click(main());
+    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
+    expect(main()).toHaveTextContent(SPEC.buying);
+    expect(main()).toBeDisabled();
+    expect(radio(SPEC.proLabel)).toBeDisabled();
+    expect(radio(SPEC.founderLabel)).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: null });
+    await act(async () => finish({ ok: true, plan: 'pro' }));
+    expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
+  });
+
+  test('a Founder purchase ends on their number', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    requestMockPurchase.mockResolvedValue({ ok: true, plan: 'founder', founderNumber: 7, founderCount: 7 });
+    fetchEntitlement.mockResolvedValue({ plan: 'founder', founderNumber: 7, expiresAt: null });
+    const { onDone } = await openSheet();
+    await userEvent.click(main());
+    expect(requestMockPurchase).toHaveBeenCalledWith('founder');
+    expect(screen.getByRole('heading', { name: SPEC.ownedFounder7 })).toBeInTheDocument();
+    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent('Founder #7');
+    await userEvent.click(screen.getByRole('button', { name: SPEC.back }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed purchase: the red error above the button, and the button resets', async () => {
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    requestMockPurchase.mockRejectedValue(new Error('nope'));
+    await openSheet();
+    await userEvent.click(main());
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(SPEC.error);
+    expect(alert).toHaveClass('form-error');
+    expect(alert.nextElementSibling).toBe(main());
+    expect(main()).toHaveTextContent(SPEC.getFounder);
+    expect(main()).toBeEnabled();
+  });
+
+  test('the X, Maybe later and Escape close it', async () => {
+    const { onClose } = await openSheet();
+    expect(dialog()).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await userEvent.click(screen.getByRole('button', { name: SPEC.later }));
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  test('a locked feature opens it on its own row', async () => {
+    await openSheet({ highlight: 4 });
+    expect(highlighted()).toEqual([SPEC.benefits[3]]);
+  });
+});
+
+describe('Restore purchase', () => {
+  test('re-reads the entitlement: Restoring…, then Restored. You’re Pro.', async () => {
+    let finish;
+    fetchEntitlement.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(fetchEntitlement).toHaveBeenCalledWith('jack');
+    expect(screen.getByRole('button', { name: SPEC.restoring })).toBeDisabled();
+    await act(async () => finish({ plan: 'pro', expiresAt: null }));
+    expect(screen.getByRole('heading', { name: SPEC.restored })).toBeInTheDocument();
+    // Shared at once: the ad service sees the restored plan.
+    expect(adServiceIsPro()).toBe(true);
+  });
+
+  test('nothing found: the muted line above the button', async () => {
+    fetchEntitlement.mockResolvedValue(null);
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    const note = screen.getByText(SPEC.nothing);
+    expect(note).toHaveClass('pro-sheet-note');
+    expect(note.nextElementSibling).toBe(main());
+    expect(screen.getByRole('button', { name: SPEC.restore })).toBeEnabled();
+  });
+
+  test('an expired plan is nothing to restore', async () => {
+    fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: 1 });
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(screen.getByText(SPEC.nothing)).toBeInTheDocument();
+  });
+
+  test('a failed read shows the error and keeps the last known plan', async () => {
+    fetchEntitlement.mockRejectedValue(new Error('offline'));
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(screen.getByRole('alert')).toHaveTextContent(SPEC.error);
+    expect(screen.getByRole('button', { name: SPEC.restore })).toBeEnabled();
+  });
+});
+
+describe('Terms and Privacy', () => {
+  const links = () => document.querySelector('.pro-sheet-links');
+
+  test('hidden without their URLs: Restore purchase alone, no dots', async () => {
+    await openSheet();
+    expect(screen.queryByRole('link', { name: SPEC.terms })).toBeNull();
+    expect(screen.queryByRole('link', { name: SPEC.privacy })).toBeNull();
+    expect(links().textContent).toBe(SPEC.restore);
+  });
+
+  test('both set: Restore purchase · Terms · Privacy, opening the real pages', async () => {
+    process.env.NEXT_PUBLIC_TERMS_URL = 'https://example.com/terms';
+    process.env.NEXT_PUBLIC_PRIVACY_URL = 'https://example.com/privacy';
+    await openSheet();
+    expect(links().textContent).toBe(`${SPEC.restore}·${SPEC.terms}·${SPEC.privacy}`);
+    expect(screen.getByRole('link', { name: SPEC.terms })).toHaveAttribute('href', 'https://example.com/terms');
+    expect(screen.getByRole('link', { name: SPEC.privacy })).toHaveAttribute('href', 'https://example.com/privacy');
+    document.querySelectorAll('.pro-sheet-dot').forEach((dot) => expect(dot).toHaveAttribute('aria-hidden', 'true'));
+  });
+
+  test.each([
+    ['only Terms', 'NEXT_PUBLIC_TERMS_URL', SPEC.terms, SPEC.privacy],
+    ['only Privacy', 'NEXT_PUBLIC_PRIVACY_URL', SPEC.privacy, SPEC.terms],
+  ])('%s: one dot, no dangling ones', async (_label, flag, shown, hidden) => {
+    process.env[flag] = 'https://example.com/page';
+    await openSheet();
+    expect(links().textContent).toBe(`${SPEC.restore}·${shown}`);
+    expect(screen.getByRole('link', { name: shown })).toHaveAttribute('href', 'https://example.com/page');
+    expect(screen.queryByRole('link', { name: hidden })).toBeNull();
+  });
+
+  test('a blank URL counts as unset', async () => {
+    process.env.NEXT_PUBLIC_TERMS_URL = '  ';
+    await openSheet();
+    expect(links().textContent).toBe(SPEC.restore);
+  });
+});
+
+describe('layout rules (phone.css)', () => {
+  const css = readFileSync(join(__dirname, 'phone.css'), 'utf8');
+  const rule = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return css.match(new RegExp(`\\n${escaped} \\{([^}]*)\\}`))[1];
+  };
+
+  test('the X: the shared overlay close, 44px to tap, a 36px soft circle, full ink', () => {
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const close = rule('.overlay-close.pro-sheet-close');
+    expect(close).toMatch(/color: var\(--ink\);/);
+    expect(close).toMatch(/right: calc\(env\(safe-area-inset-right, 0px\) \+ 8px\);/);
+    expect(close).not.toMatch(/muted|opacity: 0/);
+    const circle = rule('.overlay-close.pro-sheet-close::before');
+    expect(circle).toMatch(/width: 36px;/);
+    expect(circle).toMatch(/height: 36px;/);
+    expect(rule('.overlay-close')).toMatch(/width: 44px;[\s\S]*height: 44px;/);
+  });
+
+  test('sizes: hero 200px, headline 32px, 24px sides; 180px, 28px, 20px at 360', () => {
+    expect(rule('.pro-sheet-hero')).toMatch(/height: 200px;/);
+    expect(rule('.pro-sheet-hero')).toMatch(/background: #007a45;/);
+    expect(rule('.pro-sheet .pro-sheet-headline')).toMatch(/font-size: 32px;/);
+    expect(rule('.pro-sheet')).toMatch(/--pro-pad: 24px;/);
+    const small = css.match(/@media \(max-width: 374px\) \{\n  \.pro-sheet \{[^@]*?\n\}/)[0];
+    expect(small).toMatch(/--pro-pad: 20px;/);
+    expect(small).toMatch(/\.pro-sheet-hero \{ height: 180px; \}/);
+    expect(small).toMatch(/font-size: 28px;/);
+  });
+
+  test('rows 44px with 24px icons, cards 76px, main button 56px, Maybe later 44px', () => {
+    expect(rule('.pro-benefits li')).toMatch(/height: 44px;/);
+    expect(rule('.pro-plan')).toMatch(/height: 76px;/);
+    expect(rule('.pro-sheet .pro-sheet-main')).toMatch(/height: 56px;/);
+    expect(rule('.pro-sheet-later')).toMatch(/min-height: 44px;/);
+    expect(rule('.pro-fine-print')).toMatch(/font-size: 13px;/);
+    expect(rule('.pro-benefits li.is-highlighted')).toMatch(/font-weight: 800;/);
+    expect(rule('.pro-sheet-footer')).toMatch(/env\(safe-area-inset-bottom/);
+  });
+});

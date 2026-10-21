@@ -9,6 +9,7 @@ import '@testing-library/jest-dom';
 // set it on these mocks.
 jest.mock('./phone/entitlementApi', () => ({
   subscribeEntitlement: jest.fn(() => () => {}),
+  fetchEntitlement: jest.fn(async () => null),
   fetchFounderCount: jest.fn(() => new Promise(() => {})),
   requestMockPurchase: jest.fn(async () => ({ ok: true })),
 }));

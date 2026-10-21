@@ -1,4 +1,4 @@
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { apiUrl } from './resultTexts';
 
@@ -13,6 +13,13 @@ export function subscribeEntitlement(uid, onChange) {
     (snap) => onChange(snap.exists() ? snap.data() : null),
     (err) => onChange(undefined, err),
   );
+}
+
+// One fresh read of the user's own entitlement (Restore purchase), from the
+// server rather than the cache. null when there is none.
+export async function fetchEntitlement(uid) {
+  const snap = await getDocFromServer(doc(db, 'entitlements', uid));
+  return snap.exists() ? snap.data() : null;
 }
 
 // How many founder spots are taken. 0 before the first one.

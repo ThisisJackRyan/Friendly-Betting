@@ -56,7 +56,8 @@ needs it), and client-unwritable. The rest of `meta` stays closed by default. Co
 ## Client
 
 - `src/phone/entitlementApi.js`: `subscribeEntitlement(uid, cb)` (onSnapshot of the user's own
-  doc), `fetchFounderCount()`, `requestMockPurchase(plan)`. The only Pro reads. Jest mocks it for
+  doc), `fetchEntitlement(uid)` (one server read of it, for Restore purchase),
+  `fetchFounderCount()`, `requestMockPurchase(plan)`. The only Pro reads. Jest mocks it for
   every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.
   `useEntitlement()` returns `{ entitlement, isPro, loading }` and keeps `src/ads/pro.js`
@@ -88,37 +89,57 @@ Nobody else's plan is fetched or shown.
 member, the type picker lists those entries after the regular types (with a Pro badge). A real
 type also needs CreateForm and model support before it goes in the list.
 
-### Paywall
+### Paywall: the Pro sheet
 
-`src/phone/Paywall.jsx` at `/pro` (web `app/(chrome)/pro/page.js`, app route `pro`). With
+`src/phone/ProSheet.jsx` (UX spec, Oct 20): a bottom sheet that slides up over the page that
+opened it, portaled to `document.body`. `src/phone/Paywall.jsx` is `/pro` (web
+`app/(chrome)/pro/page.js`, app route `pro`): the same sheet on its own page. With
 `NEXT_PUBLIC_PRO_PAYWALL` off the web route is a real 404 and the app shows the not-found page.
 
-Copy (all from `PRO_COPY`): `Go Pro`, `Start 3 bets free, then $3/mo.`, `No ads.`, the founder line,
-`Picking a side is always free.`, and `Get Pro`, `Get Founder`, `Not now`. The founder line is
-data-driven from `meta/founders`: `Founder: $40 once, Pro for life. First 100 only.` while fewer than 100
-are taken, `Founder: $80 once, Pro for life. Next 500 only.` up to 600, then
-`Founder spots are gone. Pro is still $3/mo.` (and no Get Founder button). If the count can't be read, the founder
-line and button are left out rather than guessing a price.
+Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in full ink with a
+44px tap area), a green hero with a white `Pro` badge, `All the bets. None of the ads.` and
+`Friends always play free.`, five benefit rows, the plan cards, the fine print and
+`Restore purchase · Terms · Privacy`; pinned above the safe area, the main button and
+`Maybe later`. Every string is in `PRO_COPY` (`proConfig.js`).
 
-Buttons only do something with `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1` (previews). Otherwise they are
-disabled with `Coming soon` under them. A Pro member sees their badge and
-`You’re Pro. No more ads.` instead of the buttons; a Founder with a number sees
-`You’re Founder #7. No more ads.` (their own number).
+- **Highlighted row.** `highlight` (`PRO_ROW`) tints one benefit row: 1 (No ads) from `/pro` and
+  the Go Pro links, 3 from a locked Run it back, 4 from the locked Friends (head-to-head) filter.
+- **Plan cards.** Pro `$3/mo` and Founder `$40 once` / `$80 once`, priced by `founderOffer()`
+  from `meta/founders`. Founder is picked while spots remain, with `{n} of 100 spots left` (or
+  `of 500` in tier 2) only once the real count has loaded. After 600, no Founder card, Pro
+  picked, `Founder spots are gone.` above it. If the count can't be read, only the Pro card
+  shows (no guessed price or seats). Until the count is back the cards
+  are grey placeholders and the main button is disabled.
+- **Main button.** `Get Pro` / `Get Founder`; `Getting you set…` while buying (cards, X and
+  Maybe later disabled); `Coming soon`, disabled, without `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1`. A
+  failed purchase shows `Couldn’t finish that. Try again.` above it.
+- **Restore purchase** re-reads `entitlements/{uid}` from the server (`fetchEntitlement` in
+  `entitlementApi.js`, via `refreshEntitlement()` in `useEntitlement.js`, which shares the result
+  with every screen and the ad service). Pro found: `Restored. You’re Pro.`; none:
+  `Nothing to restore on this account.` above the button. No store receipts are checked yet.
+- **Terms / Privacy** link to `NEXT_PUBLIC_TERMS_URL` / `NEXT_PUBLIC_PRIVACY_URL` in a new tab,
+  each only when set; the dots only sit between links that show.
+- **Success screen.** A Pro member (already Pro on arrival, or just bought or restored) sees a
+  large badge and `You’re Pro. No more ads.` or `You’re Founder #7. No more ads.`, and
+  `Back to my bets`.
 
-Entry points: `/pro` directly, and a `Go Pro` link on My bets for a signed-in creator without Pro
-(flag on). **Not done: the "4th bet" prompt.** Counting a creator's bets in Create would need a
-new query (My bets' list isn't loaded there), so for now the paywall is only linked from My bets
-and creation is never blocked. TODO: count created bets (server-side counter on the user, or the
-My bets query) and show the paywall when a non-Pro creator starts bet 4; enforce the limit in
-rules or a server route if it should be more than a prompt.
+Entry points: `/pro` directly, and the Go Pro links (`GoProLink`).
+
+**Not done: the "4th bet" prompt.** Counting a creator's bets in Create would need a
+new query (My bets' list isn't loaded there), so for now creation is never blocked. TODO: count
+created bets (server-side counter on the user, or the My bets query) and show the paywall when a
+non-Pro creator starts bet 4; enforce the limit in rules or a server route if it should be more
+than a prompt.
 
 ## Flags
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro` and the My bets link. Web only: always off in the native app (see below). |
+| `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro`, the Pro sheet and the Go Pro links. Web only: always off in the native app (see below). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | off | Early-access types for Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | off | Paywall buttons call the mock route. Previews only. |
+| `NEXT_PUBLIC_TERMS_URL` | unset | The Pro sheet's Terms link. Hidden when unset. |
+| `NEXT_PUBLIC_PRIVACY_URL` | unset | The Pro sheet's Privacy link. Hidden when unset. |
 | `PRO_MOCK_PURCHASE` | off | Server: the mock route answers at all. |
 | `PRO_MOCK_UIDS` | empty | Server: testers' uids allowed to use the mock route, comma separated. Empty or unset means nobody. |
 
@@ -182,8 +203,9 @@ paywall is always off, so mock purchases only work on the web preview.
 - **Webhooks.** App Store Server Notifications v2, Play Real-time Developer Notifications, Stripe
   webhooks: renewals (move `expiresAt`), refunds and revocations (remove the plan, and for a
   refunded founder decide whether the number is retired), billing retry / grace periods, expiry.
-- **Restore purchases.** A Restore button on the paywall (required by App Review) that
-  re-validates the store's receipts for the signed-in user and rewrites the entitlement. Decide
+- **Restore purchases.** The sheet's `Restore purchase` (required by App Review) only re-reads
+  the entitlement today. It must also re-validate the store's receipts for the signed-in user
+  (a server route) and rewrite the entitlement before it reads. Decide
   how a purchase follows a user who changes phone number (new uid).
 - **Founder counter integrity.** Assign numbers only in the validated-purchase transaction, make
   it idempotent per transaction id (a retried webhook must not take a second number), and add an

@@ -831,6 +831,7 @@ async function mockEntitlement(page, { plan = null, founders = 0 } = {}) {
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
+      export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
       export const fetchFounderCount = async () => ${JSON.stringify(founders)};
       export const requestMockPurchase = async () => ({ ok: true });`,
   }));
@@ -879,7 +880,7 @@ test('without Pro the same tally has no badge and still shows the ad', async ({ 
   await expect(page.getByRole('dialog', { name: 'Ad', exact: true })).toBeVisible();
 });
 
-test('the paywall at /pro: a 404 with the flag off, the offer with it on', async ({ page }, testInfo) => {
+test('the paywall at /pro: a 404 with the flag off, the Pro sheet with it on', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await mockEntitlement(page, { founders: 12 });
@@ -888,16 +889,77 @@ test('the paywall at /pro: a 404 with the flag off, the offer with it on', async
 
   await enablePaywall(page);
   await page.goto('/pro');
-  await expect(page.getByRole('heading', { level: 2, name: 'Go Pro' })).toBeVisible();
-  await expect(page.getByText('Start 3 bets free, then $3/mo.')).toBeVisible();
-  await expect(page.getByText('No ads.')).toBeVisible();
-  await expect(page.getByText('Founder: $40 once, Pro for life. First 100 only.')).toBeVisible();
-  // No mock purchase in this build: the buttons wait.
-  await expect(page.getByRole('button', { name: 'Get Pro' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Get Founder' })).toBeDisabled();
-  await expect(page.getByText('Coming soon')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Not now' })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('paywall.png'), animations: 'disabled', scale: 'css' });
+  const sheet = page.getByRole('dialog', { name: 'All the bets. None of the ads.' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('Friends always play free.')).toBeVisible();
+  await expect(sheet.locator('.pro-benefits li.is-highlighted')).toHaveText('No ads, ever');
+  await expect(sheet.getByRole('radio', { name: /^Founder/ })).toBeChecked();
+  await expect(sheet.getByText('88 of 100 spots left')).toBeVisible();
+  // No mock purchase in this build: the main button waits.
+  await expect(sheet.getByRole('button', { name: 'Coming soon' })).toBeDisabled();
+  await sheet.getByRole('button', { name: 'Maybe later' }).click();
+  await expect(sheet).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+// The sheet's measurements from the UX spec, at the two phone widths.
+const SHEET_SIZES = [
+  { width: 393, height: 852, hero: 200, headline: '32px', pad: 24 },
+  { width: 360, height: 780, hero: 180, headline: '28px', pad: 20 },
+];
+
+for (const size of SHEET_SIZES) {
+  test(`the Pro sheet layout at ${size.width}x${size.height}`, async ({ page }, testInfo) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await mockEntitlement(page, { founders: 12 });
+    await enablePaywall(page);
+    await page.goto('/pro');
+    const sheet = page.locator('.pro-sheet');
+    await expect(sheet.getByText('88 of 100 spots left')).toBeVisible();
+    // Let the slide-up finish before measuring.
+    await expect.poll(() => sheet.evaluate((el) => el.getAnimations().length)).toBe(0);
+    const m = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect().toJSON();
+      const close = document.querySelector('.pro-sheet-close');
+      const circle = getComputedStyle(close, '::before');
+      return {
+        sheet: box('.pro-sheet'),
+        hero: box('.pro-sheet-hero'),
+        headline: getComputedStyle(document.querySelector('.pro-sheet-headline')).fontSize,
+        bodyPad: parseFloat(getComputedStyle(document.querySelector('.pro-sheet-body')).paddingLeft),
+        close: box('.pro-sheet-close'),
+        closeColor: getComputedStyle(close).color,
+        circle: [circle.width, circle.height, circle.borderRadius],
+        rows: Array.from(document.querySelectorAll('.pro-benefits li')).map((li) => li.getBoundingClientRect().height),
+        icons: Array.from(document.querySelectorAll('.pro-benefits li svg')).map((svg) => svg.getBoundingClientRect().width),
+        cards: Array.from(document.querySelectorAll('.pro-plan')).map((card) => card.getBoundingClientRect().toJSON()),
+        main: box('.pro-sheet-main'),
+        later: box('.pro-sheet-later'),
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    expect(m.scrollWidth).toBeLessThanOrEqual(size.width);
+    expect(m.sheet.width).toBe(size.width);
+    expect(m.sheet.bottom).toBe(size.height);
+    expect(m.hero.height).toBe(size.hero);
+    expect(m.headline).toBe(size.headline);
+    expect(m.bodyPad).toBe(size.pad);
+    expect([m.close.width, m.close.height]).toEqual([44, 44]);
+    expect(m.close.right).toBeLessThanOrEqual(size.width);
+    expect(m.close.top).toBeGreaterThanOrEqual(m.sheet.top);
+    expect(m.closeColor).toBe('rgb(32, 59, 46)');
+    expect(m.circle).toEqual(['36px', '36px', '50%']);
+    expect(m.rows).toEqual([44, 44, 44, 44, 44]);
+    expect(m.icons).toEqual([24, 24, 24, 24, 24]);
+    expect(m.cards.map((card) => card.height)).toEqual([76, 76]);
+    m.cards.forEach((card) => expect(card.width).toBe(size.width - 2 * size.pad));
+    // Pinned: the main button and Maybe later are on screen without scrolling.
+    expect(m.main.height).toBe(56);
+    expect(m.later.height).toBeGreaterThanOrEqual(44);
+    expect(m.later.bottom).toBeLessThanOrEqual(size.height);
+    await page.screenshot({ path: testInfo.outputPath(`pro-sheet-${size.width}.png`), animations: 'disabled', scale: 'css' });
+    expect(errors).toEqual([]);
+  });
+}

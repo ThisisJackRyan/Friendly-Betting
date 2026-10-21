@@ -22,7 +22,15 @@ export function founderOffer(count) {
   for (let index = 0; index < FOUNDER_TIERS.length; index += 1) {
     const tier = FOUNDER_TIERS[index];
     if (taken < tier.through) {
-      return { soldOut: false, first: index === 0, price: tier.price, spots: tier.through - from, next: taken + 1 };
+      // spots: the tier's size; left: how many of them are still open (never 0).
+      return {
+        soldOut: false,
+        first: index === 0,
+        price: tier.price,
+        spots: tier.through - from,
+        left: tier.through - taken,
+        next: taken + 1,
+      };
     }
     from = tier.through;
   }
@@ -49,20 +57,55 @@ export function proMockPurchaseEnabled() {
   return process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE === '1';
 }
 
-// Every on-screen string for Pro.
+// Terms and Privacy links on the Pro sheet. Each shows only when its URL is
+// set, so the sheet never links to a page that isn't there.
+export function proTermsUrl() {
+  return (process.env.NEXT_PUBLIC_TERMS_URL || '').trim();
+}
+
+export function proPrivacyUrl() {
+  return (process.env.NEXT_PUBLIC_PRIVACY_URL || '').trim();
+}
+
+// The Pro sheet's benefit rows, in order. A locked feature opens the sheet
+// with its row highlighted (PRO_ROW).
+export const PRO_ROW = { noAds: 1, badge: 2, runItBack: 3, headToHead: 4, early: 5 };
+
+// Every on-screen string for Pro (UX, Oct 20).
 export const PRO_COPY = {
   title: 'Go Pro',
-  free: `Start ${FREE_BETS} bets free, then $${PRO_MONTHLY_USD}/mo.`,
-  noAds: 'No ads.',
-  bettors: 'Picking a side is always free.',
-  founder: (offer) => `Founder: $${offer.price} once, Pro for life. ${offer.first ? 'First' : 'Next'} ${offer.spots} only.`,
-  founderSoldOut: `Founder spots are gone. Pro is still $${PRO_MONTHLY_USD}/mo.`,
+  headline: 'All the bets. None of the ads.',
+  line: 'Friends always play free.',
+  benefits: [
+    'No ads, ever',
+    'A Pro badge on your bets',
+    'Run it back in one tap',
+    'Head-to-head stats with friends',
+    'Early access to new stuff',
+  ],
+  proLabel: 'Pro',
+  proPrice: `$${PRO_MONTHLY_USD}/mo`,
+  proNote: 'Billed monthly. Cancel anytime.',
+  founderLabel: 'Founder',
+  founderPrice: (offer) => `$${offer.price} once`,
+  founderNote: 'Pro for life, plus a Founder badge and number.',
+  founderSeats: (offer) => `${offer.left} of ${offer.spots} spots left`,
+  founderSoldOut: 'Founder spots are gone.',
   getPro: 'Get Pro',
   getFounder: 'Get Founder',
-  notNow: 'Not now',
+  buying: 'Getting you set…',
   comingSoon: 'Coming soon',
+  later: 'Maybe later',
+  finePrint: `Pro renews at $${PRO_MONTHLY_USD}/mo until you cancel in Settings. Founder is a one-time payment and includes Pro.`,
+  restore: 'Restore purchase',
+  restoring: 'Restoring…',
+  restored: 'Restored. You’re Pro.',
+  nothingToRestore: 'Nothing to restore on this account.',
+  terms: 'Terms',
+  privacy: 'Privacy',
   owned: 'You’re Pro. No more ads.',
   ownedFounder: (number) => `You’re Founder #${number}. No more ads.`,
+  backToBets: 'Back to my bets',
   error: 'Couldn’t finish that. Try again.',
   link: 'Go Pro',
   pro: 'Pro',
