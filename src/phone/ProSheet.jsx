@@ -18,6 +18,10 @@ import {
 
 const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
 
+// How long the plan cards wait for the founder count before showing the Pro
+// card alone.
+export const FOUNDER_COUNT_TIMEOUT_MS = 8000;
+
 // The Pro sheet (UX spec, Oct 20): slides up from the bottom, on top of the
 // page that opened it, and is all of /pro. `highlight` is the benefit row
 // (PRO_ROW) to tint: a locked feature opens it on its own row, Go Pro on
@@ -30,7 +34,7 @@ const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
 export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone }) {
   const { entitlement, isPro } = useEntitlementState();
   const purchasable = proMockPurchaseEnabled();
-  // undefined while loading, null if the count could not be read.
+  // undefined while loading, null if the count could not be read in time.
   const [founders, setFounders] = useState(undefined);
   const [picked, setPicked] = useState('');
   const [buying, setBuying] = useState(false);
@@ -52,11 +56,28 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
 
   useEffect(() => {
     let current = true;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      setFounders(null);
+    }, FOUNDER_COUNT_TIMEOUT_MS);
     fetchFounderCount()
-      .then((count) => current && setFounders(count))
-      .catch(() => current && setFounders(null));
+      .then((count) => {
+        if (!current) return;
+        clearTimeout(timer);
+        // A count after the timeout adds the Founder card but keeps Pro
+        // picked, so the choice never changes under the user.
+        if (timedOut) setPicked((value) => value || 'pro');
+        setFounders(count);
+      })
+      .catch(() => {
+        if (!current) return;
+        clearTimeout(timer);
+        setFounders(null);
+      });
     return () => {
       current = false;
+      clearTimeout(timer);
     };
   }, []);
 

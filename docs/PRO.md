@@ -107,9 +107,11 @@ Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in f
 - **Plan cards.** Pro `$3/mo` and Founder `$40 once` / `$80 once`, priced by `founderOffer()`
   from `meta/founders`. Founder is picked while spots remain, with `{n} of 100 spots left` (or
   `of 500` in tier 2) only once the real count has loaded. After 600, no Founder card, Pro
-  picked, `Founder spots are gone.` above it. If the count can't be read, only the Pro card
-  shows (no guessed price or seats). Until the count is back the cards
-  are grey placeholders and the main button is disabled.
+  picked, `Founder spots are gone.` above it. Until the count is back the cards are grey
+  placeholders and the main button is disabled. If the read fails or takes longer than
+  `FOUNDER_COUNT_TIMEOUT_MS` (8 seconds, `ProSheet.jsx`), only the Pro card shows, picked (no
+  guessed price or seats). A count that lands after the timeout adds the Founder card but keeps
+  Pro picked.
 - **Main button.** `Get Pro` / `Get Founder`; `Getting you set…` while buying (cards, X and
   Maybe later disabled); `Coming soon`, disabled, without `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1`. A
   failed purchase shows `Couldn’t finish that. Try again.` above it.

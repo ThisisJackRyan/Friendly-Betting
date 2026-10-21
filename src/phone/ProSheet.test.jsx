@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Paywall from './Paywall';
-import ProSheet from './ProSheet';
+import ProSheet, { FOUNDER_COUNT_TIMEOUT_MS } from './ProSheet';
 import EntitlementSync from './EntitlementSync';
 import { fetchEntitlement, fetchFounderCount, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
@@ -322,6 +322,107 @@ describe('the sheet', () => {
   test('a locked feature opens it on its own row', async () => {
     await openSheet({ highlight: 4 });
     expect(highlighted()).toEqual([SPEC.benefits[3]]);
+  });
+});
+
+describe('waiting for the founder count (fake timers)', () => {
+  let user;
+  let settle;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+    fetchFounderCount.mockReturnValue(new Promise((resolve, reject) => { settle = { resolve, reject }; }));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const wait = (ms) => act(async () => { jest.advanceTimersByTime(ms); });
+  const skeleton = () => document.querySelectorAll('.pro-plan.is-loading');
+
+  test('the timeout is 8 seconds', () => {
+    expect(FOUNDER_COUNT_TIMEOUT_MS).toBe(8000);
+  });
+
+  test('loading: the skeleton cards and a disabled button, right up to the timeout', async () => {
+    await openSheet();
+    expect(skeleton()).toHaveLength(2);
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(main()).toBeDisabled();
+    await wait(FOUNDER_COUNT_TIMEOUT_MS - 1);
+    expect(skeleton()).toHaveLength(2);
+    expect(main()).toBeDisabled();
+  });
+
+  test('success: both cards, Founder picked', async () => {
+    await openSheet();
+    await act(async () => settle.resolve(93));
+    expect(skeleton()).toHaveLength(0);
+    expect(radio(SPEC.founderLabel)).toBeChecked();
+    expect(screen.getByText('7 of 100 spots left')).toBeInTheDocument();
+    expect(main()).toHaveTextContent(SPEC.getFounder);
+    expect(main()).toBeEnabled();
+    // The timer is gone: nothing changes at 8 seconds.
+    await wait(FOUNDER_COUNT_TIMEOUT_MS);
+    expect(radio(SPEC.founderLabel)).toBeChecked();
+  });
+
+  test('failure: the Pro card alone, Pro picked, no price or seats guessed', async () => {
+    await openSheet();
+    await act(async () => settle.reject(new Error('offline')));
+    expect(skeleton()).toHaveLength(0);
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(screen.queryByText(/spots left|once/)).toBeNull();
+    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
+    expect(main()).toHaveTextContent(SPEC.getPro);
+    expect(main()).toBeEnabled();
+  });
+
+  test('timeout: the Pro card alone, Pro picked', async () => {
+    await openSheet();
+    await wait(FOUNDER_COUNT_TIMEOUT_MS);
+    expect(skeleton()).toHaveLength(0);
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(screen.queryByText(/spots left|once/)).toBeNull();
+    expect(screen.queryByText(SPEC.soldOut)).toBeNull();
+    expect(main()).toHaveTextContent(SPEC.getPro);
+    expect(main()).toBeEnabled();
+    await user.click(main());
+    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
+  });
+
+  test('a count after the timeout adds the Founder card but keeps Pro picked', async () => {
+    await openSheet();
+    await wait(FOUNDER_COUNT_TIMEOUT_MS);
+    await act(async () => settle.resolve(0));
+    expect(screen.getByText('100 of 100 spots left')).toBeInTheDocument();
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(radio(SPEC.founderLabel)).not.toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getPro);
+    await user.click(radio(SPEC.founderLabel));
+    expect(main()).toHaveTextContent(SPEC.getFounder);
+  });
+
+  test('a sold-out count after the timeout: still Pro alone, now with the sold-out line', async () => {
+    await openSheet();
+    await wait(FOUNDER_COUNT_TIMEOUT_MS);
+    await act(async () => settle.resolve(600));
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(screen.getByText(SPEC.soldOut)).toBeInTheDocument();
+  });
+
+  test('sold out: Pro picked', async () => {
+    await openSheet();
+    await act(async () => settle.resolve(600));
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    expect(radio(SPEC.proLabel)).toBeChecked();
+    expect(main()).toHaveTextContent(SPEC.getPro);
   });
 });
 
