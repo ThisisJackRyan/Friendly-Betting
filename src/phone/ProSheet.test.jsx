@@ -128,6 +128,18 @@ describe('/pro', () => {
     await userEvent.click(screen.getByRole('button', { name: SPEC.back }));
     expect(navigation.push).toHaveBeenCalledWith('/bets');
   });
+
+  test('a legacy founder plan is Pro: the success screen with the plain Pro badge', async () => {
+    subscribeEntitlement.mockImplementation((_uid, onChange) => {
+      onChange({ plan: 'founder', source: 'mock', founderNumber: 7, expiresAt: null });
+      return () => {};
+    });
+    await openPage();
+    expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
+    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent(/^Pro$/);
+    expect(dialog().textContent).not.toMatch(/Founder|#7/);
+    expect(adServiceIsPro()).toBe(true);
+  });
 });
 
 describe('the sheet', () => {
@@ -280,6 +292,15 @@ describe('Restore purchase', () => {
     const badge = document.querySelector('.pro-sheet-success-badge');
     expect(badge.querySelector('.pro-badge')).toHaveTextContent(/^Pro$/);
     expect(badge.nextElementSibling).toBe(line);
+  });
+
+  test('a legacy founder plan restores as Pro: the plain Pro badge, no number', async () => {
+    fetchEntitlement.mockResolvedValue({ plan: 'founder', source: 'mock', founderNumber: 7, expiresAt: null });
+    await openSheet();
+    await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(SPEC.restored);
+    expect(document.querySelector('.pro-sheet-success-badge .pro-badge')).toHaveTextContent(/^Pro$/);
+    expect(dialog().textContent).not.toMatch(/Founder|#7/);
   });
 
   test('nothing found: the muted line above the button', async () => {

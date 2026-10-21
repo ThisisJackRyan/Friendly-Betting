@@ -30,8 +30,8 @@ None of these block merging the infrastructure. All of them block shipping ads.
   consent allows. Not wired yet.
 - **TODO: Play data safety** form and the Play Console "Contains ads" declaration.
 - **Pro is wired.** `src/ads/pro.js` `isPro()` reads a cache that `src/phone/useEntitlement.js`
-  fills from the signed-in user's `entitlements/{uid}` doc, so a Pro or Founder member gets reason
-  `pro` and never sees an ad. Billing itself is still a TODO: see [docs/PRO.md](PRO.md).
+  fills from the signed-in user's `entitlements/{uid}` doc, so a Pro member (legacy founder plans
+  included) gets reason `pro` and never sees an ad. Billing itself is still a TODO: see [docs/PRO.md](PRO.md).
 
 ## Files
 

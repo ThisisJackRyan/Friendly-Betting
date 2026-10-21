@@ -134,7 +134,7 @@ test('a failed read keeps the plan already known', () => {
 test('the badge is only for the signed-in user it was loaded for', () => {
   renderHook(() => useEntitlement());
   emit('entitlements/jack', { plan: 'founder', founderNumber: 9 });
-  expect(renderHook(() => useProBadge('jack')).result.current).toEqual({ kind: 'founder', number: 9 });
+  expect(renderHook(() => useProBadge('jack')).result.current).toEqual({ kind: 'pro' });
   expect(renderHook(() => useProBadge('maya')).result.current).toBeNull();
   expect(renderHook(() => useProBadge(undefined)).result.current).toBeNull();
   expect(renderHook(() => useEntitlementState()).result.current.isPro).toBe(true);

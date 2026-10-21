@@ -52,7 +52,7 @@
 
 ## Free to play
 
-Making your pick is always free. **Founder seats are coming soon** for the folks who start the bets.
+Making your pick is always free.
 
 The iOS and Android apps are coming soon too. Until then, Friendly works great in your phone’s browser.
 

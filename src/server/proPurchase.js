@@ -1,10 +1,9 @@
-import { PRO_PERIOD_DAYS, founderOffer } from '../phone/proConfig';
+import { PRO_PERIOD_DAYS } from '../phone/proConfig';
 
 // The mock purchase (docs/PRO.md). Preview and local only: it grants Pro with
 // no payment, so it must never answer in production.
 
-export const PLANS = ['pro', 'founder'];
-export const FOUNDERS_DOC = 'meta/founders';
+export const PLANS = ['pro'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function failure(code) {
@@ -33,8 +32,7 @@ export function mockPurchaseUids(env = process.env) {
 
 const FORBIDDEN = { ok: false, status: 403, error: 'forbidden' };
 
-// There is one Firebase project, so a preview grant is a real entitlement
-// (and a real founder number). Only a phone-verified, allowlisted tester may
+// There is one Firebase project, so a preview grant is a real entitlement. Only a phone-verified, allowlisted tester may
 // buy: never an anonymous bettor session.
 export function mockBuyerAllowed(decoded, env = process.env) {
   if (!decoded?.uid) return FORBIDDEN;
@@ -62,32 +60,19 @@ export function validPlan(plan) {
   return PLANS.includes(plan);
 }
 
-// Writes entitlements/{uid} in one transaction. A founder takes the next
-// number from meta/founders, so two buyers can never share one, and nobody
-// gets one past the last spot. A founder already owns everything: buying
-// again changes nothing. `since` and `toTimestamp` come from the Admin SDK
+// Writes entitlements/{uid} in one transaction: a 30 day mock Pro plan.
+// `since` and `toTimestamp` come from the Admin SDK
 // (FieldValue.serverTimestamp, Timestamp.fromMillis) so tests can stub them.
 export async function grantMockEntitlement({ db, uid, plan, now = Date.now(), since, toTimestamp = (ms) => ms }) {
   if (!validPlan(plan)) throw failure('invalid-plan');
   const entitlementRef = db.doc(`entitlements/${uid}`);
-  const foundersRef = db.doc(FOUNDERS_DOC);
   return db.runTransaction(async (tx) => {
     const existing = await tx.get(entitlementRef);
-    const founders = await tx.get(foundersRef);
-    const current = existing.exists ? existing.data() : null;
-    if (current?.plan === 'founder') {
-      return { plan: 'founder', founderNumber: current.founderNumber ?? null, unchanged: true };
-    }
-    if (plan === 'pro') {
-      const expiresAt = now + PRO_PERIOD_DAYS * DAY_MS;
-      tx.set(entitlementRef, { plan: 'pro', source: 'mock', since, expiresAt: toTimestamp(expiresAt) });
-      return { plan: 'pro', expiresAt };
-    }
-    const taken = Math.max(0, Math.floor(Number(founders.exists ? founders.data()?.count : 0) || 0));
-    if (founderOffer(taken).soldOut) throw failure('sold-out');
-    const founderNumber = taken + 1;
-    tx.set(foundersRef, { count: founderNumber });
-    tx.set(entitlementRef, { plan: 'founder', source: 'mock', since, founderNumber, expiresAt: null });
-    return { plan: 'founder', founderNumber, founderCount: founderNumber };
+    // A legacy founder doc (docs/PRO.md) is lifetime Pro: a 30 day plan
+    // would cut it short, so it is left alone.
+    if (existing.exists && existing.data()?.plan === 'founder') return { plan: 'pro', unchanged: true };
+    const expiresAt = now + PRO_PERIOD_DAYS * DAY_MS;
+    tx.set(entitlementRef, { plan: 'pro', source: 'mock', since, expiresAt: toTimestamp(expiresAt) });
+    return { plan: 'pro', expiresAt };
   });
 }

@@ -1,10 +1,11 @@
-import { doc, getDoc } from 'firebase/firestore';
-import { fetchFounderCount, requestMockPurchase } from './entitlementApi';
+import * as entitlementApi from './entitlementApi';
+
+const { requestMockPurchase } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
   doc: jest.fn((_db, ...segments) => ({ path: segments.join('/') })),
-  getDoc: jest.fn(),
+  getDocFromServer: jest.fn(),
   onSnapshot: jest.fn(),
 }));
 const mockAuth = { currentUser: null };
@@ -15,8 +16,6 @@ jest.mock('../Config/firebase-config', () => ({
   db: {},
 }));
 
-const snap = (data) => ({ exists: () => data !== null, data: () => data });
-
 beforeEach(() => {
   global.fetch = jest.fn();
   mockAuth.currentUser = { getIdToken: jest.fn(async () => 'id-token') };
@@ -26,14 +25,8 @@ afterEach(() => {
   delete global.fetch;
 });
 
-test('the founder count reads meta/founders, 0 when missing or junk', async () => {
-  getDoc.mockResolvedValueOnce(snap({ count: 42 }));
-  await expect(fetchFounderCount()).resolves.toBe(42);
-  expect(doc).toHaveBeenLastCalledWith({}, 'meta', 'founders');
-  getDoc.mockResolvedValueOnce(snap(null));
-  await expect(fetchFounderCount()).resolves.toBe(0);
-  getDoc.mockResolvedValueOnce(snap({ count: 'lots' }));
-  await expect(fetchFounderCount()).resolves.toBe(0);
+test('only the entitlement reads and the mock purchase: no founder count', () => {
+  expect(Object.keys(entitlementApi).sort()).toEqual(['fetchEntitlement', 'requestMockPurchase', 'subscribeEntitlement']);
 });
 
 test('a mock purchase posts the plan with the ID token', async () => {
@@ -47,8 +40,8 @@ test('a mock purchase posts the plan with the ID token', async () => {
 });
 
 test('a refused purchase throws with the route’s error code', async () => {
-  fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({ error: 'sold-out' }) });
-  await expect(requestMockPurchase('founder')).rejects.toMatchObject({ code: 'sold-out' });
+  fetch.mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: 'invalid-plan' }) });
+  await expect(requestMockPurchase('pro')).rejects.toMatchObject({ code: 'invalid-plan' });
   mockAuth.currentUser = null;
   await expect(requestMockPurchase('pro')).rejects.toThrow('Not signed in.');
 });

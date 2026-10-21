@@ -1,7 +1,6 @@
 # Pro tier
 
-Creators get 3 free bet creations, then Pro at $3/mo. Founder is lifetime Pro: $40 for the
-first 100 spots, $80 for the next 500, then sold out. Bettors (anyone who only picks a side) are
+Creators get 3 free bet creations, then Pro at $3/mo, the only plan. Bettors (anyone who only picks a side) are
 always free and never need an account.
 
 Today Pro is a data model, rules, a client listener, badges, a flagged paywall and a
@@ -14,24 +13,25 @@ Pro already turns ads off (see [docs/ADS.md](ADS.md)).
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `plan` | `'pro' \| 'founder'` | Founder counts as Pro, forever. |
+| `plan` | `'pro'` | The only plan sold. Legacy docs may say `'founder'`: see below. |
 | `source` | `'mock' \| 'storekit' \| 'play' \| 'stripe' \| 'revenuecat' \| 'admin'` | Who granted it. Only `mock` is written today. |
 | `since` | timestamp | Server time of the grant. |
-| `founderNumber` | number, founders only | 1 to 600, from `meta/founders`. |
-| `expiresAt` | timestamp or `null` | Pro: end of the paid period. Founder: `null`. Missing or `null` on Pro means no expiry. |
+| `expiresAt` | timestamp or `null` | End of the paid period. Missing or `null` means no expiry. |
 
-`meta/founders` is `{ count }`: how many founder spots are taken. The paywall reads it to price
-the next spot.
+**Legacy founder docs.** Before the Founder tier was dropped, the mock purchase could write
+`{ plan: 'founder', source: 'mock', since, founderNumber, expiresAt: null }` (lifetime). Those
+docs still read as Pro, forever, whatever `expiresAt` says, with the plain `Pro` badge: the
+number is never shown. Nothing writes that shape any more, and a legacy founder who buys Pro
+again keeps their doc unchanged (a 30 day plan would cut lifetime short).
 
 Pure helpers in `src/phone/entitlement.js`:
 
-- `isProEntitlement(ent, now)`: founder always; pro when `expiresAt` is missing, `null`, or later
-  than `now`. Accepts Firestore Timestamps, Dates, millis.
-- `badgeFor(ent, now)`: `{ kind: 'pro' }`, `{ kind: 'founder', number? }` or `null`.
+- `isProEntitlement(ent, now)`: pro when `expiresAt` is missing, `null`, or later than `now`;
+  a legacy founder doc always. Accepts Firestore Timestamps, Dates, millis.
+- `badgeFor(ent, now)`: `{ kind: 'pro' }` for any live plan, or `null`.
 
 Pricing, flags and every Pro string live in `src/phone/proConfig.js` (`FREE_BETS`,
-`PRO_MONTHLY_USD`, `FOUNDER_TIERS`, `founderOffer(count)`, `EARLY_ACCESS_TYPES`, `PRO_COPY`).
-The server route uses the same `founderOffer`, so the paywall and the counter agree.
+`PRO_MONTHLY_USD`, `PRO_PERIOD_DAYS`, `EARLY_ACCESS_TYPES`, `PRO_COPY`).
 
 ## Rules
 
@@ -57,7 +57,7 @@ needs it), and client-unwritable. The rest of `meta` stays closed by default. Co
 
 - `src/phone/entitlementApi.js`: `subscribeEntitlement(uid, cb)` (onSnapshot of the user's own
   doc), `fetchEntitlement(uid)` (one server read of it, for Restore purchase),
-  `fetchFounderCount()`, `requestMockPurchase(plan)`. The only Pro reads. Jest mocks it for
+  `requestMockPurchase(plan)`. The only Pro reads. Jest mocks it for
   every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.
   `useEntitlement()` returns `{ entitlement, isPro, loading }` and keeps `src/ads/pro.js`
@@ -73,7 +73,7 @@ needs it), and client-unwritable. The rest of `meta` stays closed by default. Co
 
 ### Badges
 
-`src/phone/ProBadge.jsx` shows `Pro`, `Founder` or `Founder #N`. Clients can only read their own
+`src/phone/ProBadge.jsx` shows `Pro`. Clients can only read their own
 entitlement, so the badge only ever follows the viewer's own name:
 
 - Tally: the viewer's own name in the voter list under the bars.
@@ -164,7 +164,7 @@ StoreKit and Play Billing.
 
 ## Mock purchase
 
-`POST /api/pro/mock-purchase` with `{ plan: 'pro' | 'founder' }` and
+`POST /api/pro/mock-purchase` with `{ plan: 'pro' }` and
 `Authorization: Bearer <Firebase ID token>`. Code: `app/api/pro/mock-purchase/route.js`,
 `src/server/proPurchase.js`. Tests: `src/server/proPurchase.test.js`.
 
@@ -181,21 +181,18 @@ Guards, in order:
 3. **403** `forbidden` for an anonymous session (`firebase.sign_in_provider === 'anonymous'`), a
    token without a `phone_number` claim, or a uid not listed in `PRO_MOCK_UIDS`. Empty or unset
    `PRO_MOCK_UIDS` means everyone gets a 403.
-4. **400** `invalid-plan` for anything but `pro` or `founder`.
-5. **409** `sold-out` for founder once 600 spots are taken.
-6. **503** without `FIREBASE_SERVICE_ACCOUNT`.
+4. **400** `invalid-plan` for anything but `pro` (`founder` included).
+5. **503** without `FIREBASE_SERVICE_ACCOUNT`.
 
 Why the allowlist: there is only one Firebase project, so a mock purchase on a preview writes a
-real `entitlements/{uid}` and takes a real founder number from `meta/founders`. Without it, any
-bettor (an anonymous session) on a preview could make itself Pro or a Founder. The checks live
+real `entitlements/{uid}`. Without it, any bettor (an anonymous session) on a preview could make
+itself Pro. The checks live
 in `authorizeMockBuyer` and `mockBuyerAllowed` (`src/server/proPurchase.js`), which never log
 tokens, phone numbers or uids. To add a tester, put their uid in `PRO_MOCK_UIDS` on the preview
 deploy.
 
 Writes (one transaction): Pro is `{ plan: 'pro', source: 'mock', since: serverTimestamp,
-expiresAt: now + 30 days }`. Founder reads `meta/founders`, takes `count + 1` as
-`founderNumber`, writes the new count and `{ plan: 'founder', source: 'mock', since,
-founderNumber, expiresAt: null }`. A founder buying again changes nothing. CORS is the same
+expiresAt: now + 30 days }`. A legacy founder doc is left as it is. CORS is the same
 allowlist as the other routes (`src/server/http.js`).
 
 The native app calls the production origin (`apiUrl`), where this route is a 404, and its
@@ -203,23 +200,19 @@ paywall is always off, so mock purchases only work on the web preview.
 
 ## TODOs for real billing
 
-- **Store billing.** iOS: StoreKit 2 (auto-renewable subscription for Pro, non-consumable for
-  Founder). Android: Play Billing (subscription + one-time product). Web: Stripe Checkout.
+- **Store billing.** iOS: StoreKit 2 (auto-renewable subscription for Pro). Android: Play
+  Billing (subscription). Web: Stripe Checkout.
   RevenueCat could front all three; if used, set `source: 'revenuecat'` and let its webhooks
   write entitlements.
 - **Server-side receipt validation.** Never trust the client: verify App Store signed
   transactions (App Store Server API) and Play purchase tokens (Google Play Developer API) on the
   server before writing `entitlements/{uid}`.
 - **Webhooks.** App Store Server Notifications v2, Play Real-time Developer Notifications, Stripe
-  webhooks: renewals (move `expiresAt`), refunds and revocations (remove the plan, and for a
-  refunded founder decide whether the number is retired), billing retry / grace periods, expiry.
+  webhooks: renewals (move `expiresAt`), refunds and revocations (remove the plan), billing retry / grace periods, expiry.
 - **Restore purchases.** The sheet's `Restore purchase` (required by App Review) only re-reads
   the entitlement today. It must also re-validate the store's receipts for the signed-in user
   (a server route) and rewrite the entitlement before it reads. Decide
   how a purchase follows a user who changes phone number (new uid).
-- **Founder counter integrity.** Assign numbers only in the validated-purchase transaction, make
-  it idempotent per transaction id (a retried webhook must not take a second number), and add an
-  admin audit that `count` equals the number of founder entitlements.
 - **Paid-bet gating.** The 4th-bet prompt above, and server or rules enforcement if the free limit
   should be hard.
 - **Mock removal.** Before launch, delete the mock route and `NEXT_PUBLIC_PRO_MOCK_PURCHASE`, or
@@ -227,13 +220,12 @@ paywall is always off, so mock purchases only work on the web preview.
 - **App Store review notes.** Digital goods inside the iOS app must use In-App Purchase (no
   Stripe links in the app, unless a permitted external-purchase entitlement applies). Show price,
   period and auto-renew terms on the paywall, link the Terms of Use and Privacy Policy, include
-  Restore Purchases, and give App Review a test account. Founder must be clearly described as a
-  one-time lifetime purchase. Play has the equivalent rules for Play Billing.
+  Restore Purchases, and give App Review a test account. Play has the equivalent rules for Play Billing.
 
 ## Pre-launch cleanup
 
-Mock purchases write to the one production Firebase project, so testers' mock plans and founder
-numbers are real data. Before real billing launches, by hand (nothing does this automatically):
+Mock purchases write to the one production Firebase project, so testers' mock plans are real
+data. Before real billing launches, by hand (nothing does this automatically):
 
 1. **Turn the mock off.** Unset `PRO_MOCK_PURCHASE`, `PRO_MOCK_UIDS` and
    `NEXT_PUBLIC_PRO_MOCK_PURCHASE` in every Vercel environment, and redeploy.
@@ -249,10 +241,9 @@ numbers are real data. Before real billing launches, by hand (nothing does this 
    ```
 
    Count the docs first and check that none has another `source`.
-3. **Reset the founder counter.** Set `meta/founders` back to `{ count: 0 }`, or delete the doc
-   (a missing doc reads as 0). Do this after step 2, and only while no real founder has been
-   sold, so no real buyer loses a number.
-4. **Check.** `entitlements` has no `source == 'mock'` docs, `meta/founders` is missing or 0, and
+3. **Legacy founder docs.** Step 2 already deletes every mock one (they are all
+   `source == 'mock'`). If `meta/founders` is still in the database, delete it: nothing reads it.
+4. **Check.** `entitlements` has no `source == 'mock'` docs, `meta/founders` is gone, and
    `POST /api/pro/mock-purchase` is a 404 on every deploy.
 
 Do not commit the script or wire it into a build or deploy step.

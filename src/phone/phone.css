@@ -3607,7 +3607,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   vertical-align: middle;
   white-space: nowrap;
 }
-.pro-badge-founder { background: var(--ink); }
 .screen-title .pro-badge,
 .reveal-headline .pro-badge { font-size: 12px; }
 /* Go Pro entry points (GoProLink): a muted text link, never accent green and

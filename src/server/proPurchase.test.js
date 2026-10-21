@@ -109,7 +109,7 @@ describe('guards', () => {
     expect(db.writes).toEqual([]);
   });
 
-  test.each([[{}], [{ plan: 'free' }], [{ plan: 'PRO' }], [{ plan: ['pro'] }], ['not json']])('400 for plan %j', async (body) => {
+  test.each([[{}], [{ plan: 'free' }], [{ plan: 'PRO' }], [{ plan: 'founder' }], [{ plan: ['pro'] }], ['not json']])('400 for plan %j', async (body) => {
     const res = await buy(body, { token: 'jack-token' });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid-plan' });
@@ -141,7 +141,7 @@ describe('who may buy', () => {
     ['a token without a phone number', 'nophone-token'],
     ['a phone user not on the allowlist', 'sam-token'],
   ])('403 for %s, with no write', async (_name, token) => {
-    const res = await buy({ plan: 'founder' }, { token });
+    const res = await buy({ plan: 'pro' }, { token });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'forbidden' });
     expect(db.writes).toEqual([]);
@@ -243,51 +243,24 @@ describe('purchases', () => {
     expect(body.expiresAt).toBeGreaterThanOrEqual(before + 30 * DAY);
     expect(body.expiresAt).toBeLessThanOrEqual(Date.now() + 30 * DAY);
     expect(db.data('entitlements/maya')).toBeUndefined();
+  });
+
+  test('founder is no longer sold: a 400 that writes nothing', async () => {
+    const res = await buy({ plan: 'founder' }, { token: 'jack-token' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid-plan' });
+    expect(db.writes).toEqual([]);
     expect(db.data('meta/founders')).toBeUndefined();
   });
 
-  test('founders are numbered in order from the counter', async () => {
-    let res = await buy({ plan: 'founder' }, { token: 'jack-token' });
-    expect(await res.json()).toEqual({ ok: true, plan: 'founder', founderNumber: 1, founderCount: 1 });
-    expect(db.data('entitlements/jack')).toEqual({
-      plan: 'founder', source: 'mock', since: 'SERVER_TIME', founderNumber: 1, expiresAt: null,
-    });
-    res = await buy({ plan: 'founder' }, { token: 'maya-token' });
-    expect((await res.json()).founderNumber).toBe(2);
-    expect(db.data('meta/founders')).toEqual({ count: 2 });
-  });
-
-  test('a founder buying again keeps their number and takes no new spot', async () => {
-    await buy({ plan: 'founder' }, { token: 'jack-token' });
-    const again = await buy({ plan: 'founder' }, { token: 'jack-token' });
-    expect(await again.json()).toMatchObject({ plan: 'founder', founderNumber: 1, unchanged: true });
-    const pro = await buy({ plan: 'pro' }, { token: 'jack-token' });
-    expect(await pro.json()).toMatchObject({ plan: 'founder', unchanged: true });
-    expect(db.data('meta/founders')).toEqual({ count: 1 });
-    expect(db.data('entitlements/jack').plan).toBe('founder');
-  });
-
-  test('spot #600 is the last; after it founder is sold out (409) and Pro still sells', async () => {
-    db = fakeDb({ 'meta/founders': { count: 599 } });
-    let res = await buy({ plan: 'founder' }, { token: 'jack-token' });
-    expect((await res.json()).founderNumber).toBe(600);
-    res = await buy({ plan: 'founder' }, { token: 'maya-token' });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'sold-out' });
-    expect(db.data('entitlements/maya')).toBeUndefined();
-    expect(db.data('meta/founders')).toEqual({ count: 600 });
-    res = await buy({ plan: 'pro' }, { token: 'maya-token' });
+  test('a legacy founder buying Pro keeps their lifetime plan', async () => {
+    const legacy = { plan: 'founder', source: 'mock', since: 'T', founderNumber: 7, expiresAt: null };
+    db = fakeDb({ 'entitlements/jack': legacy });
+    const res = await buy({ plan: 'pro' }, { token: 'jack-token' });
     expect(res.status).toBe(200);
-  });
-
-  test('two founders at once never share a number', async () => {
-    db = fakeDb({ 'meta/founders': { count: 99 } });
-    const [a, b] = await Promise.all([
-      grantMockEntitlement({ db, uid: 'a', plan: 'founder', since: 'T' }),
-      grantMockEntitlement({ db, uid: 'b', plan: 'founder', since: 'T' }),
-    ]);
-    expect([a.founderNumber, b.founderNumber].sort()).toEqual([100, 101]);
-    expect(db.data('meta/founders')).toEqual({ count: 101 });
+    expect(await res.json()).toEqual({ ok: true, plan: 'pro', unchanged: true });
+    expect(db.data('entitlements/jack')).toEqual(legacy);
+    expect(db.writes).toEqual([]);
   });
 
   test('an unexpected failure is a 500 that logs no details', async () => {

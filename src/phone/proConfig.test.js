@@ -1,8 +1,6 @@
 import {
   EARLY_ACCESS_TYPES,
-  FOUNDER_LIMIT,
   PRO_COPY,
-  founderOffer,
   proEarlyTypesEnabled,
   proMockPurchaseEnabled,
   proPaywallEnabled,
@@ -20,31 +18,14 @@ afterEach(() => {
   });
 });
 
-test('founder spots: $40 for #1 to #100, $80 for #101 to #600, then sold out', () => {
-  expect(founderOffer(0)).toMatchObject({ soldOut: false, price: 40, first: true, spots: 100, left: 100, next: 1 });
-  expect(founderOffer(99)).toMatchObject({ price: 40, left: 1, next: 100 });
-  expect(founderOffer(100)).toMatchObject({ price: 80, first: false, spots: 500, left: 500, next: 101 });
-  expect(founderOffer(599)).toMatchObject({ price: 80, left: 1, next: 600 });
-  expect(founderOffer(600)).toEqual({ soldOut: true });
-  expect(founderOffer(9999)).toEqual({ soldOut: true });
-  expect(FOUNDER_LIMIT).toBe(600);
-});
-
-test('a missing or junk count prices the first spot', () => {
-  expect(founderOffer(undefined)).toMatchObject({ price: 40, next: 1 });
-  expect(founderOffer('nope')).toMatchObject({ price: 40, next: 1 });
-  expect(founderOffer(-3)).toMatchObject({ price: 40, next: 1 });
-});
-
 test('the copy is built from the pricing, in the spec’s words', () => {
   expect(PRO_COPY.proPrice).toBe('$3/mo');
   expect(PRO_COPY.proNote).toBe('Billed monthly. Cancel anytime.');
   expect(PRO_COPY.finePrint).toBe('Pro renews at $3/mo until you cancel in Settings.');
-  expect(PRO_COPY.founderNumber(7)).toBe('Founder #7');
 });
 
 test('no Pro copy has an em dash, a TODO or a straight apostrophe', () => {
-  const strings = Object.values(PRO_COPY).flatMap((value) => (typeof value === 'function' ? value({ price: 1, spots: 1, left: 1, first: true }) : value));
+  const strings = Object.values(PRO_COPY).flat();
   strings.forEach((text) => {
     expect(text).not.toMatch(/—|TODO|'/);
   });
