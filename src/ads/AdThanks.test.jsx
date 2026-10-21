@@ -83,3 +83,33 @@ test('with no label: no visible button text; the whole layer is one control name
   fireEvent.click(dialog());
   expect(onContinue).toHaveBeenCalledTimes(1);
 });
+
+test('while it is up, focus stays on its button: Tab and focus moving behind it come back', () => {
+  render(
+    <>
+      <button type="button">Under the layer</button>
+      <AdThanks onContinue={() => {}} label="Text the crew" />
+    </>,
+  );
+  const button = screen.getByRole('button', { name: 'Text the crew' });
+  expect(button).toHaveFocus();
+  fireEvent.keyDown(button, { key: 'Tab' });
+  expect(button).toHaveFocus();
+  fireEvent.keyDown(button, { key: 'Tab', shiftKey: true });
+  expect(button).toHaveFocus();
+  act(() => { screen.getByRole('button', { name: 'Under the layer' }).focus(); });
+  expect(button).toHaveFocus();
+});
+
+test('once it is gone, focus is free again', () => {
+  const { rerender } = render(
+    <>
+      <button type="button">Under the layer</button>
+      <AdThanks onContinue={() => {}} label="Text the crew" />
+    </>,
+  );
+  rerender(<button type="button">Under the layer</button>);
+  const under = screen.getByRole('button', { name: 'Under the layer' });
+  act(() => { under.focus(); });
+  expect(under).toHaveFocus();
+});

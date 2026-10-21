@@ -48,6 +48,26 @@ const LOAD_ERROR = 'Couldn’t load the crew’s picks. Try again in a bit.';
 
 // The Call off confirm. The reveal after keeps REVEAL_COPY.calledOffSub.
 const CALL_OFF_COPY = 'Nobody wins this one.';
+const CALL_OFF_FAILED = 'Couldn\u2019t call off this bet. Try again.';
+
+const UNDO_TOO_LATE = 'Too late to undo.';
+const UNDO_FAILED = 'Couldn\u2019t undo that. Try again.';
+
+// "Too late" only when the window really is over: this screen's countdown ran
+// out before the failure came back, or undoSettle measured the server
+// settledAt past the rules' window. A rules refusal with time still on the
+// clock is a failed undo the creator can try again.
+function undoErrorCopy(err, expired) {
+  if (expired || err?.message === UNDO_TOO_LATE) return UNDO_TOO_LATE;
+  if (err?.code === 'permission-denied') return UNDO_FAILED;
+  return friendlyError(err, UNDO_FAILED);
+}
+
+// Call off's own line for a rules refusal, not the generic save one.
+function callOffErrorCopy(err) {
+  if (err?.code === 'permission-denied') return CALL_OFF_FAILED;
+  return friendlyError(err, CALL_OFF_FAILED);
+}
 
 const SHARE_NOTE = {
   shared: 'Pick who gets it.',
@@ -107,6 +127,11 @@ const TallyScreen = () => {
   const [callOff, setCallOff] = useState({ open: false, busy: false, error: '' });
   const callOffTrigger = useRef(null);
   const resultRef = useRef(null);
+  const inviteButton = useRef(null);
+  // Where focus goes once an ad's thank-you has closed: back to Text the
+  // crew when it opened the ad (once the share is done and the button is
+  // live again), or to the reveal headline after the settle ad.
+  const focusAfterThanks = useRef(null);
   const revealSettlement = useRef(false);
   // Whether this tab just made this bet (see freshBet): undefined until the
   // first mount takes the note, then true until the share sheet opens once.
@@ -175,7 +200,7 @@ const TallyScreen = () => {
       reveal();
       return;
     }
-    await settleAd.run(reveal);
+    await settleAd.run(reveal, { onThanksClose: () => { focusAfterThanks.current = 'reveal'; } });
   };
 
   // Back to open, within the window. Settling again skips the ad too.
@@ -188,7 +213,7 @@ const TallyScreen = () => {
       setSettledLocalAt(null);
       setBet(reopened);
     } catch (err) {
-      setUndoError(err?.code === 'permission-denied' ? 'Too late to undo.' : friendlyError(err, 'Couldn’t undo that. Try again.'));
+      setUndoError(undoErrorCopy(err, undoRemainingMs(bet, { localAt: settledLocalAt }) <= 0));
     } finally {
       setUndoing(false);
     }
@@ -208,7 +233,7 @@ const TallyScreen = () => {
       setBet(off);
       setCallOff({ open: false, busy: false, error: '' });
     } catch (err) {
-      setCallOff({ open: true, busy: false, error: friendlyError(err, 'Couldn’t call off this bet. Try again.') });
+      setCallOff({ open: true, busy: false, error: callOffErrorCopy(err) });
     }
   };
 
@@ -226,7 +251,7 @@ const TallyScreen = () => {
     const text = inviteText();
     setMessage(text);
     setSharing(true);
-    invite.share(() => shareMessage(text))
+    invite.share(() => shareMessage(text), { onThanksClose: () => { focusAfterThanks.current = 'invite'; } })
       .then((result) => {
         if (result != null) setShareState(result);
       })
@@ -271,6 +296,22 @@ const TallyScreen = () => {
 
   // While a settle is held, the open-bet actions stay in place but are inert.
   const locked = saving || Boolean(held);
+
+  const thanksUp = Boolean(invite.thanks || settleAd.thanks);
+  useEffect(() => {
+    const target = focusAfterThanks.current;
+    if (!target || thanksUp) return;
+    if (target === 'invite') {
+      // The button is disabled until its share is done.
+      if (sharing || locked) return;
+      focusAfterThanks.current = null;
+      inviteButton.current?.focus();
+      return;
+    }
+    if (held || !settled) return;
+    focusAfterThanks.current = null;
+    resultRef.current?.querySelector('.reveal-headline')?.focus();
+  });
 
   const final = Boolean(settled);
   useEffect(() => {
@@ -348,7 +389,7 @@ const TallyScreen = () => {
             {votingOpen(bet) && <div className={nudge ? 'tally-share is-nudge' : 'tally-share'}>
               {message && shareState === 'manual' && <p className="manual-message">{message}</p>}
               {shareNote ? <p className="share-note">{shareNote}</p> : null}
-              <button type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing || locked} onClick={onShare}>
+              <button ref={inviteButton} type="button" className={nudge ? 'cta press cta-nudge' : 'cta press'} disabled={sharing || locked} onClick={onShare}>
                 <FiShare2 size={18} aria-hidden="true" />
                 {INVITE_LABEL}
               </button>

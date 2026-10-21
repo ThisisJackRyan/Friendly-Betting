@@ -147,6 +147,38 @@ const tap = (element) => act(async () => { fireEvent.click(element); });
 const settle = () => act(async () => {});
 
 describe('Text the crew', () => {
+  test('focus stays on the thank-you\'s button, then returns to Text the crew once the share is done', async () => {
+    let finishShare;
+    shareMessage.mockImplementation((text) => new Promise((resolve) => {
+      shareCalls.push({ kind: 'message', text, inClick: mockInClick() });
+      finishShare = () => resolve('copied');
+    }));
+    await renderTally();
+    await tap(inviteButton());
+    await settle();
+    const thanksButton = within(thanks()).getByRole('button', { name: 'Text the crew' });
+    expect(thanksButton).toHaveFocus();
+    // Focus can't wander behind the layer while it is up.
+    act(() => { inviteButton().focus(); });
+    expect(thanksButton).toHaveFocus();
+    await tap(thanksButton);
+    expect(thanks()).not.toBeInTheDocument();
+    // Sharing: the button is still disabled, so focus waits for it.
+    expect(inviteButton()).toBeDisabled();
+    await act(async () => { finishShare(); });
+    expect(inviteButton()).toBeEnabled();
+    expect(inviteButton()).toHaveFocus();
+  });
+
+  test('with no ad shown, Text the crew does not pull focus after the share', async () => {
+    showInterstitial.mockResolvedValue({ shown: false, skipped: true, reason: 'capped' });
+    await renderTally();
+    await tap(inviteButton());
+    await settle();
+    expect(shareMessage).toHaveBeenCalledTimes(1);
+    expect(inviteButton()).not.toHaveFocus();
+  });
+
   test('an ad shown: the thank-you, then the share with the invite text (web, no share sheet: waits for a tap)', async () => {
     await renderTally();
     jest.useFakeTimers();

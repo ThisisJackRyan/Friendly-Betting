@@ -517,7 +517,7 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/t/${CODE}`);
-      await page.getByText('Bragging rights, secured.').waitFor();
+      await page.getByText('Time for everyone else to pay up.').waitFor();
       await showBars(page, '.reveal');
     },
   },

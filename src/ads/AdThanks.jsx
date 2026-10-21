@@ -57,6 +57,7 @@ export const coverButtonStyle = {
 
 export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
   const button = useRef(null);
+  const layer = useRef(null);
   const done = useRef(false);
   const finish = useRef(onContinue);
   finish.current = () => {
@@ -68,19 +69,32 @@ export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
   useEffect(() => {
     button.current?.focus();
     const timer = autoContinueMs > 0 ? setTimeout(() => finish.current(), autoContinueMs) : null;
+    // While it is up, focus stays on its one button: Tab, a click on the
+    // page under it, or a script can't move focus behind the layer.
+    const keep = (event) => {
+      if (layer.current && !layer.current.contains(event.target)) button.current?.focus();
+    };
+    document.addEventListener('focusin', keep);
     return () => {
       if (timer) clearTimeout(timer);
+      document.removeEventListener('focusin', keep);
     };
   }, [autoContinueMs]);
 
   const view = (
     <div
+      ref={layer}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ad-thanks-line"
       style={thanksLayerStyle}
       data-testid="ad-thanks"
       onClick={() => finish.current()}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        event.preventDefault();
+        button.current?.focus();
+      }}
     >
       <p id="ad-thanks-line" style={line}>{AD_THANKS_LINE}</p>
       {/* The button's click bubbles to the layer, which continues once. */}

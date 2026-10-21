@@ -147,14 +147,14 @@ describe('rendered screens never show TODO_UX', () => {
     await renderAt('/b/abc123', <VoteScreen />);
     const card = screen.getByRole('region', { name: 'Settled result' });
     expect([...card.children].map((node) => node.textContent)).toEqual([
-      'Chiefs -3 won', 'One friend called it.', 'Bragging rights, secured.', 'Stakes: $20',
+      'Chiefs -3 won', 'One friend called it.', 'Time for everyone else to pay up.', 'Stakes: $20',
     ]);
     cleanup();
     feed(BETS['several unnamed winners']);
     as('jack', true);
     await renderAt('/t/abc123', <TallyScreen />);
     expect(screen.getByRole('heading', { name: '4 friends called it.' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Bragging rights, secured.');
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Time for everyone else to pay up.');
   });
 
   test('MyBets in every filter', async () => {

@@ -10,6 +10,7 @@ import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { AUTH_COPY, codeSentCopy, PERSON_CHECK_CANCELLED } from './creatorSession';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
+import { SLIDE_MS } from './createMotion';
 
 const phoneCreator = {
   uid: 'user-1',
@@ -297,6 +298,95 @@ test('a failed save stays on the stake step with the error and can try again', a
   await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
   await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
   expect(saveBet).toHaveBeenCalledTimes(2);
+});
+
+describe('the draft survives fast typing and taps', () => {
+  const activePane = () => document.querySelector('.create-pane:not(.is-leaving)');
+  const activeQuestion = () => activePane().querySelector('#question');
+  const landSlide = () => act(() => new Promise((resolve) => setTimeout(resolve, SLIDE_MS + 20)));
+
+  test('Next in the same tick as the last keystrokes carries the whole question', async () => {
+    renderForm('/new/money-line');
+    // Keystrokes and the Next tap land before React renders in between: Next
+    // still sees every character, not the question as of the last render.
+    act(() => {
+      fireEvent.change(activeQuestion(), { target: { value: 'QA h' } });
+      fireEvent.change(activeQuestion(), { target: { value: 'QA h2h 1?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(saveBet).toHaveBeenCalledTimes(1));
+    expect(saveBet.mock.calls[0][1].question).toBe('QA h2h 1?');
+  });
+
+  test('Text friends in the same tick as a stake tap saves that stake', async () => {
+    renderForm('/new/money-line');
+    await goToStake('QA h2h 2?');
+    await landSlide();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Coffee', exact: true }));
+      fireEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    });
+    await waitFor(() => expect(saveBet).toHaveBeenCalledTimes(1));
+    expect(saveBet.mock.calls[0][1]).toEqual(expect.objectContaining({ question: 'QA h2h 2?', stake: 'Coffee' }));
+  });
+
+  test('typing as the details slide arrives and after it lands keeps every character', async () => {
+    renderForm();
+    await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+    expect(document.querySelector('.create-pane.is-leaving')).toBeInTheDocument();
+    const field = activeQuestion();
+    fireEvent.change(field, { target: { value: 'QA ' } });
+    // The slide lands: the leaving pane goes, the tabs stay hidden, and none
+    // of that touches the field or what is in it.
+    await landSlide();
+    expect(document.querySelector('.create-pane.is-leaving')).toBeNull();
+    expect(activeQuestion()).toBe(field);
+    expect(field).toHaveValue('QA ');
+    await userEvent.type(field, 'long question typed fast?');
+    expect(field).toHaveValue('QA long question typed fast?');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(saveBet).toHaveBeenCalledTimes(1));
+    expect(saveBet.mock.calls[0][1].question).toBe('QA long question typed fast?');
+  });
+
+  test('the arriving step takes no taps until its slide lands', async () => {
+    renderForm('/new/money-line');
+    expect(activePane()).not.toHaveClass('is-sliding');
+    await goToStake('QA h2h 3?');
+    // Mid-slide, the spot where Coffee lands still has the pane passing under
+    // it: a tap there would pick whichever chip happens to be there.
+    expect(activePane()).toHaveClass('is-sliding');
+    await landSlide();
+    expect(activePane()).not.toHaveClass('is-sliding');
+    await userEvent.click(screen.getByRole('button', { name: 'Coffee', exact: true }));
+    expect(screen.getByRole('button', { name: 'Coffee', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('three bets in a row in one session each save their own question and stake', async () => {
+    const made = [
+      ['QA h2h 1?', 'Coffee'],
+      ['QA h2h 2?', 'Coffee'],
+      ['QA h2h 3?', 'Coffee'],
+      ['QA h2h 4?', ''],
+    ];
+    for (const [index, [question, stake]] of made.entries()) {
+      saveBet.mockResolvedValueOnce(`bet${index}`);
+      // Each Create is a fresh page after the last bet's tally.
+      const view = renderForm();
+      await userEvent.click(screen.getByRole('button', { name: /money line/i }));
+      await goToStake(question);
+      await landSlide();
+      if (stake) await userEvent.click(screen.getByRole('button', { name: stake, exact: true }));
+      await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith(`/t/bet${index}`));
+      view.unmount();
+    }
+    expect(saveBet.mock.calls.map(([, fields]) => [fields.question, fields.stake])).toEqual(made);
+  });
 });
 
 test('phone tabs hide after step 1 and return when the walkthrough is back on pick type', async () => {

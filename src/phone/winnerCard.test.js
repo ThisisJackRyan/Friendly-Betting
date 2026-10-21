@@ -33,7 +33,7 @@ describe('winnerCardText', () => {
       question: 'Chiefs cover -3?',
       eyebrow: 'Chiefs -3 won',
       headline: 'Maya & Sam won.',
-      subline: 'Bragging rights, secured.',
+      subline: 'Time for everyone else to pay up.',
       stake: 'Stakes: $20',
     });
     expect(winnerCardText(bet).headline).toBe(buildReveal({ bet, viewerId: null }).headline);
@@ -76,13 +76,34 @@ describe('winnerCardText', () => {
   });
 });
 
+describe('the card\'s winners line follows the stake', () => {
+  test.each([
+    ['', 'Bragging rights, secured.', ''],
+    ['Bragging rights', 'Bragging rights, secured.', 'Stakes: Bragging rights'],
+    ['Coffee', 'Coffee’s on everyone else.', 'Stakes: Coffee'],
+    ['Lunch', 'Lunch is on everyone else.', 'Stakes: Lunch'],
+    ['Drinks', 'Drinks are on everyone else.', 'Stakes: Drinks'],
+    ['Loser buys pizza', 'Time for everyone else to pay up.', 'Stakes: Loser buys pizza'],
+  ])('stake %j', (stake, line, stakeText) => {
+    const solo = buildWinnerCard(settled({ winners: [['maya', 'Maya']], losers: [['zed', 'Zed']], stake }), { measure });
+    expect(solo.text.subline).toBe(`Called it solo. ${line}`);
+    expect(textOf(solo, 'subline').join(' ')).toBe(`Called it solo. ${line}`);
+    expect(textOf(solo, 'stake')).toEqual(stakeText ? [stakeText] : []);
+    const crew = buildWinnerCard(settled({ winners: [['maya', 'Maya'], ['sam', 'Sam']], stake }), { measure });
+    expect(textOf(crew, 'subline').join(' ')).toBe(line);
+    // Every line fits inside the card, the subline in its two lines.
+    expect(textOf(solo, 'subline').length).toBeLessThanOrEqual(2);
+    [...solo.lines, ...crew.lines].forEach((item) => expect(measure(item.text, item.font)).toBeLessThanOrEqual(inner));
+  });
+});
+
 describe('buildWinnerCard layout', () => {
   test('lines in reading order, inside the card, with the brand around them', () => {
     const card = buildWinnerCard(settled({ winners: [['maya', 'Maya']] }), { measure });
     expect(card).toMatchObject({ width: 1080, height: 1350, background: CARD_COLORS.background });
     expect(card.lines.map((line) => line.key)).toEqual(['question', 'eyebrow', 'headline', 'subline', 'subline', 'stake']);
     expect(card.lines.map((line) => line.text)).toEqual([
-      'Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'Called it solo. Bragging rights,', 'secured.', 'Stakes: $20',
+      'Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'Called it solo. Time for everyone else', 'to pay up.', 'Stakes: $20',
     ]);
     expect(card.brand).toMatchObject({ text: CARD_BRAND, period: '.' });
     expect(card.footer.text).toBe('friendly-bets.com');

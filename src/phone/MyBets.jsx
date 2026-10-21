@@ -27,6 +27,16 @@ const FILTERS = ['All', 'Open', 'Closed', 'Settled', 'Friends'];
 const DELETE_ERROR = 'Couldn\u2019t delete this bet. Try again.';
 const TOAST_MS = 4000;
 
+// The card's last line, from the creator's side as the reveal puts it: their
+// own win (alone or with others) is "You called it.", never "A friend won"
+// for their own unnamed pick.
+function cardOutcome(bet, result, uid) {
+  if (isCalledOff(bet)) return REVEAL_COPY.calledOff;
+  if (!result) return 'See who\u2019s in';
+  if (uid && result.winners.some((winner) => winner.voterId === uid)) return REVEAL_COPY.youWon;
+  return resultHeadline(result);
+}
+
 export function MyBetsList({ user }) {
   const uid = isCreator(user) ? user.uid : '';
   const [bets, setBets] = useState(null);
@@ -250,11 +260,7 @@ export function MyBetsList({ user }) {
                           </h2>
                           <BetFacts bet={bet} />
                           <span className="bet-card-bottom">
-                            <span>
-                              {isCalledOff(bet)
-                                ? REVEAL_COPY.calledOff
-                                : result ? resultHeadline(result) : 'See who’s in'}
-                            </span>
+                            <span>{cardOutcome(bet, result, uid)}</span>
                             <FiArrowRight aria-hidden="true" />
                           </span>
                         </Link>
