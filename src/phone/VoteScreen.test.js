@@ -1191,6 +1191,65 @@ describe('adding or editing a name after picking', () => {
       expect(rememberName).toHaveBeenCalledWith('John');
     });
 
+    test('a snapshot that only lands after the time out still remembers the name', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(rememberName).not.toHaveBeenCalled();
+
+      publish(renamedTo(current, 'John'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledTimes(1);
+      expect(rememberName).toHaveBeenCalledWith('John');
+      // The pick field for the next bet starts from it too.
+      publish(renamedTo(current, 'John'));
+      expect(rememberName).toHaveBeenCalledTimes(1);
+    });
+
+    test('a late snapshot or answer for an older name never replaces a newer saved one', async () => {
+      const lands = [];
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        lands.push(resolve);
+      }));
+      const input = await saveAs('John');
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+
+      await user.clear(input);
+      await user.type(input, 'Jo');
+      await user.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+      await act(async () => {
+        lands[1]();
+      });
+      expect(rememberName).toHaveBeenLastCalledWith('Jo');
+      publish(renamedTo(current, 'Jo'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Jo') })).toBeInTheDocument();
+
+      // The first save's snapshot and answer arrive last.
+      publish(renamedTo(current, 'John'));
+      await act(async () => {
+        lands[0]();
+      });
+      expect(rememberName.mock.calls).toEqual([['Jo']]);
+    });
+
+    test('leaving the page mid-save clears the save timer', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+      const before = jest.getTimerCount();
+      cleanup();
+      expect(jest.getTimerCount()).toBeLessThan(before);
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+      expect(rememberName).not.toHaveBeenCalled();
+    });
+
     test('leaving the page mid-save updates nothing after unmount', async () => {
       const error = jest.spyOn(console, 'error').mockImplementation(() => {});
       try {

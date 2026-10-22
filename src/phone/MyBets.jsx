@@ -29,6 +29,9 @@ import { PRO_ROW } from './proConfig';
 const FILTERS = ['All', 'Open', 'Closed', 'Settled', 'Friends'];
 const DELETE_ERROR = 'Couldn\u2019t delete this bet. Try again.';
 const TOAST_MS = 4000;
+// How long a delete may show Deleting… before the dialog gives up and shows
+// the delete error. A delete that lands later still closes the dialog.
+export const DELETE_WAIT_MS = 15000;
 
 // The card's last line, from the creator's side as the reveal puts it: their
 // own win (alone or with others) is "You called it.", never "A friend won"
@@ -52,6 +55,9 @@ export function MyBetsList({ user }) {
   const [toast, setToast] = useState('');
   const [proSheet, setProSheet] = useState(false);
   const deleteTrigger = useRef(null);
+  // The delete waiting on the list to confirm it, if any.
+  const deleteWait = useRef(null);
+  const alive = useRef(true);
   const proTrigger = useRef(null);
   // Head-to-head stats (the Friends filter) are Pro with the paywall on.
   const friendsLocked = useProLocked();
@@ -77,22 +83,67 @@ export function MyBetsList({ user }) {
     deleteTrigger.current?.focus();
   };
 
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      deleteWait.current?.stop();
+    };
+  }, []);
+
+  // Done as soon as deleteBet resolves or the live list no longer has the bet
+  // (the server's answer can be slow to come back after the delete is in);
+  // after DELETE_WAIT_MS with neither it fails.
+  const removeBet = (code) => new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (deleteWait.current === wait) deleteWait.current = null;
+      if (err) reject(err);
+      else resolve();
+    };
+    const wait = { code, done: () => finish(), stop: () => { settled = true; clearTimeout(timer); } };
+    const timer = setTimeout(() => finish(new Error('Could not delete this bet.')), DELETE_WAIT_MS);
+    deleteWait.current = wait;
+    deleteBet(code).then(() => finish(), (err) => finish(err || new Error()));
+  });
+
   const confirmDelete = async () => {
     if (!deleting || deleteBusy) return;
     setDeleteBusy(true);
     setDeleteError('');
     try {
-      await deleteBet(deleting);
+      await removeBet(deleting);
+      if (!alive.current) return;
       setDeleting(null);
       setToast('Bet deleted.');
     } catch (err) {
+      if (!alive.current) return;
       const offline = err?.code === 'offline'
         || (typeof navigator !== 'undefined' && navigator.onLine === false);
       setDeleteError(offline ? PHONE_OFFLINE_ERROR : DELETE_ERROR);
     } finally {
-      setDeleteBusy(false);
+      if (alive.current) setDeleteBusy(false);
     }
   };
+
+  // The live list without the bet: the delete is on the server (deleteBet
+  // only commits on the server, with no local-only removal). It finishes a
+  // waiting delete, and closes the dialog if a failed or timed out delete
+  // landed after all. A failed list load proves nothing.
+  useEffect(() => {
+    if (!bets || error) return;
+    const gone = (code) => !bets.some((bet) => bet.id === code);
+    const wait = deleteWait.current;
+    if (wait && gone(wait.code)) wait.done();
+    if (deleting && !deleteBusy && deleteError && gone(deleting)) {
+      setDeleting(null);
+      setDeleteError('');
+      setToast('Bet deleted.');
+    }
+  }, [bets, error, deleting, deleteBusy, deleteError]);
 
   useEffect(() => {
     if (!uid) return undefined;

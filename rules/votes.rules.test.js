@@ -337,6 +337,62 @@ describe('legacy votes array (phase 1)', () => {
   });
 });
 
+// The extra attack probes from the PR #85 review, pinned.
+describe('review probes (PR #85)', () => {
+  const sam = openBet.votes[0];
+  const lee = { voterId: 'anon-2', name: 'Lee', optionId: 'b', at: 3 };
+  const maya = { voterId: 'anon-3', name: 'Maya', optionId: 'a', at: 4 };
+
+  beforeEach(async () => {
+    await seed({ 'bets/two': { ...openBet, code: 'two', votes: [sam, lee] } });
+  });
+
+  test('nobody can reorder the legacy array, with or without an append', async () => {
+    await assertFails(anon('anon-1').doc('bets/two').update({ votes: [lee, sam] }));
+    await assertFails(anon('anon-3').doc('bets/two').update({ votes: [lee, sam, maya] }));
+    await assertFails(anon('anon-2').doc('bets/two').update({ votes: [lee, sam, { ...lee, at: 5 }] }));
+    expect((await read('bets/two')).votes).toEqual([sam, lee]);
+  });
+
+  test('the creator cannot wipe the legacy array through an edit or a settle', async () => {
+    const db = creator();
+    await assertFails(db.doc('bets/two').update({ votes: [] }));
+    await assertFails(db.doc('bets/two').update({ question: 'New question', votes: [] }));
+    await assertFails(db.doc('bets/two').update({ question: 'New question', votes: [sam] }));
+    await assertFails(db.doc('bets/two').update({ ...settleFields, settledAt: FieldValue.serverTimestamp(), votes: [] }));
+    await assertFails(db.doc('bets/two').update({
+      status: 'closed', calledOff: true, settledAt: FieldValue.serverTimestamp(), votes: [],
+    }));
+    expect((await read('bets/two')).votes).toEqual([sam, lee]);
+    // The same edit and settle without touching votes still go through.
+    await assertSucceeds(db.doc('bets/two').update({ question: 'New question' }));
+    await assertSucceeds(db.doc('bets/two').update({ ...settleFields, settledAt: FieldValue.serverTimestamp() }));
+  });
+
+  test('a non-creator cannot change other fields along with an append', async () => {
+    const db = anon('anon-3');
+    await assertFails(db.doc('bets/two').update({ votes: [sam, lee, maya], question: 'Hacked' }));
+    await assertFails(db.doc('bets/two').update({ votes: [sam, lee, maya], status: 'closed' }));
+    await assertFails(db.doc('bets/two').update({ votes: [sam, lee, maya], winnerId: 'a' }));
+    await assertFails(db.doc('bets/two').update({ votes: [sam, lee, maya], createdByID: 'anon-3' }));
+    await assertSucceeds(db.doc('bets/two').update({ votes: [sam, lee, maya] }));
+  });
+
+  test('nobody can delete a vote doc once the bet is gone', async () => {
+    await assertSucceeds(creator().doc('bets/abc123').delete());
+    await assertFails(creator().doc('bets/abc123/votes/anon-2').delete());
+    await assertFails(anon('anon-2').doc('bets/abc123/votes/anon-2').delete());
+    await assertFails(otherPhone().doc('bets/abc123/votes/anon-2').delete());
+    expect(await read('bets/abc123/votes/anon-2')).not.toBeNull();
+  });
+
+  test('a voter may append themselves twice (the merge counts them once, at the last entry)', async () => {
+    const db = anon('anon-2');
+    await assertSucceeds(db.doc('bets/two').update({ votes: [sam, lee, { ...lee, optionId: 'a', at: 6 }] }));
+    await assertSucceeds(anon('anon-1').doc('bets/abc123').update({ votes: [sam, { ...sam, at: 7 }] }));
+  });
+});
+
 describe('settling still works with vote docs', () => {
   test('the creator settles, and votes close with it', async () => {
     await assertSucceeds(creator().doc('bets/abc123').update({ ...settleFields, settledAt: FieldValue.serverTimestamp() }));

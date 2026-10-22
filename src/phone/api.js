@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   deleteField,
   doc,
   getDoc,
@@ -10,7 +9,6 @@ import {
   runTransaction,
   serverTimestamp,
   where,
-  writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
@@ -20,7 +18,7 @@ import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
 import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
-import { cleanName, voteFromDoc, withVotes } from './votes';
+import { cleanName, mergeVotes, voteFromDoc, withVotes } from './votes';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -297,7 +295,8 @@ async function castLegacyVote(code, pick) {
 }
 
 // Changes only the name on a voter's own pick: same side, same place in the
-// list, same time. A pick still only in the bet's `votes` array is copied to
+// list, same time. A pick still only in the bet's `votes` array, or newer
+// there than the voter's doc (mergeVotes keeps the later one), is copied to
 // the voter's own doc with the new name (taking the time of the copy). Rules
 // from before per-voter docs deny that, so a denied rename is made in the
 // array, the old way. Its promise can answer late; VoteScreen also takes the
@@ -310,14 +309,14 @@ export async function renameVote(code, voterId, name) {
       if (!voterId) throw new Error('Your pick isn’t in yet.');
       const ref = voteRef(code, voterId);
       const own = await tx.get(ref);
-      if (own.exists()) {
+      const doc = own.exists() ? voteFromDoc(voterId, own.data()) : null;
+      const mine = mergeVotes(data.votes, doc ? [doc] : []).filter((item) => item.voterId === voterId).pop();
+      if (!mine) throw new Error('Your pick isn’t in yet.');
+      if (mine === doc) {
         tx.update(ref, { name: trimmed });
         return;
       }
-      const votes = Array.isArray(data.votes) ? data.votes : [];
-      const legacy = votes.filter((item) => item.voterId === voterId).pop();
-      if (!legacy) throw new Error('Your pick isn’t in yet.');
-      tx.set(ref, { voterId, name: trimmed, optionId: legacy.optionId, at: serverTimestamp() });
+      tx.set(ref, { voterId, name: trimmed, optionId: mine.optionId, at: serverTimestamp() });
     });
   } catch (err) {
     if (!isDenied(err)) throw err;
@@ -427,9 +426,9 @@ export async function callOffBet(code) {
 // The creator deletes their bet. The server route also deletes the vote docs
 // and the voters' saved result-text numbers, which no client can touch.
 // Without Admin credentials the route answers 503 and no numbers can have
-// been saved through it, so the bet doc and its vote docs are deleted here in
-// one batch (the rules allow only the creator, and vote docs only along with
-// the bet). Any other failure throws and nothing is deleted client-side.
+// been saved through it, so the bet doc and its vote docs are deleted here
+// (deleteBetHere). Any other failure throws and nothing is deleted
+// client-side.
 // Errors from a dropped network (the fetch itself failed, or the browser
 // reports offline) carry code 'offline' so the screen can say so.
 function isOffline() {
@@ -441,6 +440,26 @@ function offlineError(cause) {
   err.code = 'offline';
   err.cause = cause;
   return err;
+}
+
+// The bet doc and its vote docs in one transaction (the rules allow only the
+// creator, and vote docs only along with the bet). A client transaction can't
+// query, so the vote docs are listed inside it, after the bet is read and
+// right before the commit, instead of ahead of a separate batch: the gap in
+// which a new pick could be left behind shrinks to the commit itself (once
+// the bet is gone, the rules refuse new vote docs), and a bet that changed
+// meanwhile (an older build's pick in the array) retries with a fresh list.
+// A bet that's already gone is done. A transaction only answers once the
+// server has the delete, so My bets never drops the bet on this device alone.
+async function deleteBetHere(code) {
+  const ref = doc(db, 'bets', code);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) return;
+    const votes = await readVoteDocs(code);
+    votes.forEach((vote) => tx.delete(voteRef(code, vote.voterId)));
+    tx.delete(ref);
+  });
 }
 
 export async function deleteBet(code) {
@@ -466,15 +485,7 @@ export async function deleteBet(code) {
   const body = await res.json().catch(() => ({}));
   if (res.status === 503 && body?.error === 'not-configured') {
     try {
-      const votes = await readVoteDocs(code);
-      if (votes.length) {
-        const batch = writeBatch(db);
-        votes.forEach((vote) => batch.delete(voteRef(code, vote.voterId)));
-        batch.delete(doc(db, 'bets', code));
-        await batch.commit();
-      } else {
-        await deleteDoc(doc(db, 'bets', code));
-      }
+      await deleteBetHere(code);
     } catch (cause) {
       if (isOffline()) throw offlineError(cause);
       throw cause;

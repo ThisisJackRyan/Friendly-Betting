@@ -21,9 +21,14 @@ export function cleanName(name) {
   return out.trim();
 }
 
-// A vote's time in ms: a number in the legacy array, a Timestamp in a vote doc.
+// A vote's time in ms: a number in the legacy array, a Timestamp in a vote
+// doc (or its { seconds, nanoseconds } form), or a Date. Anything else is null.
 export function voteAtMs(value) {
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }
   return timestampMs(value);
 }
 
@@ -39,25 +44,36 @@ export function voteFromDoc(id, data) {
 }
 
 // The one list every reader uses: the legacy array plus the vote docs, one
-// entry per voter. A voter's doc wins over their array entry, and a voter
-// listed twice in the array counts once, at their last entry (a recast moved
-// a voter to the end). Ordered by when each pick was cast, so a voter who
-// switches sides moves to the end, as before. Entries with no voterId (very
-// old bets) are kept as they are.
+// entry per voter. A voter listed twice in the array counts once, at their
+// last entry (a recast moved a voter to the end). A voter with both a doc and
+// an array entry keeps the later of the two, so a side switch made from an
+// older build after their doc was written isn't lost; the doc wins a tie, or
+// when either time is missing (a doc still waiting on its server time is the
+// newest). Ordered by when each pick was cast, so a voter who switches sides
+// moves to the end, as before. Entries with no voterId (very old bets) are
+// kept as they are.
 export function mergeVotes(legacy, docs) {
   const list = Array.isArray(legacy) ? legacy.filter(Boolean) : [];
   const own = (Array.isArray(docs) ? docs : []).filter((vote) => vote?.voterId);
   const ids = list.map((vote) => vote.voterId).filter(Boolean);
   if (!own.length && new Set(ids).size === ids.length) return list;
-  const docIds = new Set(own.map((vote) => vote.voterId));
   const lastAt = new Map();
   list.forEach((vote, index) => {
     if (vote.voterId) lastAt.set(vote.voterId, index);
   });
+  // Each voter's doc, unless their array entry is newer.
+  const newest = own.filter((vote) => {
+    const index = lastAt.get(vote.voterId);
+    if (index === undefined) return true;
+    const docAt = voteAtMs(vote.at);
+    const arrayAt = voteAtMs(list[index].at);
+    return docAt == null || arrayAt == null || arrayAt <= docAt;
+  });
+  const docIds = new Set(newest.map((vote) => vote.voterId));
   const kept = list.filter((vote, index) => !vote.voterId
     || (!docIds.has(vote.voterId) && lastAt.get(vote.voterId) === index));
   // A stable sort: entries with no time keep their place ahead of timed ones.
-  return [...kept, ...own]
+  return [...kept, ...newest]
     .map((vote, index) => ({ vote, index, at: voteAtMs(vote.at) ?? -1 }))
     .sort((a, b) => a.at - b.at || a.index - b.index)
     .map((item) => item.vote);
