@@ -219,10 +219,9 @@ describe('flag on (web)', () => {
     expect(screen.queryByRole('button', { name: MANAGE })).toBeNull();
   });
 
-  test('new copy is ASCII: no em dash, no curly apostrophe', () => {
+  test('new copy has no em dash, TODO or straight apostrophe', () => {
     Object.values(STRIPE_COPY).forEach((text) => {
-      expect(text).not.toMatch(/[—‘’]/);
-      expect(text).toMatch(/^[\x20-\x7E]+$/);
+      expect(text).not.toMatch(/—|TODO|'/);
     });
   });
 
