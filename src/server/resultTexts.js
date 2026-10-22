@@ -5,6 +5,7 @@ import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
 import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
 import { PROD_ORIGIN } from '../platform/runtime';
+import { readBetWithVotes } from './betVotes';
 
 // Numbers live outside the public bet doc, so they can never reach the tally,
 // share card, OG image, or any client read. Admin SDK only; rules deny all.
@@ -116,11 +117,12 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
   await db.runTransaction(async (tx) => {
     // Read the bet in the transaction so a concurrent settle forces a retry
     // that fails with 'closed' rather than leaving a number behind after delivery.
-    const snap = await tx.get(db.doc(`bets/${code}`));
-    if (!snap.exists) throw failure('not-found');
-    const bet = snap.data();
+    // Its vote docs are read in it too, so a changed pick retries as well.
+    const bet = await readBetWithVotes(db, code, tx);
+    if (!bet) throw failure('not-found');
     if (isFinished(bet)) throw failure('closed');
-    // The side comes from the voter's recorded pick, never from the request.
+    // The side comes from the voter's recorded pick (array or vote doc),
+    // never from the request.
     const vote = (bet.votes || []).find((item) => item.voterId === uid);
     if (!uid || !vote) throw failure('no-vote');
     const listed = await tx.get(numbers);
@@ -139,9 +141,9 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-async function readBet(db, code) {
-  const snap = await db.doc(`bets/${code}`).get();
-  return snap.exists ? snap.data() : null;
+// The bet with its votes merged (array and vote docs), or null.
+function readBet(db, code) {
+  return readBetWithVotes(db, code);
 }
 
 // Runs in flight on this server instance, by bet code and settledAt.

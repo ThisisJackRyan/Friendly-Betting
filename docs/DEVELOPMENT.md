@@ -32,7 +32,7 @@ npm run mobile:build     # Vite build of the native app bundle
 npm run screenshots      # regenerate docs/screenshots (see below)
 ```
 
-`npm run test:rules` runs `firebase emulators:exec --only firestore` with the demo project `demo-friendly-betting`, then Jest with `jest.rules.config.js` over `rules/*.test.js`. It needs the Firebase CLI and Java on `PATH`. It never touches the real project. `npm test` skips `rules/` and `mobile/e2e/`, and only picks up `*.test.js(x)` files, so `scripts/` is never run by Jest.
+`npm run test:rules` runs `firebase emulators:exec --only firestore` with the demo project `demo-friendly-betting`, then Jest with `jest.rules.config.js` over `rules/*.test.js`. It needs the Firebase CLI and Java on `PATH`. It never touches the real project. `npm test` skips `rules/` and `mobile/e2e/`, and only picks up `*.test.js(x)` files, so the scripts in `scripts/` are never run by Jest (`scripts/backfill-votes.test.js` tests the backfill's plan without running it).
 
 ## Web + iOS + Android
 
@@ -116,7 +116,7 @@ Next, after this loop works with real friends: one nudge for non-voters, “run 
 
 ## Firestore rules
 
-`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; vote-only updates for bettors; and a deny-all for `privateResultTexts` (Admin SDK only). Tests live in `rules/firestore.rules.test.js` and run with `npm run test:rules`.
+`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; per-voter vote docs (`bets/{code}/votes/{uid}`) that only their voter writes, plus an append-only legacy `votes` array for older builds (docs/VOTE-SECURITY.md, NOT DEPLOYED); and a deny-all for `privateResultTexts` (Admin SDK only). Tests live in `rules/*.rules.test.js` and run with `npm run test:rules`.
 
 The file is **not auto-deployed**. Nothing in this repo or on Vercel deploys it. Prod rules live in the Firebase console. Before anyone runs `firebase deploy --only firestore:rules`, review it line by line against the rules live in the console for `friendly-betting-fb47e` and merge anything the live rules allow that is missing here. Any catch-all `match /{document=**}` allow rule in the console would expose private result-text numbers and must not exist.
 
@@ -130,7 +130,7 @@ All three run on the Node runtime with the Firebase Admin SDK (`src/server/fireb
 | `POST /api/bets/[code]/result-texts/send` | Anyone; acts only on settled bets | Claims each saved number once (deleted in a transaction) and calls `sendResultSms`. |
 | `DELETE /api/bets/[code]` | Creator (ID token with the creator uid and phone) | `src/server/deleteBet.js`: deletes the bet, its result-text numbers and the `privateResultTexts/{code}` doc in one transaction. |
 
-If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` directly from the client, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
+If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` and its vote docs directly from the client, in one batch, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
 
 ### CORS
 

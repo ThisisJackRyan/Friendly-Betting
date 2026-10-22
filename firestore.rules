@@ -6,6 +6,13 @@ rules_version = '2';
 // branch. They are tested against the emulator only; never run
 // `firebase deploy` with them until that doc's checklist is done.
 //
+// DO NOT DEPLOY the per-voter vote rules (bets/{code}/votes/{uid}, the
+// append-only legacy `votes` rule and the empty `votes` on create;
+// docs/VOTE-SECURITY.md) either. They are phase 1 of a two-phase change with
+// a required deploy order: the app that writes per-voter docs ships first,
+// and these rules follow only once that doc's checklist is done. Tested
+// against the emulator only.
+//
 // NOT AUTO-DEPLOYED. Nothing in this repo or on Vercel deploys this file.
 // Before anyone runs `firebase deploy --only firestore:rules`, review it
 // line by line against the rules currently live in the Firebase console
@@ -19,7 +26,9 @@ rules_version = '2';
 // Every bet write comes from the browser through src/phone/api.js, so for
 // bets these rules are the only real enforcement:
 //   - createBet  -> create on bets/{code}
-//   - castVote   -> update of `votes` only
+//   - castVote   -> create/update of the voter's own bets/{code}/votes/{uid};
+//                   older builds append their own entry to `votes`
+//   - renameVote -> name-only update of the voter's own vote doc
 //   - saveBet    -> creator edit of their own open bet
 //   - settleBet  -> creator close & settle with a winner
 //   - callOffBet -> creator calls off an open bet (calledOff, no winner)
@@ -98,6 +107,90 @@ service cloud.firestore {
         || request.resource.data.settledAt is number;
     }
 
+    // The longest name on a pick (NAME_MAX in src/phone/votes.js).
+    function nameMax() {
+      return 30;
+    }
+
+    // The bet's side ids, worked out the way hydrateBet (src/phone/api.js)
+    // does: a current bet lists its options; a CRA-era bet with a type and a
+    // detail doc id has fixed sides (Money Line, Over Under) or one per prop
+    // option in its PropBets doc. Rules have no loops, so a listed bet's
+    // options are checked one index at a time; the app makes at most 4.
+    function optionAt(options, i, id) {
+      return options.size() > i && options[i].get('id', null) == id;
+    }
+
+    function listedOption(options, id) {
+      return options is list && (optionAt(options, 0, id) || optionAt(options, 1, id)
+        || optionAt(options, 2, id) || optionAt(options, 3, id)
+        || optionAt(options, 4, id) || optionAt(options, 5, id)
+        || optionAt(options, 6, id) || optionAt(options, 7, id));
+    }
+
+    function propOption(betID, id) {
+      let count = get(/databases/$(database)/documents/PropBets/$(betID)).data.get('options', []).size();
+      return id in ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'][0:(count < 10 ? count : 10)];
+    }
+
+    function legacyOption(bet, id) {
+      return (bet.type == 'Money Line' && id in ['a', 'b'])
+        || (bet.type == 'Over Under' && id in ['over', 'under'])
+        || (bet.type == 'Prop' && propOption(bet.betID, id));
+    }
+
+    function isBetOption(bet, id) {
+      return id is string && (
+        (bet.get('schemaVersion', null) == 2 && bet.get('options', null) is list)
+          ? listedOption(bet.options, id)
+          : (bet.get('betID', '') is string && bet.get('betID', '') != ''
+              && bet.get('type', '') is string && bet.get('type', '') != '')
+            ? legacyOption(bet, id)
+            : listedOption(bet.get('options', null), id));
+    }
+
+    // A name on a pick: a string of at most nameMax() characters.
+    function validName(name) {
+      return name is string && name.size() <= nameMax();
+    }
+
+    // One entry an older build appends to the legacy `votes` array: the
+    // caller's own pick, in the shape castVote has always written.
+    function validLegacyVote(bet, vote) {
+      return vote is map
+        && vote.keys().hasOnly(['voterId', 'name', 'optionId', 'at'])
+        && vote.get('voterId', null) == request.auth.uid
+        && isBetOption(bet, vote.get('optionId', null))
+        && validName(vote.get('name', ''))
+        && vote.get('at', 0) is number;
+    }
+
+    // Phase 1 of docs/VOTE-SECURITY.md: the legacy array only grows, by one
+    // entry of the caller's own at the end. Every entry already there stays
+    // exactly as it was, so nobody can rewrite or drop anyone's pick. A voter
+    // listed twice counts once, at their last entry (mergeVotes).
+    function appendsOwnVote(bet) {
+      let before = bet.get('votes', []);
+      let after = request.resource.data.votes;
+      return before is list && after is list
+        && after.size() == before.size() + 1
+        && (before.size() == 0 || after[0:before.size()] == before)
+        && validLegacyVote(bet, after[before.size()]);
+    }
+
+    // A per-voter vote doc as castVote and renameVote write it: exactly these
+    // fields, the voter's own uid, one of the bet's sides, a capped name and
+    // a server time.
+    function validVoteDoc(bet, uid) {
+      let vote = request.resource.data;
+      return vote.keys().hasOnly(['voterId', 'name', 'optionId', 'at'])
+        && vote.keys().hasAll(['voterId', 'name', 'optionId', 'at'])
+        && vote.voterId == uid
+        && validName(vote.name)
+        && isBetOption(bet, vote.optionId)
+        && vote.at is timestamp;
+    }
+
     // The creator's undo window after a settle. The app shows 30s; the extra
     // 5s lets a tap near the end land.
     function inUndoWindow(bet) {
@@ -120,14 +213,19 @@ service cloud.firestore {
         && request.resource.data.createdByID == request.auth.uid
         && request.resource.data.get('status', 'open') == 'open'
         && request.resource.data.get('winnerId', null) == null
-        && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff']);
+        && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff'])
+        && request.resource.data.get('votes', []) == [];
 
-      // castVote: any signed-in user (voters use anonymous auth) may change
-      // the votes list on an open bet, and nothing else. isOpen refuses a
+      // castVote from older builds (phase 1, docs/VOTE-SECURITY.md): any
+      // signed-in user (voters use anonymous auth) may append their own pick
+      // to the legacy votes list on an open bet, and change nothing else.
+      // Replacing or renaming an entry already there is refused; current
+      // builds write bets/{code}/votes/{uid} instead. isOpen refuses a
       // called-off bet by either marker (calledOff true, status 'called-off').
       allow update: if request.auth != null
         && isOpen(resource.data)
-        && changedKeys().hasOnly(['votes']);
+        && changedKeys().hasOnly(['votes'])
+        && appendsOwnVote(resource.data);
 
       // saveBet: the creator edits their own open bet. Result fields
       // (including calledOff), votes and the creator stay untouched.
@@ -177,10 +275,45 @@ service cloud.firestore {
         && request.resource.data.get('winnerId', null) == null
         && !request.resource.data.keys().hasAny(['settledAt', 'settlement', 'calledOff']);
 
-      // deleteBet: only the creator. Votes are embedded in the doc, so they go
-      // with it. Saved result-text numbers (privateResultTexts) are client-
-      // denied; the server route deletes them with the bet.
+      // deleteBet: only the creator. Legacy votes are embedded in the doc, so
+      // they go with it; vote docs go in the same batch (below). Saved
+      // result-text numbers (privateResultTexts) are client-denied; the
+      // server route deletes them with the bet.
       allow delete: if isBetCreator(resource.data);
+
+      // One voter's pick (docs/VOTE-SECURITY.md). The doc id is the voter's
+      // auth uid, and only that user writes it, only while the bet is open
+      // (isOpen: not closed, not called off). A voter may change sides
+      // (castVote, which stamps a new server time) or only their name
+      // (renameVote, same side and time). Voters never delete a pick.
+      match /votes/{uid} {
+        function bet() {
+          return get(/databases/$(database)/documents/bets/$(code)).data;
+        }
+
+        // Readable like the bet itself: anyone with the link. A query of
+        // one bet's votes only; nothing allows a collection group query.
+        allow get, list: if true;
+
+        allow create: if request.auth != null
+          && request.auth.uid == uid
+          && isOpen(bet())
+          && validVoteDoc(bet(), uid)
+          && request.resource.data.at == request.time;
+
+        allow update: if request.auth != null
+          && request.auth.uid == uid
+          && isOpen(bet())
+          && validVoteDoc(bet(), uid)
+          && (request.resource.data.at == request.time
+            || (request.resource.data.at == resource.data.at
+              && request.resource.data.optionId == resource.data.optionId));
+
+        // deleteBet's client fallback: the creator deletes the vote docs in
+        // the same batch that deletes the bet, never on their own.
+        allow delete: if isBetCreator(bet())
+          && !existsAfter(/databases/$(database)/documents/bets/$(code));
+      }
     }
 
     // Detail docs written by the old CRA app; hydrateBet reads them by id.

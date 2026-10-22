@@ -34,6 +34,7 @@ import ProBadge from './ProBadge';
 import { useProBadge } from './useEntitlement';
 import NameEdit from './NameEdit';
 import { NAME_PLACEHOLDER } from './nameEditCopy';
+import { cleanName, NAME_MAX } from './votes';
 
 const LOAD_ERROR = 'Could not open this bet.';
 // How long a name save may show Saving… before the form gives up and shows
@@ -132,7 +133,7 @@ const VoteScreen = () => {
     setSaving(true);
     setError('');
     setPendingId(optionId);
-    const trimmed = name.trim();
+    const trimmed = cleanName(name);
     if (trimmed) rememberName(trimmed);
     setOptimistic({ voterId: user.uid, name: trimmed, optionId });
     try {
@@ -270,6 +271,7 @@ const VoteScreen = () => {
                     value={name}
                     placeholder={NAME_PLACEHOLDER}
                     autoComplete="nickname"
+                    maxLength={NAME_MAX}
                     onChange={(event) => setName(event.target.value)}
                   />
                 </label>

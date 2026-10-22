@@ -42,6 +42,9 @@ jest.mock('../Config/firebase-config', () => ({
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db, collection, id) => ({ collection, id }),
+  // The bet's vote docs (bets/{code}/votes): none here, the picks are in the array.
+  collection: (_db, ...path) => ({ path: path.join('/') }),
+  getDocs: jest.fn(async () => ({ docs: [] })),
   runTransaction: jest.fn(),
   serverTimestamp: () => ({ seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 }),
   deleteField: () => undefined,

@@ -193,11 +193,15 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
   await page.route('**/src/phone/api.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `import { buildSettlement } from ${JSON.stringify(new URL('./settlement.js', route.request().url()).href)};
-      let bet = ${JSON.stringify(bet)};
+      import { withVotes } from ${JSON.stringify(new URL('./votes.js', route.request().url()).href)};
+      // Fixture picks are in the legacy votes array; a fixture's voteDocs are
+      // per-voter docs. Reads get both merged, as the real api does.
+      const merge = ({ voteDocs, ...item }) => withVotes(item, voteDocs || []);
+      let bet = merge(${JSON.stringify(bet)});
       const winnerId = ${JSON.stringify(winnerId || null)};
       if (winnerId) bet = { ...bet, status: 'closed', winnerId, settledAt: Date.now(), settlement: buildSettlement(bet, winnerId) };
       export const subscribeBet = (code, cb) => { cb(bet); return () => {}; };
-      const bets = ${JSON.stringify(bets)};
+      const bets = ${JSON.stringify(bets)}?.map(merge) ?? null;
       export const subscribeMyBets = (uid, cb) => { cb(bets || [bet]); return () => {}; };
       export const hydrateBet = async (b) => b;
       export const createBet = async () => ${JSON.stringify(CODE)};

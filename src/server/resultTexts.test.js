@@ -120,6 +120,18 @@ describe('saveVoterNumber', () => {
     expect(db.writes).toEqual([]);
   });
 
+  test('a pick in a vote doc counts, and wins over the voter\'s array entry', async () => {
+    const db = fakeDb({
+      'bets/abc123': openBet(),
+      'bets/abc123/votes/maya': { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } },
+      'bets/abc123/votes/sam': { voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 6, nanoseconds: 0 } },
+    });
+    await saveVoterNumber({ db, code: 'abc123', uid: 'maya', phone: '2025550143' });
+    await saveVoterNumber({ db, code: 'abc123', uid: 'sam', phone: '2025550188' });
+    expect(db.data(`${NUMBERS}/${sha('+12025550143')}`)).toMatchObject({ voterId: 'maya', optionId: 'a' });
+    expect(db.data(`${NUMBERS}/${sha('+12025550188')}`)).toMatchObject({ voterId: 'sam', optionId: 'a' });
+  });
+
   test('a bet settled during the save retries and rejects closed, writing nothing', async () => {
     const db = fakeDb({ 'bets/abc123': openBet() });
     const runTransaction = db.runTransaction;
@@ -186,6 +198,15 @@ describe('deliverResultTexts', () => {
     await deliverResultTexts({ db, code: 'abc123', sendSms });
     expect(sendSms).toHaveBeenCalledWith('+12025550143', lostText.replace('Yes won', 'No won'));
     expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText.replace('Yes won', 'No won'));
+  });
+
+  test('without a settlement snapshot a vote doc decides the outcome over the array', async () => {
+    const bet = openBet({ status: 'closed', winnerId: 'a' });
+    const db = await seeded(bet, { sam: '2025550188' });
+    await db.doc('bets/abc123/votes/sam').set({ voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 6, nanoseconds: 0 } });
+    const sendSms = jest.fn(async () => {});
+    await deliverResultTexts({ db, code: 'abc123', sendSms });
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText);
   });
 
   test('running again, or concurrently, never sends a duplicate', async () => {

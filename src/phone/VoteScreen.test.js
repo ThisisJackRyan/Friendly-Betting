@@ -1038,6 +1038,26 @@ describe('adding or editing a name after picking', () => {
     expect(edit).toHaveFocus();
   });
 
+  test('both name inputs stop at 30 characters', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const first = await screen.findByLabelText(/your name/i);
+    expect(first).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(first);
+    await userEvent.type(first, 'x'.repeat(40));
+    expect(first).toHaveValue('x'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'x'.repeat(30), optionId: 'a' });
+
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('x'.repeat(30)) }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'y'.repeat(40));
+    expect(input).toHaveValue('y'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+    expect(renameVote).toHaveBeenCalledWith('abc123', 'anon-1', 'y'.repeat(30));
+  });
+
   test('prefills the current name, and cancel leaves it alone', async () => {
     current = pickedAs('Sam');
     renderAt('/b/abc123', <VoteScreen />);
