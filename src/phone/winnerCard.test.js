@@ -81,7 +81,7 @@ describe('the creator among the winners, on the card', () => {
   test('a named creator is a winner like any other, alone or in the list', () => {
     const solo = winnerCardText(settled({ winners: [['jack', 'Jack']], losers: [['zed', 'Zed']], stake: 'Coffee' }));
     expect(solo.headline).toBe('Jack won.');
-    expect(solo.subline).toBe('Called it solo. Coffee’s on everyone else.');
+    expect(solo.subline).toBe('The only one who called it. Coffee’s on everyone else.');
     const crew = winnerCardText(settled({ winners: [['maya', 'Maya'], ['jack', 'Jack']], stake: 'Coffee' }));
     expect(crew.headline).toBe('Maya & Jack won.');
     expect(crew.subline).toBe('Coffee’s on everyone else.');
@@ -176,8 +176,8 @@ describe('the card\'s winners line follows the stake', () => {
     ['Loser buys pizza', 'Time for everyone else to pay up.', 'Stakes: Loser buys pizza'],
   ])('stake %j', (stake, line, stakeText) => {
     const solo = buildWinnerCard(settled({ winners: [['maya', 'Maya']], losers: [['zed', 'Zed']], stake }), { measure });
-    expect(solo.text.subline).toBe(`Called it solo. ${line}`);
-    expect(textOf(solo, 'subline').join(' ')).toBe(`Called it solo. ${line}`);
+    expect(solo.text.subline).toBe(`The only one who called it. ${line}`);
+    expect(textOf(solo, 'subline').join(' ')).toBe(`The only one who called it. ${line}`);
     expect(textOf(solo, 'stake')).toEqual(stakeText ? [stakeText] : []);
     const crew = buildWinnerCard(settled({ winners: [['maya', 'Maya'], ['sam', 'Sam']], stake }), { measure });
     expect(textOf(crew, 'subline').join(' ')).toBe(line);
@@ -193,7 +193,7 @@ describe('buildWinnerCard layout', () => {
     expect(card).toMatchObject({ width: 1080, height: 1350, background: CARD_COLORS.background });
     expect(card.lines.map((line) => line.key)).toEqual(['question', 'eyebrow', 'headline', 'subline', 'subline', 'stake']);
     expect(card.lines.map((line) => line.text)).toEqual([
-      'Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'Called it solo. Time for everyone else', 'to pay up.', 'Stakes: $20',
+      'Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'The only one who called it. Time for', 'everyone else to pay up.', 'Stakes: $20',
     ]);
     expect(card.brand).toMatchObject({ text: CARD_BRAND, period: '.' });
     expect(card.footer.text).toBe('friendly-bets.com');

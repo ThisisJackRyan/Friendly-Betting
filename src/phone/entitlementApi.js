@@ -28,17 +28,6 @@ function noteDenied(err) {
   if (logsDeniedReads()) console.info('Entitlement read denied; treated as no plan.', err.code);
 }
 
-// The uids whose entitlement read was denied this session. Restore still
-// reads fresh every time, and a read that succeeds takes the uid out, so a
-// session open across the rules deploy finds Pro on Restore; its denied
-// listener needs a reload (docs/PRO.md).
-const denied = new Set();
-
-// Tests only.
-export function __resetDeniedForTests() {
-  denied.clear();
-}
-
 // onChange(entitlement | null) on every snapshot, onChange(undefined, err) on
 // any other error.
 export function subscribeEntitlement(uid, onChange) {
@@ -50,7 +39,6 @@ export function subscribeEntitlement(uid, onChange) {
         onChange(undefined, err);
         return;
       }
-      denied.add(uid);
       noteDenied(err);
       onChange(null);
     },
@@ -80,11 +68,9 @@ function withTimeout(promise, controller) {
 export async function fetchEntitlement(uid) {
   try {
     const snap = await withTimeout(getDocFromServer(doc(db, 'entitlements', uid)));
-    denied.delete(uid);
     return snap.exists() ? snap.data() : null;
   } catch (err) {
     if (!noEntitlement(err)) throw err;
-    denied.add(uid);
     noteDenied(err);
     return null;
   }

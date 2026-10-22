@@ -66,10 +66,8 @@ auto-deployed (see the note at its top).
   user's own doc as no entitlement, like a missing doc, so rules without the `entitlements`
   block (not yet deployed) read as not Pro rather than an error; any other error is still an
   error. Restore purchase always asks the server, even after the listener (or an earlier
-  Restore) was denied; a read that succeeds takes the uid out of the session's denied set, and a
-  denied one adds it. Preview and dev
-  builds log a denied read with its error code only (`console.info`, never the uid, path or
-  error); production builds log nothing. Jest mocks it for every test in `src/setupTests.js`.
+  Restore) was denied. Preview and dev builds log a denied read with its error code only
+  (`console.info`, never the uid, path or error); production builds log nothing. Jest mocks it for every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.
   `useEntitlement()` returns `{ entitlement, isPro, loading }` and keeps `src/ads/pro.js`
   current through `setProEntitlement`, so the ad service's synchronous `isPro()` is right on
