@@ -61,6 +61,10 @@ const VoteScreen = () => {
   const [pendingId, setPendingId] = useState(null);
   // The pick just cast, counted in the tally until a snapshot records it.
   const [optimistic, setOptimistic] = useState(null);
+  // That pick once castVote has saved it, until a snapshot records it: the
+  // live listener can answer seconds later (two round trips on rules without
+  // per-voter docs), and the pick is the voter's own to rename meanwhile.
+  const [savedPick, setSavedPick] = useState(null);
   const [saving, setSaving] = useState(false);
   // A name just saved on the voter's pick, shown until a snapshot has it.
   const [renamed, setRenamed] = useState(null);
@@ -79,6 +83,7 @@ const VoteScreen = () => {
     setError('');
     setPendingId(null);
     setOptimistic(null);
+    setSavedPick(null);
     setRenamed(null);
   }, [code]);
 
@@ -87,7 +92,13 @@ const VoteScreen = () => {
     if (recorded) setOptimistic(null);
   }, [recorded]);
 
-  const existing = voteFor(bet, user?.uid);
+  // The voter's pick as the snapshot has it; `existing` also counts the pick
+  // castVote saved before the snapshot shows it.
+  const listed = voteFor(bet, user?.uid);
+  const existing = listed || (savedPick && savedPick.voterId === user?.uid ? savedPick : null);
+  useEffect(() => {
+    if (listed && savedPick) setSavedPick(null);
+  }, [listed, savedPick]);
   const storedName = existing?.name || '';
   const storedRef = useRef(null);
   storedRef.current = existing ? storedName : null;
@@ -95,7 +106,8 @@ const VoteScreen = () => {
     if (renamed !== null && storedName === renamed) setRenamed(null);
   }, [renamed, storedName]);
   // A snapshot with the new name means the write is on the server, even if
-  // the transaction's own answer is slow to come back.
+  // the transaction's own answer is slow to come back, or only comes after
+  // the save timed out.
   useEffect(() => {
     const wait = renameWait.current;
     if (wait && existing && storedName === wait.name) wait.done();
@@ -105,6 +117,8 @@ const VoteScreen = () => {
     alive.current = true;
     return () => {
       alive.current = false;
+      renameWait.current?.stop();
+      renameWait.current = null;
     };
   }, []);
   const tally = withName(withOptimisticVote(bet, optimistic), user?.uid, renamed);
@@ -116,7 +130,7 @@ const VoteScreen = () => {
   const settled = buildReveal({ bet, viewerId: user?.uid });
   // Only a recorded pick on a bet that isn't settled or called off, from a
   // real (anonymous) account.
-  const offerResultText = resultTextsEnabled() && Boolean(existing) && !isFinished(bet)
+  const offerResultText = resultTextsEnabled() && Boolean(listed) && !isFinished(bet)
     && Boolean(user) && !user.isLocal;
 
   useEffect(() => {
@@ -135,16 +149,15 @@ const VoteScreen = () => {
     setPendingId(optionId);
     const trimmed = cleanName(name);
     if (trimmed) rememberName(trimmed);
-    setOptimistic({ voterId: user.uid, name: trimmed, optionId });
+    const pick = { voterId: user.uid, name: trimmed, optionId };
+    setOptimistic(pick);
     try {
-      await castVote(code, {
-        voterId: user.uid,
-        name: trimmed,
-        optionId,
-      });
+      await castVote(code, pick);
+      if (alive.current) setSavedPick(pick);
     } catch (err) {
       setPendingId(null);
       setOptimistic(null);
+      setSavedPick(null);
       setError(friendlyError(err, 'Your pick didn’t stick. Give it another go.'));
     } finally {
       setSaving(false);
@@ -153,7 +166,10 @@ const VoteScreen = () => {
 
   // Only the name changes; the side stays whatever the bet records. Done as
   // soon as renameVote resolves or a snapshot shows the new name; after
-  // RENAME_WAIT_MS with neither it fails, and a later success still lands.
+  // RENAME_WAIT_MS with neither it fails, and a later success still lands:
+  // the screen shows it, and the name is remembered whether the answer or a
+  // snapshot brings it. Only the newest save is remembered, so a late answer
+  // or snapshot for an older name never replaces a newer one.
   const saveName = (next) => new Promise((resolve, reject) => {
     let settled = false;
     const seq = ++renameSeq.current;
@@ -163,11 +179,20 @@ const VoteScreen = () => {
       rememberName(next);
       if (alive.current) setName(next);
     };
-    const finish = (err) => {
+    const release = () => {
+      if (renameWait.current === wait) renameWait.current = null;
+    };
+    // After a time out, a late answer or snapshot still remembers the name.
+    const late = () => {
+      release();
+      landed();
+    };
+    const finish = (err, timedOut = false) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (renameWait.current === wait) renameWait.current = null;
+      // A timed out save keeps waiting for its snapshot.
+      if (!timedOut) release();
       if (err) {
         if (alive.current) setRenamed(null);
         reject(err);
@@ -176,14 +201,18 @@ const VoteScreen = () => {
       landed();
       resolve();
     };
-    const wait = { name: next, done: () => finish() };
+    const wait = {
+      name: next,
+      done: () => (settled ? late() : finish()),
+      stop: () => clearTimeout(timer),
+    };
     // NameEdit shows its own save error for any failure, this one included.
-    const timer = setTimeout(() => finish(new Error()), RENAME_WAIT_MS);
+    const timer = setTimeout(() => finish(new Error(), true), RENAME_WAIT_MS);
     renameWait.current = wait;
     setRenamed(next);
     if (storedRef.current === next) wait.done();
     renameVote(code, user.uid, next).then(
-      () => (settled ? landed() : finish()),
+      () => (settled ? late() : finish()),
       (err) => finish(err),
     );
   });
@@ -234,7 +263,7 @@ const VoteScreen = () => {
             <div className="vote-meta">
               {bet.closesAt && open ? <p className="closes">Picks close {formatCloses(bet.closesAt)}</p> : null}
             </div>
-            <BetFacts bet={bet} />
+            <BetFacts bet={tally} />
             <hr className="meta-rule" />
 
             {settled && <SettledReveal bet={bet} code={code} reveal={settled} voterId={user?.uid} badge={proBadge} />}

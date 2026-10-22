@@ -2,9 +2,10 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import Paywall from './Paywall';
-import ProSheet from './ProSheet';
+import ProSheet, { RESTORE_MIN_BUSY_MS } from './ProSheet';
 import EntitlementSync from './EntitlementSync';
 import { __resetEntitlementForTests } from './useEntitlement';
+import { __resetDeniedForTests } from './entitlementApi';
 import { isPro as adServiceIsPro } from '../ads/pro';
 
 // Restore purchase end to end: the sheet, refreshEntitlement and the real
@@ -45,6 +46,7 @@ let listen;
 
 beforeEach(() => {
   __resetEntitlementForTests();
+  __resetDeniedForTests();
   listen = 'denied';
   onSnapshot.mockReset();
   onSnapshot.mockImplementation((_ref, next, error) => {
@@ -86,18 +88,44 @@ describe.each(SURFACES)('%s', (_name, surface) => {
     expect(adServiceIsPro()).toBe(false);
   });
 
-  test.each(['denied', 'missing'])('listener %s, read denied: Nothing to restore on this account.', async (state) => {
-    listen = state;
+  test('listener missing, read denied: Restoring… until the answer, then Nothing to restore on this account.', async () => {
+    listen = 'missing';
     let deny;
     getDocFromServer.mockReturnValue(new Promise((_resolve, reject) => { deny = reject; }));
     await open(surface);
     await userEvent.click(screen.getByRole('button', { name: RESTORE }));
     expect(getDocFromServer).toHaveBeenCalledWith({ path: 'entitlements/jack' });
-    expect(screen.getByRole('button', { name: RESTORING })).toBeDisabled();
+    const busy = screen.getByRole('button', { name: RESTORING });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
     await act(async () => deny(failure('permission-denied')));
-    expect(screen.getByRole('status')).toHaveTextContent(NOTHING);
+    expect(await screen.findByRole('status')).toHaveTextContent(NOTHING);
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('button', { name: RESTORE })).toBeEnabled();
+    expect(screen.getByRole('button', { name: RESTORE })).not.toHaveAttribute('aria-busy');
+  });
+
+  test('listener denied (live rules): a fresh read denied at once still holds Restoring…, then Nothing to restore', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    getDocFromServer.mockRejectedValue(failure('permission-denied'));
+    await open(surface);
+    await user.click(screen.getByRole('button', { name: RESTORE }));
+    expect(getDocFromServer).toHaveBeenCalledWith({ path: 'entitlements/jack' });
+    await act(async () => { await jest.advanceTimersByTimeAsync(RESTORE_MIN_BUSY_MS - 50); });
+    expect(screen.getByRole('button', { name: RESTORING })).toBeDisabled();
+    expect(screen.queryByText(NOTHING)).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(50); });
+    expect(screen.getByRole('status')).toHaveTextContent(NOTHING);
+    expect(screen.getByRole('button', { name: RESTORE })).toBeEnabled();
+  });
+
+  test('listener denied, then the rules deploy: Restore finds Pro without a reload', async () => {
+    getDocFromServer.mockResolvedValue({ exists: () => true, data: () => ({ plan: 'pro', expiresAt: null }) });
+    await open(surface);
+    await userEvent.click(screen.getByRole('button', { name: RESTORE }));
+    expect(await screen.findByRole('heading', { name: 'Restored. You’re Pro.' })).toBeInTheDocument();
+    expect(adServiceIsPro()).toBe(true);
   });
 
   test.each(['denied', 'missing'])('listener %s, doc missing: Nothing to restore on this account.', async (state) => {
@@ -105,15 +133,16 @@ describe.each(SURFACES)('%s', (_name, surface) => {
     getDocFromServer.mockResolvedValue(missing);
     await open(surface);
     await userEvent.click(screen.getByRole('button', { name: RESTORE }));
-    expect(screen.getByRole('status')).toHaveTextContent(NOTHING);
+    expect(await screen.findByRole('status')).toHaveTextContent(NOTHING);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test.each(['unavailable', 'deadline-exceeded', 'internal'])('a read that fails with %s: Couldn’t finish that. Try again.', async (code) => {
+    listen = 'missing';
     getDocFromServer.mockRejectedValue(failure(code));
     await open(surface);
     await userEvent.click(screen.getByRole('button', { name: RESTORE }));
-    expect(screen.getByRole('alert')).toHaveTextContent(ERROR);
+    expect(await screen.findByRole('alert')).toHaveTextContent(ERROR);
     expect(screen.queryByText(NOTHING)).toBeNull();
     expect(screen.getByRole('button', { name: RESTORE })).toBeEnabled();
   });
@@ -121,6 +150,7 @@ describe.each(SURFACES)('%s', (_name, surface) => {
   test('a read that never answers times out: Couldn’t finish that. Try again.', async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    listen = 'missing';
     getDocFromServer.mockReturnValue(new Promise(() => {}));
     await open(surface);
     await user.click(screen.getByRole('button', { name: RESTORE }));
@@ -137,6 +167,7 @@ describe('Get Pro (mock purchase), then the fresh read', () => {
   });
 
   test('read denied: no error, and the button is ready again', async () => {
+    listen = 'missing';
     getDocFromServer.mockRejectedValue(failure('permission-denied'));
     await open(SURFACES[1][1]);
     await userEvent.click(screen.getByRole('button', { name: 'Get Pro' }));

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { useState } from 'react';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
@@ -838,23 +839,156 @@ describe('the code boxes', () => {
     expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '654325');
   });
 
-  test('Backspace clears a filled box, then the one before it', async () => {
+  test('Backspace takes off the last digit wherever focus is, then the one before it', async () => {
     await reachCode();
     await userEvent.click(cell(1));
     await userEvent.keyboard('1234');
-    await userEvent.click(cell(3));
+    await userEvent.click(cell(2));
 
     await userEvent.keyboard('{Backspace}');
-    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '2', '', '4']);
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '2', '3', '']);
+    expect(cell(4)).toHaveFocus();
+
+    await userEvent.keyboard('{Backspace}');
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '2', '', '']);
     expect(cell(3)).toHaveFocus();
-
-    await userEvent.keyboard('{Backspace}');
-    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '', '', '4']);
-    expect(cell(2)).toHaveFocus();
 
     await userEvent.keyboard('5');
-    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '5', '', '4']);
-    expect(cell(3)).toHaveFocus();
+    expect([1, 2, 3, 4].map((n) => cell(n).value)).toEqual(['1', '2', '5', '']);
+    expect(cell(4)).toHaveFocus();
+  });
+
+  test('after fixing box 3 mid-code, repeated Backspace clears right to left and skips no box', async () => {
+    await reachCode();
+    await userEvent.click(cell(1));
+    await userEvent.keyboard('12345');
+    await userEvent.click(cell(3));
+    await userEvent.keyboard('9');
+    expect(codeDigits()).toBe('12945');
+    expect(cell(4)).toHaveFocus();
+
+    const steps = [];
+    for (let press = 0; press < 5; press += 1) {
+      await userEvent.keyboard('{Backspace}');
+      steps.push(codeDigits());
+    }
+    expect(steps).toEqual(['1294', '129', '12', '1', '']);
+    expect(cell(1)).toHaveFocus();
+    // Nothing left to clear: focus stays on box 1.
+    await userEvent.keyboard('{Backspace}');
+    expect(codeDigits()).toBe('');
+    expect(cell(1)).toHaveFocus();
+    expect(verifyPhoneCode).not.toHaveBeenCalled();
+  });
+
+  test('a pasted code in box 1 fills every box and verifies once', async () => {
+    verifyPhoneCode.mockImplementation(() => new Promise(() => {}));
+    await reachCode();
+    fireEvent.paste(cell(1), { clipboardData: { getData: () => '123456' } });
+    expect(codeDigits()).toBe('123456');
+    expect(verifyPhoneCode).toHaveBeenCalledTimes(1);
+    expect(verifyPhoneCode).toHaveBeenCalledWith('vid-1', '123456');
+  });
+
+  describe('on their own', () => {
+    function Boxes({ onOtp = () => {} }) {
+      const [otp, setOtp] = useState(['', '', '', '', '', '']);
+      return (
+        <CodeBody
+          e164="+15550100000"
+          otp={otp}
+          onOtp={(next, completed) => {
+            setOtp(next);
+            onOtp(next, completed);
+          }}
+          busy={null}
+        />
+      );
+    }
+    const digits = () => [1, 2, 3, 4, 5, 6].map((n) => cell(n).value).join('');
+    const type = (text) => act(() => {
+      text.split('').forEach((digit, index) => {
+        fireEvent.change(cell(index + 1), { target: { value: digit } });
+      });
+    });
+    const deleteBack = (node, cancelable = true) => {
+      const event = new Event('beforeinput', { bubbles: true, cancelable });
+      Object.defineProperty(event, 'inputType', { value: 'deleteContentBackward' });
+      act(() => {
+        node.dispatchEvent(event);
+      });
+      return event;
+    };
+
+    test.each([1, 4])('a whole code pasted in box %i fills from box 1, and Backspace clears it right to left', async (box) => {
+      const onOtp = jest.fn();
+      render(<Boxes onOtp={onOtp} />);
+      type('9');
+      fireEvent.paste(cell(box), { clipboardData: { getData: () => '123 456' } });
+      expect(digits()).toBe('123456');
+      expect(onOtp).toHaveBeenLastCalledWith(['1', '2', '3', '4', '5', '6'], '123456');
+      await userEvent.click(cell(2));
+      const steps = [];
+      for (let press = 0; press < 6; press += 1) {
+        await userEvent.keyboard('{Backspace}');
+        steps.push(digits());
+      }
+      expect(steps).toEqual(['12345', '1234', '123', '12', '1', '']);
+    });
+
+    test.each([
+      ['after', '5123456'],
+      ['before', '1234565'],
+    ])('an autofill that lands %s the old digit (7 digits) gives the 6-digit code', (_where, value) => {
+      const onOtp = jest.fn();
+      render(<Boxes onOtp={onOtp} />);
+      type('5');
+      fireEvent.input(cell(1), { target: { value }, inputType: 'insertReplacementText' });
+      expect(digits()).toBe('123456');
+      expect(onOtp).toHaveBeenLastCalledWith(['1', '2', '3', '4', '5', '6'], '123456');
+    });
+
+    test('a 7-digit autofill in a middle box still gives the code from box 1', () => {
+      const onOtp = jest.fn();
+      render(<Boxes onOtp={onOtp} />);
+      type('127');
+      fireEvent.input(cell(3), { target: { value: '7654321' }, inputType: 'insertReplacementText' });
+      expect(digits()).toBe('654321');
+      expect(onOtp).toHaveBeenLastCalledWith(['6', '5', '4', '3', '2', '1'], '654321');
+    });
+
+    test('more digits than boxes with no old digit to drop keep the first 6', () => {
+      render(<Boxes />);
+      fireEvent.paste(cell(1), { clipboardData: { getData: () => '1234567' } });
+      expect(digits()).toBe('123456');
+    });
+
+    test('an Android Backspace sent as Unidentified still clears from an empty box', () => {
+      render(<Boxes />);
+      type('1234');
+      act(() => cell(5).focus());
+      // keyCode 229: onKeyDown can't tell it's Backspace.
+      fireEvent.keyDown(cell(5), { key: 'Unidentified', keyCode: 229 });
+      expect(digits()).toBe('1234');
+      const event = deleteBack(cell(5));
+      expect(event.defaultPrevented).toBe(true);
+      expect(digits()).toBe('123');
+      expect(cell(4)).toHaveFocus();
+      deleteBack(cell(4));
+      expect(digits()).toBe('12');
+      expect(cell(3)).toHaveFocus();
+    });
+
+    test('a beforeinput that can\'t be stopped clears once: by itself in an empty box, through the change in a filled one', () => {
+      render(<Boxes />);
+      type('12');
+      deleteBack(cell(3), false);
+      expect(digits()).toBe('1');
+      deleteBack(cell(1), false);
+      expect(digits()).toBe('1');
+      fireEvent.change(cell(1), { target: { value: '' } });
+      expect(digits()).toBe('');
+    });
   });
 
   test('after a wrong code, focus comes back and a fixed or retyped code verifies', async () => {

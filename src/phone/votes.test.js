@@ -1,4 +1,4 @@
-import { cleanName, mergeVotes, NAME_MAX, voteFromDoc, withVotes } from './votes';
+import { cleanName, mergeVotes, NAME_MAX, voteAtMs, voteFromDoc, withVotes } from './votes';
 
 const at = (seconds) => ({ seconds, nanoseconds: 0 });
 
@@ -16,6 +16,18 @@ describe('cleanName', () => {
     expect(cleanName('🎉'.repeat(16))).toBe('🎉'.repeat(15));
     expect(cleanName(`${'a'.repeat(29)}🎉`)).toBe('a'.repeat(29));
   });
+});
+
+test('voteAtMs reads ms, Timestamps, { seconds } and Dates; anything else is null', () => {
+  expect(voteAtMs(1500)).toBe(1500);
+  expect(voteAtMs({ toMillis: () => 2500 })).toBe(2500);
+  expect(voteAtMs(at(3))).toBe(3000);
+  expect(voteAtMs(new Date(4000))).toBe(4000);
+  expect(voteAtMs(new Date('nope'))).toBeNull();
+  expect(voteAtMs(NaN)).toBeNull();
+  expect(voteAtMs(null)).toBeNull();
+  expect(voteAtMs(undefined)).toBeNull();
+  expect(voteAtMs('5000')).toBeNull();
 });
 
 describe('voteFromDoc', () => {
@@ -62,6 +74,39 @@ describe('mergeVotes', () => {
     const untimed = { voterId: 'lee', name: 'Lee', optionId: 'b' };
     const doc = { voterId: 'maya', name: 'Maya', optionId: 'a', at: 10 };
     expect(mergeVotes([old, untimed], [doc])).toEqual([old, untimed, doc]);
+  });
+
+  test('a side switch in the array after the doc wins (an older build after phase 1)', () => {
+    const samDoc = { voterId: 'sam', name: 'Sam', optionId: 'b', at: 2000 };
+    const switched = { voterId: 'sam', name: 'Sam', optionId: 'a', at: 4000 };
+    expect(mergeVotes([jack, switched], [samDoc])).toEqual([jack, switched]);
+    // Against the voter's last array entry, not an older one.
+    const older = { ...switched, at: 1500 };
+    expect(mergeVotes([older, jack, switched], [samDoc])).toEqual([jack, switched]);
+    expect(mergeVotes([switched, jack, older], [samDoc])).toEqual([jack, samDoc]);
+  });
+
+  test('the later time wins whatever its form: Timestamp, { seconds }, ms or Date', () => {
+    const timestamp = (ms) => ({ toMillis: () => ms });
+    const doc = (value) => ({ voterId: 'sam', name: 'Doc', optionId: 'b', at: value });
+    const entry = (value) => ({ voterId: 'sam', name: 'Array', optionId: 'a', at: value });
+    const winner = (legacy, docs) => mergeVotes(legacy, docs).map((vote) => vote.name);
+    expect(winner([entry(5000)], [doc(timestamp(4000))])).toEqual(['Array']);
+    expect(winner([entry(3000)], [doc(timestamp(4000))])).toEqual(['Doc']);
+    expect(winner([entry(5000)], [doc(at(4))])).toEqual(['Array']);
+    expect(winner([entry(new Date(5000))], [doc(4000)])).toEqual(['Array']);
+    expect(winner([entry(new Date(3000))], [doc(4000)])).toEqual(['Doc']);
+  });
+
+  test('the doc wins a tie, and whenever either time is missing', () => {
+    const doc = (value) => ({ voterId: 'sam', name: 'Doc', optionId: 'b', at: value });
+    const entry = (value) => ({ voterId: 'sam', name: 'Array', optionId: 'a', at: value });
+    const winner = (legacy, docs) => mergeVotes(legacy, docs).map((vote) => vote.name);
+    expect(winner([entry(4000)], [doc(4000)])).toEqual(['Doc']);
+    expect(winner([entry(9000)], [doc(null)])).toEqual(['Doc']);
+    expect(winner([entry(undefined)], [doc(4000)])).toEqual(['Doc']);
+    expect(winner([entry(new Date('nope'))], [doc(4000)])).toEqual(['Doc']);
+    expect(winner([entry('soon')], [doc(4000)])).toEqual(['Doc']);
   });
 
   test('a pending doc with no server time yet sorts with the untimed', () => {

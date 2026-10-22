@@ -261,6 +261,17 @@ export function PhoneBody({ formatted, onNational, busy, check }) {
   );
 }
 
+// A whole code that landed next to the old digit (an autofill that appends
+// instead of replacing): the old digit plus 6 more. The code is the 6 without
+// it; read as the old digit first when it could be either end.
+function withoutOldDigit(value, prev) {
+  const digits = value.replace(/\D/g, '');
+  if (!prev || digits.length !== prev.length + 6) return value;
+  if (digits.startsWith(prev)) return digits.slice(prev.length);
+  if (digits.endsWith(prev)) return digits.slice(0, 6);
+  return value;
+}
+
 // The text a change put into a cell that held `prev`. A filled cell normally
 // has its digit selected, so the value is just the new text; when it was not
 // (iOS can leave the caret before the digit), the value is the old digit plus
@@ -269,11 +280,11 @@ function insertedText(target, nativeEvent, prev) {
   const value = String(target.value || '');
   const type = nativeEvent?.inputType || '';
   if (!prev || value.length <= prev.length) return value;
-  if (type === 'insertReplacementText' || type === 'insertFromPaste') return value;
+  if (type === 'insertReplacementText' || type === 'insertFromPaste') return withoutOldDigit(value, prev);
   const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : value.length;
   const begin = end - (value.length - prev.length);
   if (begin >= 0 && value.slice(0, begin) + value.slice(end) === prev) return value.slice(begin, end);
-  if (value.replace(/\D/g, '').length >= 6) return value;
+  if (value.replace(/\D/g, '').length >= 6) return withoutOldDigit(value, prev);
   if (value.startsWith(prev)) return value.slice(prev.length);
   if (value.endsWith(prev)) return value.slice(0, value.length - prev.length);
   return value;
@@ -349,12 +360,47 @@ export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, err
     fill(index, insertedText(event.target, event.nativeEvent, prev));
   };
 
-  const onKeyDown = (index, event) => {
+  // Backspace takes off the last digit in the code, wherever focus is, so
+  // repeated presses clear right to left and never leave a digit behind.
+  // Focus follows the box it cleared.
+  const backspace = () => {
+    const last = otpRef.current.map(Boolean).lastIndexOf(true);
+    if (last < 0) focusCell(0);
+    else clear(last, last);
+  };
+
+  const onKeyDown = (event) => {
     if (event.key !== 'Backspace') return;
     event.preventDefault();
-    if (otpRef.current[index]) clear(index, index);
-    else if (index > 0) clear(index - 1, index - 1);
+    backspace();
   };
+
+  // Some Android keyboards send Backspace as key 'Unidentified' (keyCode
+  // 229), which onKeyDown can't tell apart. Their beforeinput still says
+  // deleteContentBackward, even in an empty box where no change follows. A
+  // real Backspace key already stopped it in onKeyDown. If the keyboard won't
+  // let it be stopped, a filled box empties itself through onChange.
+  const onBeforeInput = (index, event) => {
+    if (event.inputType !== 'deleteContentBackward') return;
+    if (event.cancelable) {
+      event.preventDefault();
+      backspace();
+    } else if (!otpRef.current[index]) {
+      backspace();
+    }
+  };
+  const beforeInput = useRef(onBeforeInput);
+  beforeInput.current = onBeforeInput;
+  // React's onBeforeInput only reports typed text, so this is a native listener.
+  useEffect(() => {
+    const nodes = refs.current.slice();
+    const handlers = nodes.map((node, index) => {
+      const handler = (event) => beforeInput.current(index, event);
+      node?.addEventListener('beforeinput', handler);
+      return handler;
+    });
+    return () => nodes.forEach((node, index) => node?.removeEventListener('beforeinput', handlers[index]));
+  }, []);
 
   // A failed verify had the boxes disabled; put focus back in the last one so
   // the code can be fixed right away.
@@ -382,7 +428,7 @@ export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, err
             onFocus={(event) => selectCell(event.currentTarget)}
             onClick={(event) => selectCell(event.currentTarget)}
             onChange={(event) => onChange(index, event)}
-            onKeyDown={(event) => onKeyDown(index, event)}
+            onKeyDown={onKeyDown}
             onPaste={(event) => {
               const text = event.clipboardData?.getData('text') || '';
               if (!text) return;

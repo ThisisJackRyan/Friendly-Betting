@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MyBetsList } from './MyBets';
+import { DELETE_WAIT_MS, MyBetsList } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
 import { PHONE_OFFLINE_ERROR } from './creatorSession';
 
@@ -272,6 +272,65 @@ describe('delete a bet', () => {
     } finally {
       onLine.mockRestore();
     }
+  });
+
+  describe('a delete whose answer never comes back', () => {
+    beforeEach(() => {
+      deleteBet.mockImplementation(() => new Promise(() => {}));
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test('finishes once the live list no longer has the bet', async () => {
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      // Another bet changing is not this delete landing.
+      await act(async () => publishBets(bets.map((bet) => ({ ...bet }))));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      await act(async () => publishBets(bets.filter((bet) => bet.id !== 'game')));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+    });
+
+    test('a failed list load is not taken for the delete landing', async () => {
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      await act(async () => publishBets(null, new Error('offline')));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      expect(screen.getByRole('status')).toHaveTextContent('');
+    });
+
+    test('gives up after DELETE_WAIT_MS with the delete line, and a late delete still closes the dialog', async () => {
+      jest.useFakeTimers();
+      const actor = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      render(<MyBetsList user={user} />);
+      await actor.click(screen.queryAllByRole('button', { name: 'Delete' })[1]);
+      await actor.click(screen.getByRole('button', { name: 'Delete bet' }));
+      await act(async () => jest.advanceTimersByTime(DELETE_WAIT_MS - 1));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      await act(async () => jest.advanceTimersByTime(1));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('alert').textContent).toBe(GENERIC);
+      expect(within(dialog).getByRole('button', { name: 'Delete bet' })).toBeEnabled();
+      await act(async () => publishBets(bets.filter((bet) => bet.id !== 'game')));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+    });
+
+    test('leaving the screen mid-delete clears the wait', async () => {
+      jest.useFakeTimers();
+      const actor = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      const { unmount } = render(<MyBetsList user={user} />);
+      await actor.click(screen.queryAllByRole('button', { name: 'Delete' })[1]);
+      await actor.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(jest.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(jest.getTimerCount()).toBe(0);
+    });
   });
 
   test('a retry after a failed delete succeeds and closes the dialog', async () => {

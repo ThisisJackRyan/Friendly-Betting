@@ -56,7 +56,7 @@ bet applies it, so screens and routes keep reading `bet.votes`:
 | --- | --- |
 | Tally, vote screen, results, winner card, share/result texts, settle preview, Results menu | `subscribeBet` (bet doc listener + `bets/{code}/votes` listener), used by `useLiveBet` and `ResultsMenu` |
 | My bets list, Friends (head to head) | `subscribeMyBets`: one votes listener per bet in the list |
-| `settleBet` (settlement snapshot), `undoSettle`, `callOffBet` (returned bet) | `readVoteDocs(code)` inside the transaction callback |
+| `settleBet` (settlement snapshot), `undoSettle`, `callOffBet` (returned bet) | `readVoteDocs(code, { fresh: true })` in the transaction callback (a plain read, not a transactional one) |
 | `saveVoterNumber` (result-text save route) | `readBetWithVotes(db, code, tx)` (`src/server/betVotes.js`), in its transaction |
 | `deliverResultTexts` (result-text send route) | `readBetWithVotes` |
 | Delete route (`deleteBet` server) | deletes `bets/{code}/votes/*` in the same transaction |
@@ -88,9 +88,26 @@ bet. Fine at friendly-bet scale; if lists grow to hundreds, denormalize
   way, in the bet's `votes` array (`castLegacyVote`, `renameLegacyVote`). Any other
   error is thrown as before. Under the phase-1 rules the fallback only succeeds for a
   first pick (append); a refusal on both paths surfaces the refusal.
+- **Remembered for the session:** a denied vote-doc read (listener, list or the
+  rename's read of the voter's doc), or a denied vote-doc write whose array fallback
+  then succeeds, sets `voteDocsDenied` in `api.js` for every bet. From then on no vote
+  listener opens, reads answer no docs, and picks and renames go straight to the array,
+  so the live rules log no more 403s. Neither signal can happen under the phase-1 rules
+  (vote docs are readable by anyone, and they refuse the array write for anything they
+  refuse as a doc), so behaviour there is unchanged. A session open across the rules
+  deploy keeps using the array until a reload. The exception: `settleBet`,
+  `undoSettle`, `callOffBet` and the `deleteBet` client fallback read the vote docs
+  fresh (`readVoteDocs(code, { fresh: true })`), skipping the flag, so a creator
+  session from before the deploy can't settle without the vote-doc picks or leave
+  vote docs behind on delete. A fresh read that succeeds clears the flag; a denied
+  one answers no docs and sets it, like any other read.
 - `deleteBet` client fallback (no Admin credentials): deletes the vote docs and the
-  bet in one batch. The rules only let the creator delete vote docs in a write that
-  also deletes the bet.
+  bet in one transaction. A client transaction can't query, so the vote docs are
+  listed with a plain `getDocs` in the transaction callback, right before the
+  commit; it is not a transactional read. A pick committed between that listing and
+  the commit can still be left behind (a small gap; once the bet is gone the rules
+  refuse new vote docs). The server route's Admin transaction closes it. The rules
+  only let the creator delete vote docs in a write that also deletes the bet.
 
 ## Rules
 
@@ -219,7 +236,7 @@ refuse a longer name on a vote doc and on a legacy array entry.
 
 ## Known gaps
 
-- `settleBet` reads the vote docs in its transaction callback, but a new vote doc
+- `settleBet` reads the vote docs (a plain read) in its transaction callback, but a new vote doc
   doesn't conflict with the transaction (it doesn't touch the bet doc). A pick that
   lands in the milliseconds between that read and the settle commit is not in the
   settlement snapshot. Before this change the same pick was in the array, which the

@@ -12,13 +12,48 @@ import { apiUrl } from './resultTexts';
 // a timeout) is still an error.
 const noEntitlement = (err) => err?.code === 'permission-denied';
 
+// Preview and dev builds log a denied read, so a preview against the live
+// rules shows why there is no plan. Next sets NEXT_PUBLIC_VERCEL_ENV to
+// 'preview' or 'development' on Vercel and NODE_ENV to 'development' under
+// `next dev`; Vite sets NODE_ENV from the mode ('development' for
+// `mobile:dev`, 'production' for `mobile:build`) and defines the Vercel env as
+// empty. Production builds stay quiet.
+export function logsDeniedReads() {
+  const env = process.env.NEXT_PUBLIC_VERCEL_ENV;
+  return env === 'preview' || env === 'development' || process.env.NODE_ENV === 'development';
+}
+
+// Only the error code: never the uid, the doc path or the error itself.
+function noteDenied(err) {
+  if (logsDeniedReads()) console.info('Entitlement read denied; treated as no plan.', err.code);
+}
+
+// The uids whose entitlement read was denied this session. Restore still
+// reads fresh every time, and a read that succeeds takes the uid out, so a
+// session open across the rules deploy finds Pro on Restore; its denied
+// listener needs a reload (docs/PRO.md).
+const denied = new Set();
+
+// Tests only.
+export function __resetDeniedForTests() {
+  denied.clear();
+}
+
 // onChange(entitlement | null) on every snapshot, onChange(undefined, err) on
 // any other error.
 export function subscribeEntitlement(uid, onChange) {
   return onSnapshot(
     doc(db, 'entitlements', uid),
     (snap) => onChange(snap.exists() ? snap.data() : null),
-    (err) => (noEntitlement(err) ? onChange(null) : onChange(undefined, err)),
+    (err) => {
+      if (!noEntitlement(err)) {
+        onChange(undefined, err);
+        return;
+      }
+      denied.add(uid);
+      noteDenied(err);
+      onChange(null);
+    },
   );
 }
 
@@ -41,13 +76,17 @@ function withTimeout(promise, controller) {
 
 // One fresh read of the user's own entitlement (Restore purchase), from the
 // server rather than the cache. null when there is none, or none readable.
+// Always asks the server, even after a denied read this session.
 export async function fetchEntitlement(uid) {
   try {
     const snap = await withTimeout(getDocFromServer(doc(db, 'entitlements', uid)));
+    denied.delete(uid);
     return snap.exists() ? snap.data() : null;
   } catch (err) {
-    if (noEntitlement(err)) return null;
-    throw err;
+    if (!noEntitlement(err)) throw err;
+    denied.add(uid);
+    noteDenied(err);
+    return null;
   }
 }
 
