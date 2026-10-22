@@ -92,7 +92,8 @@ function isDenied(err) {
 
 // Set once this session learns the live rules have no per-voter docs, so
 // every later vote-doc read and write is skipped (no more console 403s) and
-// picks go straight to the array. It covers every bet, as the rules do. Two
+// picks go straight to the array. Fresh reads (settle, undo, call off,
+// delete) still go out, and one that succeeds clears it. It covers every bet, as the rules do. Two
 // signals only, both impossible under rules with per-voter docs: a denied
 // read of vote docs (those rules let anyone read them), or a denied vote-doc
 // write whose array fallback then succeeded (those rules refuse the array
@@ -127,10 +128,15 @@ function voteDocsOf(snap) {
 }
 
 // The bet's vote docs, read once. Denied (rules without per-voter docs): none.
-export async function readVoteDocs(code) {
-  if (voteDocsDenied) return [];
+// `fresh` always reads, even once denied this session, and a read that
+// succeeds clears the flag: settle, undo, call off and delete must not miss
+// picks a session open across the rules deploy can't see otherwise.
+export async function readVoteDocs(code, { fresh = false } = {}) {
+  if (voteDocsDenied && !fresh) return [];
   try {
-    return voteDocsOf(await getDocs(votesRef(code)));
+    const votes = voteDocsOf(await getDocs(votesRef(code)));
+    if (fresh) voteDocsDenied = false;
+    return votes;
   } catch (err) {
     if (!isDenied(err)) throw err;
     noteVoteDocsDenied();
@@ -400,10 +406,13 @@ export async function settleBet(code, winnerId) {
       if (bet.winnerId === winnerId) return bet;
       throw new Error('This one’s already settled. The result is locked.');
     }
-    // Every pick, array and vote docs. The docs are read in each attempt; a
-    // pick doc landing between that read and the commit is not in the
-    // snapshot (docs/VOTE-SECURITY.md).
-    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
+    // Every pick, array and vote docs. The docs are read fresh in each
+    // attempt; a pick doc landing between that read and the commit is not in
+    // the snapshot (docs/VOTE-SECURITY.md).
+    const full = withVotes(
+      await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)),
+      await readVoteDocs(code, { fresh: true }),
+    );
     const update = {
       status: 'closed',
       winnerId,
@@ -436,7 +445,10 @@ export async function undoSettle(code) {
     if (!isSettled(bet) || settledAt == null || Date.now() >= settledAt + UNDO_RULES_WINDOW_MS) {
       throw new Error('Too late to undo.');
     }
-    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
+    const full = withVotes(
+      await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)),
+      await readVoteDocs(code, { fresh: true }),
+    );
     tx.update(ref, {
       status: 'open',
       winnerId: null,
@@ -463,7 +475,10 @@ export async function callOffBet(code) {
     if (isCalledOff(bet)) return bet;
     if (isSettled(bet)) throw new Error('This one’s already settled. The result is locked.');
     if (isFinished(bet)) throw new Error('This bet is closed.');
-    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
+    const full = withVotes(
+      await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)),
+      await readVoteDocs(code, { fresh: true }),
+    );
     tx.update(ref, { status: 'closed', calledOff: true, settledAt: serverTimestamp() });
     return { ...full, status: 'closed', calledOff: true, settledAt: null };
   });
@@ -492,10 +507,13 @@ function offlineError(cause) {
 
 // The bet doc and its vote docs in one transaction (the rules allow only the
 // creator, and vote docs only along with the bet). A client transaction can't
-// query, so the vote docs are listed inside it, after the bet is read and
-// right before the commit, instead of ahead of a separate batch: the gap in
-// which a new pick could be left behind shrinks to the commit itself (once
-// the bet is gone, the rules refuse new vote docs), and a bet that changed
+// query, so the vote docs are listed with a plain read (not a transactional
+// one, and fresh even once denied this session) in the transaction callback,
+// after the bet is read and right before the commit, instead of ahead of a
+// separate batch. That narrows the gap in which a new pick could be left
+// behind but doesn't close it: a pick committed between the listing and the
+// commit stays (once the bet is gone, the rules refuse new vote docs; the
+// server route's Admin transaction has no such gap). A bet that changed
 // meanwhile (an older build's pick in the array) retries with a fresh list.
 // A bet that's already gone is done. A transaction only answers once the
 // server has the delete, so My bets never drops the bet on this device alone.
@@ -504,7 +522,7 @@ async function deleteBetHere(code) {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) return;
-    const votes = await readVoteDocs(code);
+    const votes = await readVoteDocs(code, { fresh: true });
     votes.forEach((vote) => tx.delete(voteRef(code, vote.voterId)));
     tx.delete(ref);
   });

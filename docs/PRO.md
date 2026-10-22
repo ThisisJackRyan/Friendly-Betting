@@ -54,9 +54,9 @@ auto-deployed (see the note at its top).
 ### Post-deploy steps (after the `entitlements` rules are live)
 
 1. Remove the permission-denied => no-plan mapping in src/phone/entitlementApi.js.
-2. A session that was open across the rules deploy needs a reload to see Pro: it remembers a
-   denied read for the rest of the session (see Client), so its listener and Restore purchase
-   keep answering no plan until the page or app reloads.
+2. A session that was open across the rules deploy: Restore purchase reads fresh every time, so
+   it finds Pro without a reload. The listener was denied and stopped, so it keeps answering no
+   plan until the page or app reloads (or a Restore shares the plan it found).
 
 ## Client
 
@@ -65,8 +65,9 @@ auto-deployed (see the note at its top).
   `requestMockPurchase(plan)`. The only Pro reads. Both treat `permission-denied` on the
   user's own doc as no entitlement, like a missing doc, so rules without the `entitlements`
   block (not yet deployed) read as not Pro rather than an error; any other error is still an
-  error. A denied read is remembered per uid for the session, so Restore purchase after the
-  listener was denied answers at once instead of waiting on another server read. Preview and dev
+  error. Restore purchase always asks the server, even after the listener (or an earlier
+  Restore) was denied; a read that succeeds takes the uid out of the session's denied set, and a
+  denied one adds it. Preview and dev
   builds log a denied read with its error code only (`console.info`, never the uid, path or
   error); production builds log nothing. Jest mocks it for every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.

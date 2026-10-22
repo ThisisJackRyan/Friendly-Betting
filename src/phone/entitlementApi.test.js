@@ -166,21 +166,21 @@ describe('a denied read this session', () => {
     });
   });
 
-  test('a Restore after the listener was denied answers no plan without a server read', async () => {
+  test('a Restore after the listener was denied still reads from the server', async () => {
     subscribeEntitlement('jack', () => {});
     sink.error(failure('permission-denied'));
-    await expect(fetchEntitlement('jack')).resolves.toBeNull();
-    expect(getDocFromServer).not.toHaveBeenCalled();
-    // Only for that user.
-    getDocFromServer.mockResolvedValue(snapOf({ plan: 'pro' }));
-    await expect(fetchEntitlement('maya')).resolves.toEqual({ plan: 'pro' });
-  });
-
-  test('a denied Restore makes the next one answer at once', async () => {
     getDocFromServer.mockRejectedValueOnce(failure('permission-denied'));
     await expect(fetchEntitlement('jack')).resolves.toBeNull();
-    await expect(fetchEntitlement('jack')).resolves.toBeNull();
     expect(getDocFromServer).toHaveBeenCalledTimes(1);
+  });
+
+  test('after the rules deploy, Restore finds Pro without a reload', async () => {
+    getDocFromServer.mockRejectedValueOnce(failure('permission-denied'));
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+    getDocFromServer.mockResolvedValue(snapOf({ plan: 'pro' }));
+    await expect(fetchEntitlement('jack')).resolves.toEqual({ plan: 'pro' });
+    await expect(fetchEntitlement('jack')).resolves.toEqual({ plan: 'pro' });
+    expect(getDocFromServer).toHaveBeenCalledTimes(3);
   });
 
   test('allowed reads and other errors are never remembered', async () => {

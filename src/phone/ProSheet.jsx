@@ -19,7 +19,7 @@ import {
 const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
 
 // Restoring… stays up at least this long, so an answer that comes back at
-// once (a read already denied this session) still shows the tap did
+// once (a read the rules deny straight away) still shows the tap did
 // something instead of flashing past.
 export const RESTORE_MIN_BUSY_MS = 600;
 

@@ -161,14 +161,9 @@ test('a denied read on Restore purchase is nothing to restore, not an error', as
     return outcome;
   };
   getDocFromServer.mockRejectedValue(denied());
-  expect(await refresh()).toEqual({ found: false });
-  // The listener's denial already answered it: no server read this session.
-  expect(getDocFromServer).not.toHaveBeenCalled();
-  // A fresh session (no denial seen yet) asks the server; a denied answer is no plan.
-  __resetDeniedForTests();
+  // Restore asks the server even after the listener's denial; a denied answer is no plan.
   expect(await refresh()).toEqual({ found: false });
   expect(getDocFromServer).toHaveBeenCalledTimes(1);
-  __resetDeniedForTests();
   getDocFromServer.mockResolvedValue({ exists: () => false, data: () => undefined });
   expect(await refresh()).toEqual({ found: false });
   getDocFromServer.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));

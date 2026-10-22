@@ -422,7 +422,7 @@ describe('deleteBet', () => {
     expect(deleteDoc).not.toHaveBeenCalled();
   });
 
-  test('a pick saved as the fallback starts is listed inside the transaction and deleted too', async () => {
+  test('a pick saved as the fallback starts is listed in the transaction callback and deleted too', async () => {
     respond(503, { error: 'not-configured' });
     voteDocs.maya = { voterId: 'maya', name: 'Maya', optionId: 'b', at: { seconds: 8, nanoseconds: 0 } };
     // Lee's pick lands once the delete is under way (the old fallback had
@@ -736,8 +736,72 @@ describe('a session that learns the rules deny vote docs', () => {
     expect(stored.votes[2].name).toBe('May');
 
     await readVoteDocs('other');
-    await settleBet('abc123', 'a');
     expect(getDocs).toHaveBeenCalledTimes(1);
+    // Settling still reads fresh; still denied, it settles from the array.
+    await settleBet('abc123', 'a');
+    expect(getDocs).toHaveBeenCalledTimes(2);
+    expect(stored.settlement.winners.map((winner) => winner.voterId)).toEqual(['jack', 'maya']);
+  });
+
+  describe('settle, undo, call off and delete read vote docs fresh', () => {
+    const maya = { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 8, nanoseconds: 0 } };
+    // A session that saw the old rules, then the per-voter rules deployed.
+    const learnDeniedThenDeploy = async () => {
+      voteRules = false;
+      await readVoteDocs('abc123');
+      voteRules = true;
+      voteDocs.maya = maya;
+      getDocs.mockClear();
+      await expect(readVoteDocs('abc123')).resolves.toEqual([]);
+      expect(getDocs).not.toHaveBeenCalled();
+    };
+
+    test('settleBet counts the vote-doc pick, and the read clears the flag', async () => {
+      await learnDeniedThenDeploy();
+      await settleBet('abc123', 'a');
+      expect(stored.settlement.winners).toEqual([{ voterId: 'jack', name: 'Jack' }, { voterId: 'maya', name: 'Maya' }]);
+      expect(stored.settlement.recipients).toContainEqual({ voterId: 'maya', won: true });
+      expect(getDocs).toHaveBeenCalledTimes(1);
+      await expect(readVoteDocs('abc123')).resolves.toEqual([expect.objectContaining({ voterId: 'maya' })]);
+      expect(getDocs).toHaveBeenCalledTimes(2);
+    });
+
+    test('callOffBet and undoSettle hand back the vote-doc pick', async () => {
+      await learnDeniedThenDeploy();
+      const off = await callOffBet('abc123');
+      expect(off.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+
+      stored = { ...stored, calledOff: false, status: 'closed', winnerId: 'a', settledAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 } };
+      voteRules = false;
+      await readVoteDocs('abc123');
+      voteRules = true;
+      const reopened = await undoSettle('abc123');
+      expect(reopened.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    });
+
+    test('the delete fallback deletes the vote doc with the bet', async () => {
+      await learnDeniedThenDeploy();
+      auth.currentUser.getIdToken = jest.fn(async () => 'id-token');
+      global.fetch = jest.fn(async () => ({ ok: false, status: 503, json: async () => ({ error: 'not-configured' }) }));
+      try {
+        await deleteBet('abc123');
+      } finally {
+        delete global.fetch;
+      }
+      expect(tx.delete.mock.calls).toEqual([
+        [{ collection: 'bets/abc123/votes', id: 'maya' }],
+        [{ collection: 'bets', id: 'abc123' }],
+      ]);
+      expect(voteDocs).toEqual({});
+      expect(stored).toBeNull();
+    });
+
+    test('a denied fresh read returns none and still sets the flag', async () => {
+      voteRules = false;
+      await expect(readVoteDocs('abc123', { fresh: true })).resolves.toEqual([]);
+      await readVoteDocs('abc123');
+      expect(getDocs).toHaveBeenCalledTimes(1);
+    });
   });
 
   test('a denied vote listen is remembered: the next subscribeBet opens no votes listener', () => {

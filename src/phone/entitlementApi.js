@@ -28,12 +28,10 @@ function noteDenied(err) {
   if (logsDeniedReads()) console.info('Entitlement read denied; treated as no plan.', err.code);
 }
 
-// The uids whose entitlement read was denied this session. The rules are the
-// same for every read of a user's own doc, so a Restore after the listener
-// (or an earlier Restore) was denied answers no plan at once instead of
-// waiting on a fresh server read. Rules that allow the read never add to it;
-// a session open across the rules deploy needs a reload to see Pro
-// (docs/PRO.md).
+// The uids whose entitlement read was denied this session. Restore still
+// reads fresh every time, and a read that succeeds takes the uid out, so a
+// session open across the rules deploy finds Pro on Restore; its denied
+// listener needs a reload (docs/PRO.md).
 const denied = new Set();
 
 // Tests only.
@@ -78,11 +76,11 @@ function withTimeout(promise, controller) {
 
 // One fresh read of the user's own entitlement (Restore purchase), from the
 // server rather than the cache. null when there is none, or none readable.
-// A read already denied this session answers null without asking again.
+// Always asks the server, even after a denied read this session.
 export async function fetchEntitlement(uid) {
-  if (denied.has(uid)) return null;
   try {
     const snap = await withTimeout(getDocFromServer(doc(db, 'entitlements', uid)));
+    denied.delete(uid);
     return snap.exists() ? snap.data() : null;
   } catch (err) {
     if (!noEntitlement(err)) throw err;
