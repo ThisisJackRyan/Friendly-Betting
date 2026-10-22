@@ -34,8 +34,9 @@ Pro member: Manage subscription -> POST /api/pro/portal -> Stripe customer porta
    `GET` (405 when on) and `OPTIONS` are 404 too. Nothing is read before this check.
 2. **401** without a bearer token, or one `verifyIdToken(token, true)` rejects (revoked included).
 3. **403** `forbidden` for an anonymous session or a token without a `phone_number` claim
-   (`memberAllowed`, the same checks as the mock purchase's `mockBuyerAllowed` minus its tester
-   allowlist).
+   (`memberAllowed`, the same checks as the mock purchase's `mockBuyerAllowed`), and, while the
+   key is a test key, for any member whose uid is not on `STRIPE_TEST_UIDS` (see
+   [Test-mode allowlist](#test-mode-allowlist-stripe_test_uids)). Nothing is read before it.
 4. **409** `already-pro` when `entitlements/{uid}` is a live plan of any source (Stripe, mock,
    admin, a legacy founder doc). **409** `already-subscribed` when the doc's Stripe subscription
    is still open (`active`, `trialing`, `past_due`, `unpaid`, `paused`) even if the plan has
@@ -64,6 +65,9 @@ from `capacitor://localhost` / `https://localhost`) can never start a Checkout.
    - `customer.subscription.created` / `updated` / `deleted`: uid from the subscription's
      `metadata.uid`, else from `stripeCustomers/{customerId}` (see below).
    - Anything else, or an event with no usable uid: **200** no-op, so Stripe stops retrying.
+   - With a test key, a uid not on `STRIPE_TEST_UIDS`: never granted (**200** no-op, logged as
+     `stripe webhook skipped: <type> not-allowlisted`, nothing written). See
+     [Test-mode allowlist](#test-mode-allowlist-stripe_test_uids).
 4. **500** when a write fails (Stripe retries with backoff for up to 3 days).
 
 **Where the period end lives.** The installed `stripe` SDK (v23, API version
@@ -113,9 +117,33 @@ event without `metadata.uid` (one edited in the dashboard, or created outside Ch
 on every applied event. Like `stripeEvents`, no rule matches it, so the default deny keeps every
 client out (tested).
 
+### Test-mode allowlist (`STRIPE_TEST_UIDS`)
+
+**Why.** Previews share the production Firebase project. A test-card Checkout on a preview
+writes a real `entitlements/{uid}` doc that the live app honors, and it renews every month until
+someone cancels it. So while the key is a test key, only the testers on `STRIPE_TEST_UIDS` may use
+Stripe at all. Like `PRO_MOCK_UIDS` for the mock purchase: comma separated, trimmed, empty
+entries ignored, and **empty or unset means nobody**. A live key (`STRIPE_ALLOW_LIVE=1`, out of
+scope) is not affected. The check is `stripeUidAllowed` in `src/server/stripeConfig.js`.
+
+- **Checkout and portal:** a verified member off the list gets **403** `forbidden`, before any
+  read or Stripe call.
+- **Webhook, granting states** (`active`, `trialing`) for a uid off the list: a **200** no-op.
+  Nothing is written, **not even `stripeEvents/{eventId}`**: every preview's webhook endpoint
+  gets every event of the shared test account, so one preview skipping an event must not mark
+  it handled for another preview that has the uid on its list.
+- **Webhook, ending states** (`past_due`, `canceled`, ...) for a uid off the list still apply,
+  but only to the subscription already on that uid's doc. Why: a tester taken off the list after
+  buying must still be able to cancel and lose Pro; refusing those would leave a paid plan that
+  only lapses at the period end. An ending event can only lower `expiresAt`
+  (`nextEntitlement`), so it can never grant. About any other subscription, nothing is written.
+- **Taken off the list after buying:** renewals stop extending Pro (it lapses at the end of the
+  paid period); cancel and `past_due` still end it at once. The member can no longer open the
+  portal on that preview, so cancel the test subscription in the dashboard.
+
 ### Customer portal: `POST /api/pro/portal`
 
-Same 404 / 401 / 403 as Checkout. Reads the token uid's `entitlements/{uid}.stripeCustomerId`;
+Same 404 / 401 / 403 (allowlist included) as Checkout. Reads the token uid's `entitlements/{uid}.stripeCustomerId`;
 none is a **404** `no-customer`. Otherwise creates a billing portal session (`return_url`
 `STRIPE_WEB_PRO_BASE_URL/pro`, plus `configuration` when `STRIPE_PORTAL_CONFIGURATION_ID` is set)
 and returns `{ url }`. Members cancel, change card and see invoices there; the resulting
@@ -162,7 +190,8 @@ Everything else reuses `PRO_COPY`.
 ### Logging
 
 Only event types and error codes (`stripe webhook failed: <type> <code>`,
-`stripe checkout failed: <code>`, `stripe webhook: signature check failed`). Never a uid, phone
+`stripe checkout failed: <code>`, `stripe webhook: signature check failed`,
+`stripe webhook skipped: <type> not-allowlisted`). Never a uid, phone
 number, email, Stripe customer or subscription id, or a key (tested).
 
 ## Environment variables
@@ -177,6 +206,7 @@ Every server variable is read per request; nothing is needed at build time.
 | `STRIPE_WEBHOOK_SECRET` | Server, secret | `whsec_...` of the webhook endpoint (or of `stripe listen` locally). |
 | `STRIPE_PRICE_ID` | Server | The test-mode `price_...` of the $3/mo recurring price. |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | Server, optional | `bpc_...` portal configuration; unset uses the default one. |
+| `STRIPE_TEST_UIDS` | Server | Firebase uids allowed to use Stripe while the key is a test key, comma separated (spaces and empty entries ignored). **Empty or unset: every member gets 403, and the webhook grants nobody.** Ignored with a live key. See [Test-mode allowlist](#test-mode-allowlist-stripe_test_uids). Testers only; never commit real uids. |
 | `STRIPE_WEB_PRO_BASE_URL` | Server | Absolute origin Checkout and the portal return to, e.g. `https://www.friendly-bets.com` or the preview's branch URL. https only (http for `localhost`/`127.0.0.1`), no path, query or credentials. Never taken from the request. |
 | `NEXT_PUBLIC_STRIPE_WEB_PRO` | Web build | `1` shows the Stripe path in the Pro sheet. Needs `NEXT_PUBLIC_PRO_PAYWALL=1` (the sheet and `/pro` only exist with it). Always off in native builds. |
 | `FIREBASE_SERVICE_ACCOUNT` | Server, secret | Already used by the other routes (docs/DEVELOPMENT.md). Without it the Stripe routes answer 503. |
@@ -224,6 +254,7 @@ change; it needs the account owner.
 # Terminal 1: the app, with the server and client flags (values from your own test account).
 STRIPE_WEB_PRO=1 STRIPE_SECRET_KEY=sk_test_... STRIPE_PRICE_ID=price_... \
 STRIPE_WEBHOOK_SECRET=whsec_from_stripe_listen STRIPE_WEB_PRO_BASE_URL=http://localhost:3000 \
+STRIPE_TEST_UIDS=<your test account's uid> \
 FIREBASE_SERVICE_ACCOUNT=... NEXT_PUBLIC_PRO_PAYWALL=1 NEXT_PUBLIC_STRIPE_WEB_PRO=1 npm run dev
 
 # Terminal 2: forward test-mode events to the local webhook. It prints the whsec_ to use above.
@@ -246,13 +277,16 @@ with the real library.
 
 1. Dashboard setup above, in test mode.
 2. Preview env: `STRIPE_WEB_PRO=1`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-   `STRIPE_PRICE_ID`, `STRIPE_WEB_PRO_BASE_URL` (branch alias), `FIREBASE_SERVICE_ACCOUNT`,
-   `NEXT_PUBLIC_PRO_PAYWALL=1`, `NEXT_PUBLIC_STRIPE_WEB_PRO=1`. Leave the mock flags off there.
+   `STRIPE_PRICE_ID`, `STRIPE_WEB_PRO_BASE_URL` (branch alias), `STRIPE_TEST_UIDS` (the testers'
+   uids only), `FIREBASE_SERVICE_ACCOUNT`, `NEXT_PUBLIC_PRO_PAYWALL=1`,
+   `NEXT_PUBLIC_STRIPE_WEB_PRO=1`. Leave the mock flags off there.
 3. The `entitlements` rules from docs/PRO.md are live (or expect a Pro member to need a reload
    or Restore; see the post-deploy notes there). `firestore.rules` needs no change for Stripe:
    `stripeEvents` and `stripeCustomers` are covered by the default deny.
 4. Redeploy the preview. `POST /api/pro/checkout` without a token answers 401 (not 404).
-5. Buy with 4242: success screen within a few seconds; dashboard shows the webhook 200s.
+5. Allowlist: a member not on `STRIPE_TEST_UIDS` gets the error line on Get Pro (403 in the
+   network tab) and nothing in Stripe. Then buy with 4242 as a listed tester: success screen
+   within a few seconds; dashboard shows the webhook 200s.
 6. Manage subscription > cancel at period end: still Pro, `stripeStatus` active. Cancel
    immediately in the dashboard: `deleted`, not Pro, doc kept.
 7. Resend an event from the dashboard: 200, nothing changes.

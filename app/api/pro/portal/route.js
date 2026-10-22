@@ -27,7 +27,7 @@ export async function POST(request) {
   const token = bearerToken(request);
   if (!token) return json({ error: 'unauthorized' }, 401);
   try {
-    const member = await authorizeMember({ token, auth: adminAuth() });
+    const member = await authorizeMember({ token, auth: adminAuth(), config });
     if (!member.ok) return json({ error: member.error }, member.status);
     const { url } = await createPortal({ db: adminDb(), stripe: stripeClient(config), config, uid: member.uid });
     return json({ url });

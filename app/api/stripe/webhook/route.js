@@ -42,13 +42,15 @@ export async function POST(request) {
     return json({ error: 'invalid-signature' }, 400);
   }
   try {
-    await handleStripeEvent({
+    const result = await handleStripeEvent({
       db: adminDb(),
       stripe,
+      config,
       event,
       since: FieldValue.serverTimestamp(),
       toTimestamp: (ms) => Timestamp.fromMillis(ms),
     });
+    if (result.reason === 'not-allowlisted') console.warn(`stripe webhook skipped: ${event.type} not-allowlisted`);
     return json({ received: true });
   } catch (err) {
     if (err?.code === 'admin-not-configured') return json({ error: 'not-configured' }, 503);

@@ -6,6 +6,8 @@ import {
   stripeClient,
   stripeKeyAllowed,
   stripeKeyMode,
+  stripeTestUids,
+  stripeUidAllowed,
   stripeWebProConfig,
 } from './stripeConfig';
 
@@ -64,7 +66,9 @@ describe('stripeWebProConfig', () => {
       portalConfigurationId: 'bpc_x',
       baseUrl: 'https://www.friendly-bets.com',
       allowLive: false,
+      testUids: [],
     });
+    expect(stripeWebProConfig({ ...ON, STRIPE_TEST_UIDS: 'jack,maya' }).testUids).toEqual(['jack', 'maya']);
   });
 
   test.each([
@@ -88,6 +92,35 @@ describe('stripeWebProConfig', () => {
 
   test('defaults to process.env, which has none of it', () => {
     expect(stripeWebProConfig()).toBeNull();
+  });
+});
+
+describe('the test-mode uid allowlist (STRIPE_TEST_UIDS)', () => {
+  test('parsed like PRO_MOCK_UIDS: comma separated, trimmed, empty entries ignored', () => {
+    expect(stripeTestUids({ STRIPE_TEST_UIDS: 'jack' })).toEqual(['jack']);
+    expect(stripeTestUids({ STRIPE_TEST_UIDS: ' jack , maya ,, ' })).toEqual(['jack', 'maya']);
+    expect(stripeTestUids({ STRIPE_TEST_UIDS: ' , ' })).toEqual([]);
+    expect(stripeTestUids({ STRIPE_TEST_UIDS: '' })).toEqual([]);
+    expect(stripeTestUids({})).toEqual([]);
+  });
+
+  test('a test key: only uids on the list; an empty or unset list allows nobody', () => {
+    const config = (env) => stripeWebProConfig({ ...ON, ...env });
+    expect(stripeUidAllowed(config({ STRIPE_TEST_UIDS: 'jack, maya' }), 'jack')).toBe(true);
+    expect(stripeUidAllowed(config({ STRIPE_TEST_UIDS: 'jack, maya' }), 'maya')).toBe(true);
+    expect(stripeUidAllowed(config({ STRIPE_TEST_UIDS: 'jack' }), 'maya')).toBe(false);
+    expect(stripeUidAllowed(config({ STRIPE_TEST_UIDS: 'jack' }), 'jac')).toBe(false);
+    expect(stripeUidAllowed(config({ STRIPE_TEST_UIDS: '' }), 'jack')).toBe(false);
+    expect(stripeUidAllowed(config({}), 'jack')).toBe(false);
+    expect(stripeUidAllowed(config({}), '')).toBe(false);
+  });
+
+  test('a live key with STRIPE_ALLOW_LIVE=1 is not affected; no config or key allows nobody', () => {
+    const live = stripeWebProConfig({ ...ON, STRIPE_SECRET_KEY: 'sk_live_x', STRIPE_ALLOW_LIVE: '1' });
+    expect(stripeUidAllowed(live, 'maya')).toBe(true);
+    expect(stripeUidAllowed({ ...live, allowLive: false }, 'maya')).toBe(false);
+    expect(stripeUidAllowed(null, 'jack')).toBe(false);
+    expect(stripeUidAllowed({ secretKey: 'pk_test_x', testUids: ['jack'] }, 'jack')).toBe(false);
   });
 });
 

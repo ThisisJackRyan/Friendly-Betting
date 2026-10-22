@@ -1,4 +1,5 @@
 import { isProEntitlement, toMillis } from '../phone/entitlement';
+import { stripeUidAllowed } from './stripeConfig';
 
 // Web Pro billing with Stripe (docs/STRIPE-WEB-PRO.md): Checkout, the
 // customer portal and the webhook that writes entitlements/{uid}. The Stripe
@@ -23,9 +24,11 @@ export function memberAllowed(decoded) {
   return { ok: true, uid: decoded.uid };
 }
 
-// Verifies the ID token (revoked tokens fail too). Returns { ok: true, uid }
-// or { ok: false, status, error }. The uid only ever comes from the token.
-export async function authorizeMember({ token, auth }) {
+// Verifies the ID token (revoked tokens fail too), then the member, then the
+// test-mode allowlist (stripeUidAllowed: with a test key, only uids on
+// STRIPE_TEST_UIDS). Returns { ok: true, uid } or { ok: false, status,
+// error }. The uid only ever comes from the token.
+export async function authorizeMember({ token, auth, config }) {
   if (!token) return UNAUTHORIZED;
   let decoded;
   try {
@@ -34,7 +37,9 @@ export async function authorizeMember({ token, auth }) {
     if (err?.code === 'admin-not-configured') throw err;
     return UNAUTHORIZED;
   }
-  return memberAllowed(decoded);
+  const member = memberAllowed(decoded);
+  if (member.ok && !stripeUidAllowed(config, member.uid)) return FORBIDDEN;
+  return member;
 }
 
 export function bearerToken(request) {
@@ -201,7 +206,16 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
 // event id recorded in stripeEvents/{eventId} (server only) so a redelivered
 // event changes nothing. stripeCustomers/{customerId} maps a customer back to
 // its uid for events without one.
-export async function applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp }) {
+//
+// With `allowed` false (a test key and a uid not on STRIPE_TEST_UIDS) a live
+// state never grants: nothing is written. A state that is not live still
+// applies to the subscription already on the doc, so a member taken off the
+// list can still cancel and lose Pro; about any other subscription nothing
+// is written. "Nothing" includes stripeEvents: every preview's endpoint gets
+// every event of the shared test account, and one that skips an event must
+// not mark it handled for a preview that has the uid on its list.
+export async function applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp, allowed = true }) {
+  if (!allowed && state.live) return { applied: false, reason: 'not-allowlisted' };
   const eventRef = db.doc(`stripeEvents/${event.id}`);
   const entitlementRef = db.doc(`entitlements/${uid}`);
   return db.runTransaction(async (tx) => {
@@ -209,6 +223,7 @@ export async function applySubscriptionEvent({ db, event, uid, state, eventCreat
     if (seen.exists) return { duplicate: true };
     const snap = await tx.get(entitlementRef);
     const existing = snap.exists ? snap.data() : null;
+    if (!allowed && existing?.stripeSubscriptionId !== state.subscriptionId) return { applied: false, reason: 'not-allowlisted' };
     const next = nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp });
     tx.set(eventRef, { type: event.type, created: event.created, processedAt: since });
     if (validCustomer(state.customerId)) tx.set(db.doc(`stripeCustomers/${state.customerId}`), { uid });
@@ -232,9 +247,11 @@ export const HANDLED_EVENTS = [
 ];
 
 // One verified webhook event. Returns { handled, ... } and never throws for
-// an event it can't use (an unknown type, no uid): those are a 200 no-op so
-// Stripe stops retrying. Throws for anything worth a retry.
-export async function handleStripeEvent({ db, stripe, event, now = Date.now(), since, toTimestamp }) {
+// an event it can't use (an unknown type, no uid, a uid off the test-mode
+// allowlist): those are a 200 no-op so Stripe stops retrying. Throws for
+// anything worth a retry. `config` is the stripeWebProConfig() result, for
+// the allowlist; without one nothing is granted.
+export async function handleStripeEvent({ db, stripe, config, event, now = Date.now(), since, toTimestamp }) {
   if (!HANDLED_EVENTS.includes(event?.type)) return { handled: false, reason: 'ignored-type' };
   if (!EVENT_PATTERN.test(String(event.id)) || !Number.isFinite(event.created)) return { handled: false, reason: 'malformed' };
   const object = event.data?.object;
@@ -251,13 +268,15 @@ export async function handleStripeEvent({ db, stripe, event, now = Date.now(), s
     const state = subscriptionState(subscription, now);
     if (!state.customerId) state.customerId = idOf(object.customer);
     const eventCreated = Math.max(event.created, Math.floor(now / SECOND));
-    const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp });
-    return { handled: true, ...result };
+    const allowed = stripeUidAllowed(config, uid);
+    const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp, allowed });
+    return result.reason ? { handled: false, ...result } : { handled: true, ...result };
   }
 
   const state = subscriptionState(object, now);
   const uid = validUid(object?.metadata?.uid) ? object.metadata.uid : await uidForCustomer(db, state.customerId);
   if (!uid) return { handled: false, reason: 'no-uid' };
-  const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated: event.created, now, since, toTimestamp });
-  return { handled: true, ...result };
+  const allowed = stripeUidAllowed(config, uid);
+  const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated: event.created, now, since, toTimestamp, allowed });
+  return result.reason ? { handled: false, ...result } : { handled: true, ...result };
 }

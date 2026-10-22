@@ -49,6 +49,7 @@ const ON = {
   STRIPE_WEBHOOK_SECRET: SECRET,
   STRIPE_PRICE_ID: 'price_pro_monthly',
   STRIPE_WEB_PRO_BASE_URL: 'https://www.friendly-bets.com',
+  STRIPE_TEST_UIDS: 'jack, maya',
 };
 const ENV_KEYS = [...Object.keys(ON), 'STRIPE_PORTAL_CONFIGURATION_ID', 'STRIPE_ALLOW_LIVE', 'VERCEL_ENV', 'NODE_ENV', 'PRO_MOCK_PURCHASE', 'PRO_MOCK_UIDS'];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -547,6 +548,141 @@ describe('webhook route: events', () => {
     const res = await deliver({ ...event('customer.subscription.updated', subscription()), id: 'evt/../entitlements/jack' });
     expect(res.status).toBe(200);
     expect(db.writes).toEqual([]);
+  });
+});
+
+describe('test mode: only uids on STRIPE_TEST_UIDS', () => {
+  const routes = [
+    ['checkout', checkoutRoute],
+    ['portal', portalRoute],
+  ];
+  beforeEach(() => {
+    db = fakeDb({
+      'entitlements/jack': { stripeCustomerId: 'cus_jack' },
+      'entitlements/maya': { stripeCustomerId: 'cus_maya' },
+    });
+  });
+
+  test.each(routes)('%s: a uid on the list is allowed', async (_name, route) => {
+    setEnv({ ...ON, STRIPE_TEST_UIDS: ' jack ,, ' });
+    const res = await post(route, { token: 'jack-token' });
+    expect(res.status).toBe(200);
+  });
+
+  test.each(routes)('%s: a verified member off the list is a 403, with no Stripe call or read', async (_name, route) => {
+    setEnv({ ...ON, STRIPE_TEST_UIDS: 'jack' });
+    const res = await post(route, { token: 'maya-token' });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockStripeApi.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(mockStripeApi.billingPortal.sessions.create).not.toHaveBeenCalled();
+    expect(adminDb).not.toHaveBeenCalled();
+    expect(db.writes).toEqual([]);
+    expectQuietLogs();
+  });
+
+  test.each([
+    ['unset', undefined],
+    ['empty', ''],
+    ['only commas and spaces', ' , '],
+  ])('an %s list is a 403 for everyone, on both routes', async (_name, list) => {
+    setEnv({ ...ON, STRIPE_TEST_UIDS: list });
+    for (const [, route] of routes) {
+      for (const token of ['jack-token', 'maya-token']) {
+        const res = await post(route, { token });
+        expect(res.status).toBe(403);
+      }
+    }
+    expect(mockStripeApi.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(mockStripeApi.billingPortal.sessions.create).not.toHaveBeenCalled();
+  });
+
+  test('the allowlist runs after the token check: a bad token is still a 401', async () => {
+    setEnv({ ...ON, STRIPE_TEST_UIDS: '' });
+    const res = await post(checkoutRoute, { token: 'forged' });
+    expect(res.status).toBe(401);
+  });
+
+  describe('webhook', () => {
+    beforeEach(() => {
+      db = fakeDb();
+      setEnv({ ...ON, STRIPE_TEST_UIDS: 'jack' });
+    });
+
+    test('customer.subscription.created for a uid off the list: 200, no grant, nothing written', async () => {
+      const res = await deliver(event('customer.subscription.created', subscription({ uid: 'maya', customer: 'cus_maya' })));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ received: true });
+      expect(db.writes).toEqual([]);
+      expect(console.warn).toHaveBeenCalledWith('stripe webhook skipped: customer.subscription.created not-allowlisted');
+      expectQuietLogs();
+    });
+
+    test('checkout.session.completed for a uid off the list: no grant, nothing written', async () => {
+      mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ uid: 'maya', customer: 'cus_maya' }));
+      const session = { id: 'cs_1', mode: 'subscription', client_reference_id: 'maya', metadata: { uid: 'maya' }, customer: 'cus_maya', subscription: 'sub_1' };
+      const res = await deliver(event('checkout.session.completed', session));
+      expect(res.status).toBe(200);
+      expect(db.writes).toEqual([]);
+    });
+
+    test('a uid found through stripeCustomers is checked too', async () => {
+      db = fakeDb({ 'stripeCustomers/cus_maya': { uid: 'maya' } });
+      await deliver(event('customer.subscription.updated', subscription({ uid: '', customer: 'cus_maya' })));
+      expect(db.paths('entitlements/')).toEqual([]);
+      expect(db.paths('stripeEvents/')).toEqual([]);
+    });
+
+    test('a uid on the list is granted as usual', async () => {
+      await deliver(event('customer.subscription.created', subscription()));
+      expect(ent()).toMatchObject({ plan: 'pro', source: 'stripe' });
+    });
+
+    test('a skipped event is not marked handled, so a preview that has the uid on its list still applies it', async () => {
+      const evt = event('customer.subscription.created', subscription({ uid: 'maya', customer: 'cus_maya' }));
+      await deliver(evt);
+      setEnv({ ...ON, STRIPE_TEST_UIDS: 'jack, maya' });
+      await deliver(evt);
+      expect(db.data('entitlements/maya')).toMatchObject({ plan: 'pro', source: 'stripe' });
+    });
+
+    describe('taken off the list after buying', () => {
+      const paid = () => ({ plan: 'pro', source: 'stripe', since: 'FIRST', expiresAt: { ts: (SEC + 30 * DAY) * 1000 }, stripeCustomerId: 'cus_maya', stripeSubscriptionId: 'sub_1', stripeStatus: 'active', stripeEventCreated: SEC - DAY });
+      beforeEach(() => {
+        db = fakeDb({ 'entitlements/maya': paid() });
+      });
+
+      test('a renewal does not extend Pro, which lapses at the paid period end', async () => {
+        await deliver(event('customer.subscription.updated', subscription({ uid: 'maya', customer: 'cus_maya', end: SEC + 60 * DAY })));
+        expect(db.data('entitlements/maya')).toEqual(paid());
+        expect(db.writes).toEqual([]);
+      });
+
+      test('a cancellation of the subscription on the doc still ends Pro', async () => {
+        await deliver(event('customer.subscription.deleted', subscription({ uid: 'maya', customer: 'cus_maya', status: 'canceled' })));
+        const doc = db.data('entitlements/maya');
+        expect(doc).toMatchObject({ plan: 'pro', source: 'stripe', stripeStatus: 'canceled' });
+        expect(isProEntitlement({ ...doc, expiresAt: doc.expiresAt.ts }, Date.now())).toBe(false);
+      });
+
+      test('past_due on the subscription on the doc still ends Pro', async () => {
+        await deliver(event('customer.subscription.updated', subscription({ uid: 'maya', customer: 'cus_maya', status: 'past_due' })));
+        expect(db.data('entitlements/maya').stripeStatus).toBe('past_due');
+        expect(db.data('entitlements/maya').expiresAt.ts).toBeLessThanOrEqual(Date.now());
+      });
+
+      test('an ending event about another subscription writes nothing', async () => {
+        await deliver(event('customer.subscription.updated', subscription({ id: 'sub_2', uid: 'maya', customer: 'cus_maya', status: 'incomplete' })));
+        expect(db.data('entitlements/maya')).toEqual(paid());
+        expect(db.writes).toEqual([]);
+      });
+    });
+
+    test('without a config (or with an unknown key) nothing is granted', async () => {
+      const result = await handleStripeEvent({ db, stripe: mockStripeApi, event: event('customer.subscription.created', subscription()), now: NOW, since: 'T' });
+      expect(result).toEqual({ handled: false, applied: false, reason: 'not-allowlisted' });
+      expect(db.writes).toEqual([]);
+    });
   });
 });
 

@@ -31,6 +31,27 @@ export function stripeKeyAllowed(env = process.env) {
   return false;
 }
 
+// Members allowed to use Stripe while the key is a test key: uids in
+// STRIPE_TEST_UIDS, comma separated (parsed like PRO_MOCK_UIDS). Empty or
+// unset means nobody. Previews share the production Firebase project, so a
+// test-card Checkout would otherwise write a real, renewing entitlement.
+export function stripeTestUids(env = process.env) {
+  return String(env.STRIPE_TEST_UIDS || '')
+    .split(',')
+    .map((uid) => uid.trim())
+    .filter(Boolean);
+}
+
+// Whether `uid` may start a Checkout, open the portal, or be granted Pro by
+// the webhook. With a test key: only uids on STRIPE_TEST_UIDS. With a live
+// key (STRIPE_ALLOW_LIVE, out of scope): everyone. Anything else: nobody.
+export function stripeUidAllowed(config, uid) {
+  const mode = stripeKeyMode(config?.secretKey);
+  if (mode === 'live') return Boolean(config.allowLive);
+  if (mode === 'test') return Array.isArray(config.testUids) && config.testUids.includes(uid);
+  return false;
+}
+
 // Where Checkout and the portal send the member back: an absolute https
 // origin (http only for localhost), no path. Never taken from the request.
 export function stripeBaseUrl(env = process.env) {
@@ -61,6 +82,7 @@ export function stripeWebProConfig(env = process.env) {
     portalConfigurationId: trimmed(env.STRIPE_PORTAL_CONFIGURATION_ID),
     baseUrl: stripeBaseUrl(env),
     allowLive: env.STRIPE_ALLOW_LIVE === '1',
+    testUids: stripeTestUids(env),
   };
   if (!config.webhookSecret || !config.priceId || !config.baseUrl) return null;
   return config;
