@@ -129,6 +129,7 @@ All three run on the Node runtime with the Firebase Admin SDK (`src/server/fireb
 | `POST /api/bets/[code]/result-texts` | Voter (Firebase ID token, the anonymous user) | Saves one US number per voter per bet in `privateResultTexts/{code}`. Side comes from the recorded vote. |
 | `POST /api/bets/[code]/result-texts/send` | Anyone; acts only on settled bets | Claims each saved number once (deleted in a transaction) and calls `sendResultSms`. |
 | `DELETE /api/bets/[code]` | Creator (ID token with the creator uid and phone) | `src/server/deleteBet.js`: deletes the bet, its result-text numbers and the `privateResultTexts/{code}` doc in one transaction. |
+| `POST /api/pro/mock-purchase`, `POST /api/pro/checkout`, `POST /api/pro/portal`, `POST /api/stripe/webhook` | Pro (flagged, 404 when off) | See [docs/PRO.md](PRO.md) and [docs/STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md). |
 
 If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` and its vote docs directly from the client, in one batch, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
 
@@ -154,6 +155,8 @@ Preflight never touches auth or the database.
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | Preview and native preview builds | `1` enables the paywall buttons, which call the mock purchase route. Never in production. |
 | `PRO_MOCK_PURCHASE` | Vercel preview, server only | `1` lets `POST /api/pro/mock-purchase` grant Pro with no payment. The route also refuses `VERCEL_ENV=production`. |
 | `PRO_MOCK_UIDS` | Vercel preview, server only | Testers' uids allowed to use the mock purchase, comma separated. Empty or unset means nobody. Anonymous sessions and tokens without a phone number are always refused. Unset before launch, see [docs/PRO.md](PRO.md#pre-launch-cleanup). |
+| `STRIPE_WEB_PRO`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `STRIPE_WEB_PRO_BASE_URL`, `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_ALLOW_LIVE` | Vercel preview, server only | Web Pro billing with Stripe, test mode only. Off (every Stripe route a 404) unless all are set. See [docs/STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md). |
+| `NEXT_PUBLIC_STRIPE_WEB_PRO` | Vercel preview only | `1` sends Get Pro to Stripe Checkout on the web. Always off in native builds (`mobile/vite.config.mjs`). |
 
 `NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 
