@@ -245,6 +245,19 @@ describe('flag on (web)', () => {
     expect(screen.queryByRole('button', { name: MANAGE })).toBeNull();
   });
 
+  test('a doc with only a Stripe customer (made before the first Checkout) is not Pro: Get Pro, no Manage', async () => {
+    plan = { stripeCustomerId: 'cus_1' };
+    fetchEntitlement.mockResolvedValue(plan);
+    await openSheet();
+    expect(adServiceIsPro()).toBe(false);
+    expect(screen.queryByRole('heading', { name: OWNED })).toBeNull();
+    expect(main()).toHaveTextContent(GET_PRO);
+    expect(main()).toBeEnabled();
+    expect(screen.queryByRole('button', { name: MANAGE })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Restore purchase' }));
+    expect(await screen.findByText('Nothing to restore on this account.')).toBeInTheDocument();
+  });
+
   test('new copy has no em dash, TODO or straight apostrophe', () => {
     Object.values(STRIPE_COPY).forEach((text) => {
       expect(text).not.toMatch(/—|TODO|'/);

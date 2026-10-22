@@ -19,6 +19,7 @@ import * as mockRoute from '../../app/api/pro/mock-purchase/route';
 // The Stripe API is mocked; webhook signatures are made and checked by the
 // real library, so the signature path is the real one.
 const mockStripeApi = {
+  customers: { create: jest.fn() },
   checkout: { sessions: { create: jest.fn() } },
   billingPortal: { sessions: { create: jest.fn() } },
   subscriptions: { retrieve: jest.fn() },
@@ -89,6 +90,9 @@ beforeEach(() => {
   db = fakeDb();
   adminDb.mockReset();
   adminDb.mockImplementation(() => db);
+  // Like Stripe: the same idempotency key returns the same customer.
+  mockStripeApi.customers.create.mockReset();
+  mockStripeApi.customers.create.mockImplementation(async (_params, { idempotencyKey }) => ({ id: `cus_${idempotencyKey.replace(/[^A-Za-z0-9]/g, '')}` }));
   mockStripeApi.checkout.sessions.create.mockReset();
   mockStripeApi.checkout.sessions.create.mockResolvedValue({ id: 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1' });
   mockStripeApi.billingPortal.sessions.create.mockReset();
@@ -221,6 +225,7 @@ describe('checkout route', () => {
     expect(mockStripeApi.checkout.sessions.create).toHaveBeenCalledTimes(1);
     expect(mockStripeApi.checkout.sessions.create).toHaveBeenCalledWith({
       mode: 'subscription',
+      customer: 'cus_customerjack',
       line_items: [{ price: 'price_pro_monthly', quantity: 1 }],
       client_reference_id: 'jack',
       metadata: { uid: 'jack' },
@@ -228,7 +233,8 @@ describe('checkout route', () => {
       success_url: 'https://www.friendly-bets.com/pro?checkout=success',
       cancel_url: 'https://www.friendly-bets.com/pro?checkout=cancel',
     });
-    expect(db.writes).toEqual([]);
+    expect(db.paths('entitlements/')).toEqual(['entitlements/jack']);
+    expect(db.data('stripeCustomers/cus_customerjack')).toEqual({ uid: 'jack' });
   });
 
   test('return URLs come from the configured base URL, never the request Origin', async () => {
@@ -242,15 +248,126 @@ describe('checkout route', () => {
     expect(params.cancel_url.startsWith('https://www.friendly-bets.com/')).toBe(true);
   });
 
-  test('reuses the Stripe customer already on entitlements/{uid}', async () => {
+  test('reuses the Stripe customer already on entitlements/{uid}, without making one', async () => {
     db = fakeDb({ 'entitlements/jack': { plan: 'pro', source: 'stripe', since: 1, expiresAt: NOW - 1000, stripeCustomerId: 'cus_jack', stripeSubscriptionId: 'sub_old', stripeStatus: 'canceled' } });
     await post(checkoutRoute, { token: 'jack-token' });
+    expect(mockStripeApi.customers.create).not.toHaveBeenCalled();
     expect(mockStripeApi.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ customer: 'cus_jack', client_reference_id: 'jack' });
+    expect(db.writes).toEqual([]);
   });
 
-  test('no customer param for a first purchase', async () => {
-    await post(checkoutRoute, { token: 'jack-token' });
-    expect(mockStripeApi.checkout.sessions.create.mock.calls[0][0]).not.toHaveProperty('customer');
+  describe('one Stripe customer per uid', () => {
+    const config = { priceId: 'price_x', baseUrl: 'https://www.friendly-bets.com' };
+    const checkout = () => createCheckout({ db, stripe: mockStripeApi, config, uid: 'jack', now: NOW });
+    const sessionCustomers = () => mockStripeApi.checkout.sessions.create.mock.calls.map(([params]) => params.customer);
+
+    test('a first Checkout makes the customer on the server, stores it on both docs, and passes it', async () => {
+      const res = await post(checkoutRoute, { token: 'jack-token' });
+      expect(res.status).toBe(200);
+      expect(mockStripeApi.customers.create).toHaveBeenCalledTimes(1);
+      expect(mockStripeApi.customers.create).toHaveBeenCalledWith({ metadata: { uid: 'jack' } }, { idempotencyKey: 'customer-jack' });
+      expect(ent()).toEqual({ stripeCustomerId: 'cus_customerjack' });
+      expect(db.data('stripeCustomers/cus_customerjack')).toEqual({ uid: 'jack' });
+      expect(sessionCustomers()).toEqual(['cus_customerjack']);
+      expectQuietLogs();
+    });
+
+    test('a doc with only the customer is not Pro, so the member can still check out', async () => {
+      await checkout();
+      expect(isProEntitlement(ent(), NOW)).toBe(false);
+      const res = await post(portalRoute, { token: 'jack-token' });
+      expect(res.status).toBe(200);
+    });
+
+    test('the webhook then grants Pro on that doc as usual', async () => {
+      await checkout();
+      mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ customer: 'cus_customerjack' }));
+      const session = { id: 'cs_1', mode: 'subscription', client_reference_id: 'jack', metadata: { uid: 'jack' }, customer: 'cus_customerjack', subscription: 'sub_1' };
+      await deliver(event('checkout.session.completed', session));
+      expect(ent()).toMatchObject({ plan: 'pro', source: 'stripe', stripeCustomerId: 'cus_customerjack', stripeSubscriptionId: 'sub_1' });
+    });
+
+    test('a second Checkout reuses the stored customer without calling customers.create', async () => {
+      await checkout();
+      await checkout();
+      expect(mockStripeApi.customers.create).toHaveBeenCalledTimes(1);
+      expect(sessionCustomers()).toEqual(['cus_customerjack', 'cus_customerjack']);
+    });
+
+    test('two parallel Checkouts end with one stored customer, used by both sessions', async () => {
+      await Promise.all([checkout(), checkout()]);
+      expect(mockStripeApi.customers.create).toHaveBeenCalledTimes(2);
+      expect(new Set(mockStripeApi.customers.create.mock.calls.map(([, options]) => options.idempotencyKey))).toEqual(new Set(['customer-jack']));
+      expect(ent()).toEqual({ stripeCustomerId: 'cus_customerjack' });
+      expect(db.paths('stripeCustomers/')).toEqual(['stripeCustomers/cus_customerjack']);
+      expect(sessionCustomers()).toEqual(['cus_customerjack', 'cus_customerjack']);
+    });
+
+    test('past the idempotency window (a different customer back), the one stored first still wins', async () => {
+      let count = 0;
+      mockStripeApi.customers.create.mockImplementation(async () => {
+        count += 1;
+        return { id: `cus_new${count}` };
+      });
+      await Promise.all([checkout(), checkout()]);
+      const stored = ent().stripeCustomerId;
+      expect(['cus_new1', 'cus_new2']).toContain(stored);
+      expect(db.paths('stripeCustomers/')).toEqual([`stripeCustomers/${stored}`]);
+      expect(sessionCustomers()).toEqual([stored, stored]);
+    });
+
+    test('a customer stored between the first read and the transaction is the one used', async () => {
+      mockStripeApi.customers.create.mockImplementation(async () => {
+        await db.doc('entitlements/jack').set({ stripeCustomerId: 'cus_webhook' }, { merge: true });
+        return { id: 'cus_other' };
+      });
+      await checkout();
+      expect(ent()).toEqual({ stripeCustomerId: 'cus_webhook' });
+      expect(db.paths('stripeCustomers/')).toEqual([]);
+      expect(sessionCustomers()).toEqual(['cus_webhook']);
+    });
+
+    test('every other field on an existing doc is kept; only stripeCustomerId is added', async () => {
+      const lapsed = { plan: 'pro', source: 'mock', since: 'T', expiresAt: NOW - 1000, note: 'kept' };
+      db = fakeDb({ 'entitlements/jack': lapsed });
+      await checkout();
+      expect(ent()).toEqual({ ...lapsed, stripeCustomerId: 'cus_customerjack' });
+      expect(isProEntitlement(ent(), NOW)).toBe(false);
+    });
+
+    test('a stored id in the wrong shape is replaced with a real customer', async () => {
+      db = fakeDb({ 'entitlements/jack': { stripeCustomerId: 'not-a-customer' } });
+      await checkout();
+      expect(ent()).toEqual({ stripeCustomerId: 'cus_customerjack' });
+      expect(sessionCustomers()).toEqual(['cus_customerjack']);
+    });
+
+    test('a legacy founder doc is never written, even in a race', async () => {
+      const legacy = { plan: 'founder', source: 'mock', since: 'T', founderNumber: 7, expiresAt: null };
+      mockStripeApi.customers.create.mockImplementation(async () => {
+        await db.doc('entitlements/jack').set(legacy);
+        return { id: 'cus_jack' };
+      });
+      await expect(checkout()).rejects.toMatchObject({ code: 'already-pro' });
+      expect(ent()).toEqual(legacy);
+      expect(mockStripeApi.checkout.sessions.create).not.toHaveBeenCalled();
+    });
+
+    test('a customers.create failure is a 500 that logs only a code, and writes nothing', async () => {
+      mockStripeApi.customers.create.mockRejectedValue(Object.assign(new Error('jack'), { type: 'StripeAPIError', code: 'api_error' }));
+      const res = await post(checkoutRoute, { token: 'jack-token' });
+      expect(res.status).toBe(500);
+      expect(console.error).toHaveBeenCalledWith('stripe checkout failed: api_error');
+      expect(db.writes).toEqual([]);
+      expect(mockStripeApi.checkout.sessions.create).not.toHaveBeenCalled();
+      expectQuietLogs();
+    });
+
+    test('a customer without a usable id is refused', async () => {
+      mockStripeApi.customers.create.mockResolvedValue({ id: 'cus_../x' });
+      await expect(checkout()).rejects.toMatchObject({ code: 'no-customer-id' });
+      expect(db.writes).toEqual([]);
+    });
   });
 
   test.each([

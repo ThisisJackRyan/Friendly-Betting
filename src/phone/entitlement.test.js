@@ -59,3 +59,8 @@ test('a Stripe plan is Pro until its period end, and not after', () => {
 test('Stripe ids alone, with no plan, are not Pro', () => {
   expect(isProEntitlement({ stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', stripeStatus: 'incomplete' }, NOW)).toBe(false);
 });
+
+test('a doc with only a Stripe customer (made before the first Checkout) is not Pro and has no badge', () => {
+  expect(isProEntitlement({ stripeCustomerId: 'cus_1' }, NOW)).toBe(false);
+  expect(badgeFor({ stripeCustomerId: 'cus_1' }, NOW)).toBeNull();
+});

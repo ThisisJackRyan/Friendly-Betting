@@ -41,13 +41,35 @@ Pro member: Manage subscription -> POST /api/pro/portal -> Stripe customer porta
    admin, a legacy founder doc). **409** `already-subscribed` when the doc's Stripe subscription
    is still open (`active`, `trialing`, `past_due`, `unpaid`, `paused`) even if the plan has
    lapsed: the sheet sends that member to the portal instead of selling a second subscription.
-5. Creates a Checkout Session: `mode: 'subscription'`, one `STRIPE_PRICE_ID`,
-   `client_reference_id`, `metadata.uid` and `subscription_data.metadata.uid` all set to the
-   **token's** uid (the body is never read), `customer` = the doc's `stripeCustomerId` when there
-   is one (otherwise Checkout makes a customer), `success_url` / `cancel_url` =
+5. Makes sure the member has **one Stripe customer** (see below), then creates a Checkout
+   Session: `mode: 'subscription'`, `customer` = that customer (always passed), one
+   `STRIPE_PRICE_ID`, `client_reference_id`, `metadata.uid` and `subscription_data.metadata.uid`
+   all set to the **token's** uid (the body is never read), `success_url` / `cancel_url` =
    `STRIPE_WEB_PRO_BASE_URL` + `/pro?checkout=success|cancel`. The request's Origin and Host are
    never used. Returns `{ url }`; the sheet leaves for it.
 6. **503** without `FIREBASE_SERVICE_ACCOUNT`; **500** `server` on a Stripe error (logs only its code).
+
+**One customer per uid** (`ensureCustomer`). Without one, parallel Checkouts (two tabs, a double
+tap) would each make a customer and then a subscription. When `entitlements/{uid}` has no valid
+`stripeCustomerId`, the server makes the customer itself:
+`stripe.customers.create({ metadata: { uid } }, { idempotencyKey: 'customer-<uid>' })`. Then in
+**one transaction** it re-reads `entitlements/{uid}`: if a customer was stored meanwhile, that one
+is used; otherwise it merges `stripeCustomerId` onto `entitlements/{uid}` and writes
+`stripeCustomers/{customerId} = { uid }`.
+
+- Stripe keeps an idempotency key for about **24 hours**, so parallel calls in that window get the
+  same customer back. The transaction covers the rest (a retry after the key expired, a webhook
+  that stored a customer first): whichever customer is stored first wins and every later
+  Checkout uses it. A customer made and then not stored is empty and harmless.
+- Only `stripeCustomerId` is merged: no plan fields are created or changed. A doc with only
+  `stripeCustomerId` reads as **not Pro** (`isProEntitlement` needs `plan`), so the badge, ads
+  and Restore treat it as no plan, and the sheet shows Get Pro without Manage subscription
+  (tested in `entitlement.test.js` and `ProSheet.stripe.test.jsx`). The webhook later adds the
+  plan to that doc as usual.
+- A legacy founder doc is never written, not even `stripeCustomerId` (simplest to reason about:
+  founder docs stay exactly as they were). A founder gets 409 `already-pro` before this, and the
+  transaction refuses one too, for a race.
+- The restricted key needs **write** access to Customers for this (see the dashboard setup).
 
 No CORS headers: the route is same-origin, so the native app (which calls the production origin
 from `capacitor://localhost` / `https://localhost`) can never start a Checkout.
@@ -87,6 +109,9 @@ stripeEvents/{eventId}      { type, created, processedAt }   // server only
 stripeCustomers/{customerId} { uid }                         // server only
 ```
 
+(Checkout itself writes only `stripeCustomerId` onto `entitlements/{uid}` and the
+`stripeCustomers` mapping, before the first purchase; see above.)
+
 - **Live** (`active`, `trialing`): `expiresAt` = the period end, so Pro lapses on its own if
   webhooks ever stop. A renewal moves `expiresAt` and keeps `since`.
 - **Not live** (`past_due`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `canceled`):
@@ -114,7 +139,7 @@ stripeCustomers/{customerId} { uid }                         // server only
 
 **`stripeCustomers/{customerId}`** maps a Stripe customer back to its uid for a subscription
 event without `metadata.uid` (one edited in the dashboard, or created outside Checkout). Written
-on every applied event. Like `stripeEvents`, no rule matches it, so the default deny keeps every
+on every applied event, and by Checkout when it makes the customer. Like `stripeEvents`, no rule matches it, so the default deny keeps every
 client out (tested).
 
 ### Test-mode allowlist (`STRIPE_TEST_UIDS`)
@@ -231,8 +256,8 @@ change; it needs the account owner.
 1. **Product and price.** Product catalog > Add product: name `Friendly Pro`, recurring price
    **$3.00 USD per month**. Copy the price id into `STRIPE_PRICE_ID`.
 2. **API key.** Developers > API keys: use the test secret key, or better a restricted key
-   (`rk_test_`) with write access to Checkout Sessions, Customer portal, and read access to
-   Subscriptions. Put it in `STRIPE_SECRET_KEY` (Vercel, Preview, sensitive).
+   (`rk_test_`) with write access to Customers, Checkout Sessions and Customer portal, and read
+   access to Subscriptions. Put it in `STRIPE_SECRET_KEY` (Vercel, Preview, sensitive).
 3. **Webhook endpoint.** Developers > Webhooks > Add endpoint:
    - URL: `https://<preview host>/api/stripe/webhook`. If the preview has Vercel Deployment
      Protection on, Stripe can't reach it: append Vercel's protection bypass

@@ -70,27 +70,51 @@ const SECOND = 1000;
 
 // Checkout -----------------------------------------------------------------
 
+// The member's one Stripe customer, made on the server before their first
+// Checkout so parallel Checkouts can't each make a customer (and then a
+// subscription) of their own. Stripe's idempotency key (kept ~24h) makes
+// parallel calls return the same customer; the transaction covers the rest:
+// whichever customer is stored first wins, and every later call uses it.
+// Only stripeCustomerId is merged onto entitlements/{uid}, so a doc with no
+// plan yet stays not Pro and any plan fields are never touched. A legacy
+// founder doc is never written (it is lifetime Pro: 'already-pro').
+export async function ensureCustomer({ db, stripe, uid }) {
+  const created = await stripe.customers.create({ metadata: { uid } }, { idempotencyKey: `customer-${uid}` });
+  if (!validCustomer(created?.id)) throw failure('no-customer-id');
+  const entitlementRef = db.doc(`entitlements/${uid}`);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(entitlementRef);
+    const current = snap.exists ? snap.data() : null;
+    if (validCustomer(current?.stripeCustomerId)) return current.stripeCustomerId;
+    if (current?.plan === 'founder') throw failure('already-pro');
+    tx.set(entitlementRef, { stripeCustomerId: created.id }, { merge: true });
+    tx.set(db.doc(`stripeCustomers/${created.id}`), { uid });
+    return created.id;
+  });
+}
+
 // A Checkout Session for $3/mo Pro, for the verified uid only. Throws
 // { code: 'already-pro' } for a live plan of any source, and
 // { code: 'already-subscribed' } for a Stripe subscription that is still
-// open (renewal pending, payment failing). Reuses the member's Stripe
-// customer when entitlements/{uid} has one.
+// open (renewal pending, payment failing). Always for the member's one
+// Stripe customer: the one on entitlements/{uid}, or a new one
+// (ensureCustomer).
 export async function createCheckout({ db, stripe, config, uid, now = Date.now() }) {
   const snap = await db.doc(`entitlements/${uid}`).get();
   const ent = snap.exists ? snap.data() : null;
   if (isProEntitlement(ent, now)) throw failure('already-pro');
   if (ent?.stripeSubscriptionId && SUBSCRIBED_STATUSES.has(ent.stripeStatus)) throw failure('already-subscribed');
-  const params = {
+  const customer = validCustomer(ent?.stripeCustomerId) ? ent.stripeCustomerId : await ensureCustomer({ db, stripe, uid });
+  const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
+    customer,
     line_items: [{ price: config.priceId, quantity: 1 }],
     client_reference_id: uid,
     metadata: { uid },
     subscription_data: { metadata: { uid } },
     success_url: `${config.baseUrl}/pro?checkout=success`,
     cancel_url: `${config.baseUrl}/pro?checkout=cancel`,
-  };
-  if (validCustomer(ent?.stripeCustomerId)) params.customer = ent.stripeCustomerId;
-  const session = await stripe.checkout.sessions.create(params);
+  });
   if (!session?.url) throw failure('no-session-url');
   return { url: session.url };
 }
