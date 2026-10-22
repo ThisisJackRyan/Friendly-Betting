@@ -59,12 +59,12 @@ test('no real early-access types ship yet', () => {
   expect(EARLY_ACCESS_TYPES).toEqual([]);
 });
 
-// Placeholder strings for Stripe web billing (docs/STRIPE-WEB-PRO.md): as few
+// Stripe web billing strings, UX approved Oct 22 (docs/STRIPE-WEB-PRO.md): as few
 // as possible, curly apostrophes like the rest of Pro copy (no straight ones),
 // no em dash, no TODO in the text itself, and none of them already in PRO_COPY.
 test('Stripe copy: few, no em dash, TODO or straight apostrophe, nothing PRO_COPY already has', () => {
   const strings = Object.values(STRIPE_COPY);
-  expect(strings).toEqual(['Manage subscription']);
+  expect(strings).toEqual(['Manage subscription', 'Pro renews at $3/mo until you cancel.']);
   strings.forEach((text) => {
     expect(text).not.toMatch(/—|TODO|'/);
     expect(Object.values(PRO_COPY).flat()).not.toContain(text);

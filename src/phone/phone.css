@@ -3837,6 +3837,25 @@ html[data-arrive='home'] .landing-body.screen-fade {
   cursor: pointer;
 }
 .pro-sheet-later:disabled { color: var(--muted); cursor: default; }
+/* Manage subscription on the success screen: a muted text link under Back to
+   my bets, never a second button and never accent green. 44px to tap. */
+.pro-sheet-manage {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.pro-sheet-manage:hover { color: var(--ink); }
+.pro-sheet-manage:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; border-radius: 6px; }
+.pro-sheet-manage:disabled { opacity: 0.55; cursor: default; }
 .pro-sheet-success {
   display: flex;
   flex-direction: column;

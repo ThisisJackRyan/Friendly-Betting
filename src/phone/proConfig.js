@@ -84,9 +84,13 @@ export const PRO_COPY = {
 };
 
 // New on-screen strings for Stripe web billing, shown only with
-// NEXT_PUBLIC_STRIPE_WEB_PRO=1. Not approved copy: every entry is a
-// placeholder until UX signs it off. Everything else the Stripe flow shows
-// reuses PRO_COPY (Get Pro, Getting you set…, the error line).
+// NEXT_PUBLIC_STRIPE_WEB_PRO=1 on the web (UX approved them Oct 22).
+// Everything else the Stripe flow shows reuses PRO_COPY (Get Pro, Getting
+// you set…, the error line).
 export const STRIPE_COPY = {
-  manage: 'Manage subscription', // PLACEHOLDER_COPY: success screen button that opens the Stripe customer portal.
+  // A muted text link under Back to my bets on the success screen; opens the
+  // Stripe customer portal.
+  manage: 'Manage subscription',
+  // Replaces PRO_COPY.finePrint: cancelling is in the Stripe portal, not Settings.
+  finePrint: `Pro renews at $${PRO_MONTHLY_USD}/mo until you cancel.`,
 };

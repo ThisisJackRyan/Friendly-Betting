@@ -135,8 +135,9 @@ subscription events come back through the webhook.
   times. The webhook's write arrives through the listener or a re-read and swaps in the success
   screen. After the last try the sheet goes back to normal (Restore purchase still works).
   `?checkout=cancel` shows the sheet as usual. Either way the parameter is removed from the URL.
-- **Manage subscription** on the success screen, for a member whose doc has a
-  `stripeCustomerId`. Opens the portal; a failure shows the existing error line.
+- **Manage subscription** on the success screen, a muted text link under Back to my bets, for a
+  member whose doc has a `stripeCustomerId`. Opens the portal; a failure shows the existing
+  error line.
 - **Restore purchase**, badges and ad gating need no change: they all use `isProEntitlement`,
   which never looks at `source`, so a live `source: 'stripe'` plan is Pro everywhere and an
   ended one is not (tested).
@@ -149,8 +150,14 @@ Turn the mock flags off where Stripe is tested, to keep `source` values honest.
 
 ### New on-screen copy
 
-One string, only with the flag on: `Manage subscription` (`STRIPE_COPY.manage`), marked
-`PLACEHOLDER_COPY` in a comment until UX approves it. Everything else reuses `PRO_COPY`.
+Two strings, only with the flag on and only on the web (`STRIPE_COPY`, UX approved them Oct 22).
+Everything else reuses `PRO_COPY`.
+
+- `Manage subscription` (`STRIPE_COPY.manage`): a muted text link (`.pro-sheet-manage`) under
+  `Back to my bets` on the success screen, not a second button and not green.
+- `Pro renews at $3/mo until you cancel.` (`STRIPE_COPY.finePrint`): the sheet's fine print.
+  Native apps, and the web with the flag off, keep `PRO_COPY.finePrint`
+  (`Pro renews at $3/mo until you cancel in Settings.`).
 
 ### Logging
 

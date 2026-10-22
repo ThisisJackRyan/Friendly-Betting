@@ -293,7 +293,7 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone, c
               {manageable && (
                 <button
                   type="button"
-                  className="pro-sheet-later pro-sheet-manage"
+                  className="pro-sheet-manage"
                   disabled={managing}
                   aria-busy={managing || undefined}
                   onClick={manage}
@@ -329,7 +329,7 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone, c
                   <p className="pro-price-amount">{PRO_COPY.proPrice}</p>
                   <p className="pro-price-note">{PRO_COPY.proNote}</p>
                 </div>
-                <p className="pro-fine-print">{PRO_COPY.finePrint}</p>
+                <p className="pro-fine-print">{stripeCheckout ? STRIPE_COPY.finePrint : PRO_COPY.finePrint}</p>
                 <p className="pro-sheet-links">
                   {links.map((link, index) => (
                     <Fragment key={link.key}>

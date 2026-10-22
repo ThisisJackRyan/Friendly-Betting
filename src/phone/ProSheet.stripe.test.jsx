@@ -29,6 +29,9 @@ const COMING_SOON = 'Coming soon';
 const ERROR = 'Couldn’t finish that. Try again.';
 const OWNED = 'You’re Pro. No more ads.';
 const MANAGE = 'Manage subscription';
+const FINE_PRINT = 'Pro renews at $3/mo until you cancel in Settings.';
+const STRIPE_FINE_PRINT = 'Pro renews at $3/mo until you cancel.';
+const finePrint = () => document.querySelector('.pro-fine-print').textContent;
 const FUTURE = () => Date.now() + 30 * 24 * 60 * 60 * 1000;
 const stripePlan = () => ({ plan: 'pro', source: 'stripe', since: 1, expiresAt: FUTURE(), stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', stripeStatus: 'active' });
 
@@ -120,6 +123,11 @@ describe('flag off: today’s sheet, unchanged', () => {
     expect(fetchEntitlement).not.toHaveBeenCalled();
   });
 
+  test('the fine print is still the Settings one', async () => {
+    await openSheet();
+    expect(finePrint()).toBe(FINE_PRINT);
+  });
+
   test('the sheet renders the same markup with the flag unset or set to anything but 1', async () => {
     const { unmount } = render(<ProSheet onClose={() => {}} />);
     await act(async () => {});
@@ -203,6 +211,24 @@ describe('flag on (web)', () => {
     expect(manage).toBeDisabled();
   });
 
+  test('the fine print drops Settings', async () => {
+    await openSheet();
+    expect(finePrint()).toBe(STRIPE_FINE_PRINT);
+  });
+
+  test('Manage subscription is a muted text link below Back to my bets, not a second button', async () => {
+    plan = stripePlan();
+    await openSheet();
+    const back = screen.getByRole('button', { name: 'Back to my bets' });
+    const manage = screen.getByRole('button', { name: MANAGE });
+    expect(manage).toHaveAttribute('type', 'button');
+    expect(back.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(manage).toHaveClass('pro-sheet-manage');
+    expect(manage).not.toHaveClass('cta');
+    expect(manage).not.toHaveClass('pro-sheet-main');
+    expect(manage).not.toHaveClass('pro-sheet-later');
+  });
+
   test('a failed portal shows the existing error line and re-enables the button', async () => {
     plan = stripePlan();
     requestBillingPortal.mockRejectedValue(Object.assign(new Error('no'), { code: 'no-customer' }));
@@ -272,6 +298,11 @@ describe('flag on (web)', () => {
       expect(main()).toHaveTextContent(COMING_SOON);
       await userEvent.click(main());
       expect(requestCheckout).not.toHaveBeenCalled();
+    });
+
+    test('the fine print is still the Settings one', async () => {
+      await openSheet();
+      expect(finePrint()).toBe(FINE_PRINT);
     });
 
     test('a Stripe member sees no Manage subscription', async () => {
