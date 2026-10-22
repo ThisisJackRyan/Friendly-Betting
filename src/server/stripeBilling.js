@@ -263,6 +263,18 @@ async function uidForCustomer(db, customerId) {
   return validUid(uid) ? uid : '';
 }
 
+// The subscription as Stripe has it now, or null when Stripe no longer has
+// it. Any other failure throws, so the webhook answers 500 and Stripe retries.
+async function retrieveSubscription(stripe, id) {
+  if (!id) return null;
+  try {
+    return await stripe.subscriptions.retrieve(id);
+  } catch (err) {
+    if (err?.code === 'resource_missing') return null;
+    throw err;
+  }
+}
+
 export const HANDLED_EVENTS = [
   'checkout.session.completed',
   'customer.subscription.created',
@@ -297,10 +309,19 @@ export async function handleStripeEvent({ db, stripe, config, event, now = Date.
     return result.reason ? { handled: false, ...result } : { handled: true, ...result };
   }
 
-  const state = subscriptionState(object, now);
-  const uid = validUid(object?.metadata?.uid) ? object.metadata.uid : await uidForCustomer(db, state.customerId);
+  // Events can arrive late and out of order, so read the subscription fresh,
+  // like checkout.session.completed, and order it at the time of that read.
+  // A subscription Stripe no longer has (resource_missing) falls back to the
+  // event's copy, ordered by event.created.
+  const fresh = await retrieveSubscription(stripe, idOf(object));
+  const subscription = fresh || object;
+  const eventCreated = fresh ? Math.max(event.created, Math.floor(now / SECOND)) : event.created;
+  const state = subscriptionState(subscription, now);
+  if (!state.customerId) state.customerId = idOf(object?.customer);
+  const metadataUid = [subscription?.metadata?.uid, object?.metadata?.uid].find(validUid);
+  const uid = metadataUid || (await uidForCustomer(db, state.customerId));
   if (!uid) return { handled: false, reason: 'no-uid' };
   const allowed = stripeUidAllowed(config, uid);
-  const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated: event.created, now, since, toTimestamp, allowed });
+  const result = await applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp, allowed });
   return result.reason ? { handled: false, ...result } : { handled: true, ...result };
 }

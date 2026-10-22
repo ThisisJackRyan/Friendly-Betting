@@ -97,7 +97,11 @@ beforeEach(() => {
   mockStripeApi.checkout.sessions.create.mockResolvedValue({ id: 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1' });
   mockStripeApi.billingPortal.sessions.create.mockReset();
   mockStripeApi.billingPortal.sessions.create.mockResolvedValue({ id: 'bps_1', url: 'https://billing.stripe.com/p/session/bps_1' });
+  // By default Stripe no longer has the subscription, so subscription events
+  // use the event's copy, ordered by event.created (the fallback path). The
+  // 'read fresh' tests below give Stripe a current subscription.
   mockStripeApi.subscriptions.retrieve.mockReset();
+  mockStripeApi.subscriptions.retrieve.mockRejectedValue(missing());
   logs = ['log', 'info', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
 });
 
@@ -128,6 +132,10 @@ function subscription({ id = 'sub_1', customer = 'cus_1', status = 'active', end
     metadata: uid ? { uid } : {},
     items: { object: 'list', data: [{ id: 'si_1', object: 'subscription_item', current_period_end: end }] },
   };
+}
+
+function missing() {
+  return Object.assign(new Error('No such subscription: sub_1'), { type: 'StripeInvalidRequestError', code: 'resource_missing' });
 }
 
 let eventCount = 0;
@@ -800,6 +808,62 @@ describe('test mode: only uids on STRIPE_TEST_UIDS', () => {
       expect(result).toEqual({ handled: false, applied: false, reason: 'not-allowlisted' });
       expect(db.writes).toEqual([]);
     });
+  });
+});
+
+describe('webhook route: subscription events read the subscription fresh', () => {
+  test('uses Stripe’s current subscription over the event’s copy, ordered at the time of the read', async () => {
+    mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ end: SEC + 60 * DAY }));
+    const before = Math.floor(Date.now() / 1000);
+    await deliver(event('customer.subscription.updated', subscription({ end: SEC + 30 * DAY }), SEC - 500));
+    expect(mockStripeApi.subscriptions.retrieve).toHaveBeenCalledWith('sub_1');
+    expect(ent()).toMatchObject({ plan: 'pro', source: 'stripe', expiresAt: { ts: (SEC + 60 * DAY) * 1000 } });
+    expect(ent().stripeEventCreated).toBeGreaterThanOrEqual(Math.max(SEC - 500, before));
+  });
+
+  test('a late past_due event after the payment went through keeps Pro (Stripe says active)', async () => {
+    db = fakeDb({ 'entitlements/jack': { plan: 'pro', source: 'stripe', since: 'FIRST', expiresAt: { ts: (SEC + 30 * DAY) * 1000 }, stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', stripeStatus: 'active', stripeEventCreated: SEC - DAY } });
+    mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription());
+    await deliver(event('customer.subscription.updated', subscription({ status: 'past_due' })));
+    expect(ent()).toMatchObject({ since: 'FIRST', stripeStatus: 'active', expiresAt: { ts: (SEC + 30 * DAY) * 1000 } });
+  });
+
+  test('a late active event for a canceled subscription stays canceled', async () => {
+    mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ status: 'canceled', endedAt: SEC - 10 }));
+    await deliver(event('customer.subscription.created', subscription(), SEC - 300));
+    expect(ent().stripeStatus).toBe('canceled');
+    expect(isProEntitlement(entAsRead(), Date.now())).toBe(false);
+  });
+
+  test('the uid comes from the current subscription’s metadata, else the event’s, else stripeCustomers', async () => {
+    mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ uid: 'maya' }));
+    await deliver(event('customer.subscription.updated', subscription({ uid: 'jack' })));
+    expect(db.data('entitlements/maya')).toMatchObject({ plan: 'pro' });
+    expect(db.data('entitlements/jack')).toBeUndefined();
+
+    db = fakeDb();
+    mockStripeApi.subscriptions.retrieve.mockResolvedValue(subscription({ uid: '' }));
+    await deliver(event('customer.subscription.updated', subscription({ uid: 'jack' })));
+    expect(ent()).toMatchObject({ plan: 'pro' });
+
+    db = fakeDb({ 'stripeCustomers/cus_1': { uid: 'jack' } });
+    await deliver(event('customer.subscription.updated', subscription({ uid: '' })));
+    expect(ent()).toMatchObject({ plan: 'pro' });
+  });
+
+  test('resource_missing falls back to the event’s copy, ordered by event.created', async () => {
+    await deliver(event('customer.subscription.updated', subscription({ end: SEC + 45 * DAY }), SEC - 5));
+    expect(mockStripeApi.subscriptions.retrieve).toHaveBeenCalledWith('sub_1');
+    expect(ent()).toMatchObject({ plan: 'pro', expiresAt: { ts: (SEC + 45 * DAY) * 1000 }, stripeEventCreated: SEC - 5 });
+  });
+
+  test('any other retrieve failure is a 500 (Stripe retries) that logs only the type and a code, and writes nothing', async () => {
+    mockStripeApi.subscriptions.retrieve.mockRejectedValue(Object.assign(new Error('sub_1 for jack'), { type: 'StripeConnectionError' }));
+    const res = await deliver(event('customer.subscription.deleted', subscription({ status: 'canceled' })));
+    expect(res.status).toBe(500);
+    expect(console.error).toHaveBeenCalledWith('stripe webhook failed: customer.subscription.deleted StripeConnectionError');
+    expect(db.writes).toEqual([]);
+    expectQuietLogs();
   });
 });
 

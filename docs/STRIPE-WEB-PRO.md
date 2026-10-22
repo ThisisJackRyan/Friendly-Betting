@@ -84,8 +84,11 @@ from `capacitor://localhost` / `https://localhost`) can never start a Checkout.
 3. Handles:
    - `checkout.session.completed` (subscription mode only): uid from `metadata.uid`, else
      `client_reference_id`. The session has no period end, so it retrieves the subscription.
-   - `customer.subscription.created` / `updated` / `deleted`: uid from the subscription's
-     `metadata.uid`, else from `stripeCustomers/{customerId}` (see below).
+   - `customer.subscription.created` / `updated` / `deleted`: also retrieves the subscription
+     and uses Stripe's current state, not the event's copy (events arrive late and out of
+     order). If Stripe no longer has it (`resource_missing`), the event's copy is used. Any
+     other retrieve failure is a 500, so Stripe retries. uid from the current subscription's
+     `metadata.uid`, else the event's, else from `stripeCustomers/{customerId}` (see below).
    - Anything else, or an event with no usable uid: **200** no-op, so Stripe stops retrying.
    - With a test key, a uid not on `STRIPE_TEST_UIDS`: never granted (**200** no-op, logged as
      `stripe webhook skipped: <type> not-allowlisted`, nothing written). See
@@ -124,8 +127,10 @@ stripeCustomers/{customerId} { uid }                         // server only
 - **Ordered.** For the subscription already on the doc, an event with `created` older than
   `stripeEventCreated` is ignored, and once that subscription is `canceled` or
   `incomplete_expired` (Stripe never revives those) no later event about it grants Pro. So a late
-  `updated` can't resurrect a deleted subscription. For `checkout.session.completed` the
-  subscription is read fresh, so it is ordered at the time of that read.
+  `updated` can't resurrect a deleted subscription. Every handled event reads the subscription
+  fresh, so it is ordered at the time of that read (`max(event.created, now)`); only the
+  `resource_missing` fallback is ordered by `event.created`. So a late `past_due` that arrives
+  after the retry already succeeded keeps Pro, since Stripe says `active`.
 - **Another subscription.** An event about a different subscription than the doc's only takes
   over when it grants Pro; it never ends a plan it did not grant.
 - **Legacy founder docs** (`plan: 'founder'`, lifetime) are never written, not even the Stripe ids.
