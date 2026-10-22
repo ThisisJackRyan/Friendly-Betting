@@ -35,7 +35,8 @@ function acquire(uid) {
     if (state.uid !== uid) publish({ uid, entitlement: null, loading: true });
     mine.stop = subscribeEntitlement(uid, (entitlement, err) => {
       if (current !== mine) return;
-      // A failed read keeps the last known plan rather than dropping it.
+      // A failed read keeps the last known plan rather than dropping it. A
+      // denied one arrives as no plan (entitlementApi.js), not as an error.
       if (err) publish({ ...state, uid, loading: false });
       else publish({ uid, entitlement: entitlement || null, loading: false });
     });
@@ -95,7 +96,8 @@ export function useEntitlement() {
 // Restore purchase: reads the signed-in user's entitlement again and shares
 // what it finds, so every screen (and the ad service) sees a restored plan
 // at once. Resolves to whether they are Pro; with nobody signed in there is
-// nothing to read. A failed read rejects and keeps the last known plan.
+// nothing to read. A failed read rejects and keeps the last known plan; a
+// denied one is no plan (entitlementApi.js), so nothing to restore.
 export async function refreshEntitlement() {
   const { uid } = state;
   if (!uid) return false;

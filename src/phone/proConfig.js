@@ -44,7 +44,9 @@ export const PRO_ROW = { noAds: 1, badge: 2, runItBack: 3, headToHead: 4, early:
 // Every on-screen string for Pro (UX, Oct 20).
 export const PRO_COPY = {
   title: 'Go Pro',
-  headline: 'All the bets. None of the ads.',
+  // A no-break space keeps "ads." off a line of its own where text-wrap:
+  // balance is not supported.
+  headline: 'All the bets. None of the\u00A0ads.',
   line: 'Friends always play free.',
   benefits: [
     'No ads, ever',

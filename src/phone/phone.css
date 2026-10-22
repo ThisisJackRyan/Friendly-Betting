@@ -3768,6 +3768,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 .pro-sheet-line { margin: 0; color: #fff; font-size: 15px; font-weight: 600; }
 .pro-sheet-body { display: flex; flex-direction: column; gap: 16px; padding: 12px var(--pro-pad) 8px; }

@@ -985,6 +985,56 @@ for (const size of SHEET_SIZES) {
   });
 }
 
+// The hero headline's lines, as the words on each (by each word's top
+// edge), plus whether it overflows its box or the hero.
+function headlineLines() {
+  const headline = document.querySelector('.pro-sheet-headline');
+  const text = headline.firstChild;
+  const words = [];
+  const pattern = /\S+/g;
+  let match;
+  while ((match = pattern.exec(text.data))) {
+    const range = document.createRange();
+    range.setStart(text, match.index);
+    range.setEnd(text, match.index + match[0].length);
+    words.push({ word: match[0], top: Math.round(range.getClientRects()[0].top) });
+  }
+  const lines = [];
+  words.forEach(({ word, top }) => {
+    const line = lines.find((l) => Math.abs(l.top - top) < 4);
+    if (line) line.words.push(word);
+    else lines.push({ top, words: [word] });
+  });
+  const box = headline.getBoundingClientRect();
+  const hero = document.querySelector('.pro-sheet-hero').getBoundingClientRect();
+  return {
+    lines: lines.sort((a, b) => a.top - b.top).map((l) => l.words.join(' ')),
+    overflow: headline.scrollWidth > headline.clientWidth || box.left < hero.left || box.right > hero.right,
+  };
+}
+
+for (const size of SHEET_SIZES) {
+  test(`the Pro sheet headline at ${size.width} wide: "ads." is never alone on a line`, async ({ page }) => {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await mockEntitlement(page);
+    await enablePaywall(page);
+    await page.goto('/pro');
+    const headline = page.locator('.pro-sheet-headline');
+    await expect(headline).toBeVisible();
+    await expect.poll(() => page.locator('.pro-sheet').evaluate((el) => el.getAnimations().length)).toBe(0);
+    expect(await headline.evaluate((el) => getComputedStyle(el).textWrap)).toBe('balance');
+    // Balanced, then without balance (the no-break space alone holds it).
+    for (const wrap of ['balance', 'wrap']) {
+      await headline.evaluate((el, value) => { el.style.textWrap = value; }, wrap);
+      const m = await page.evaluate(headlineLines);
+      expect(m.lines.join(' '), wrap).toBe('All the bets. None of the ads.');
+      expect(m.lines.at(-1), wrap).toMatch(/\bthe ads\.$/);
+      expect(m.overflow, wrap).toBe(false);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
+  });
+}
+
 test('My bets with the paywall on: the Go Pro chip right of the heading, and Friends locked', async ({ page }, testInfo) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
