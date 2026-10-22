@@ -11,6 +11,8 @@ jest.mock('./phone/entitlementApi', () => ({
   subscribeEntitlement: jest.fn(() => () => {}),
   fetchEntitlement: jest.fn(async () => null),
   requestMockPurchase: jest.fn(async () => ({ ok: true })),
+  requestCheckout: jest.fn(async () => ({ url: 'https://checkout.stripe.com/c/pay/test' })),
+  requestBillingPortal: jest.fn(async () => ({ url: 'https://billing.stripe.com/p/session/test' })),
 }));
 
 // jsdom has no canvas, so the winner card is never drawn here: the image is

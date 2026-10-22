@@ -1,7 +1,7 @@
 import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import * as entitlementApi from './entitlementApi';
 
-const { fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
+const { fetchEntitlement, requestBillingPortal, requestCheckout, requestMockPurchase, subscribeEntitlement } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
@@ -28,10 +28,37 @@ afterEach(() => {
   delete global.fetch;
 });
 
-test('only the entitlement reads and the mock purchase: no founder count', () => {
+test('only the entitlement reads, the mock purchase and the Stripe routes: no founder count', () => {
   expect(Object.keys(entitlementApi).sort()).toEqual([
-    'fetchEntitlement', 'logsDeniedReads', 'requestMockPurchase', 'subscribeEntitlement',
+    'fetchEntitlement', 'logsDeniedReads', 'requestBillingPortal', 'requestCheckout', 'requestMockPurchase', 'subscribeEntitlement',
   ]);
+});
+
+describe('Stripe routes (docs/STRIPE-WEB-PRO.md)', () => {
+  test.each([
+    ['requestCheckout', () => requestCheckout(), '/api/pro/checkout'],
+    ['requestBillingPortal', () => requestBillingPortal(), '/api/pro/portal'],
+  ])('%s posts the ID token and nothing about the user', async (_name, call, path) => {
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ url: 'https://checkout.stripe.com/x' }) });
+    await expect(call()).resolves.toEqual({ url: 'https://checkout.stripe.com/x' });
+    expect(fetch).toHaveBeenCalledWith(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
+      body: '{}',
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  test('a refusal throws with the route’s error code', async () => {
+    fetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({ error: 'already-pro' }) });
+    await expect(requestCheckout()).rejects.toMatchObject({ code: 'already-pro' });
+    fetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: 'no-customer' }) });
+    await expect(requestBillingPortal()).rejects.toMatchObject({ code: 'no-customer' });
+    fetch.mockResolvedValue({ ok: false, status: 502, json: async () => { throw new Error('html'); } });
+    await expect(requestCheckout()).rejects.toMatchObject({ code: 'purchase-failed' });
+    mockAuth.currentUser = null;
+    await expect(requestCheckout()).rejects.toThrow('Not signed in.');
+  });
 });
 
 test('a mock purchase posts the plan with the ID token', async () => {

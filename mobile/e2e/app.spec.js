@@ -842,7 +842,9 @@ async function mockEntitlement(page, { plan = null } = {}) {
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
       export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
-      export const requestMockPurchase = async () => ({ ok: true });`,
+      export const requestMockPurchase = async () => ({ ok: true });
+      export const requestCheckout = async () => { throw new Error('No Stripe in the app.'); };
+      export const requestBillingPortal = async () => { throw new Error('No Stripe in the app.'); };`,
   }));
 }
 

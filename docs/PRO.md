@@ -6,7 +6,8 @@ need an account.
 
 Today Pro is a data model, rules, a client listener, badges, a flagged paywall and a
 preview-only mock purchase. **No real payment exists yet**; see [TODOs](#todos-for-real-billing).
-Pro already turns ads off (see [docs/ADS.md](ADS.md)).
+Web billing with Stripe Checkout is built behind flags, off by default and test mode only: see
+[docs/STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md). Pro already turns ads off (see [docs/ADS.md](ADS.md)).
 
 ## Data model
 
@@ -15,9 +16,10 @@ Pro already turns ads off (see [docs/ADS.md](ADS.md)).
 | Field | Type | Notes |
 | --- | --- | --- |
 | `plan` | `'pro'` | The only plan sold. Legacy docs may say `'founder'`: see below. |
-| `source` | `'mock' \| 'storekit' \| 'play' \| 'stripe' \| 'revenuecat' \| 'admin'` | Who granted it. Only `mock` is written today. |
+| `source` | `'mock' \| 'storekit' \| 'play' \| 'stripe' \| 'revenuecat' \| 'admin'` | Who granted it. `mock` on previews; `stripe` only with the Stripe flags on ([STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md)). Nothing reads it to decide Pro. |
 | `since` | timestamp | Server time of the grant. |
 | `expiresAt` | timestamp or `null` | End of the paid period. Missing or `null` means no expiry. |
+| `stripeCustomerId`, `stripeSubscriptionId`, `stripeStatus`, `stripeEventCreated` | string, string, string, number | Only on docs the Stripe webhook touched. See [STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md). |
 
 **Legacy founder docs.** Before the Founder tier was dropped, the mock purchase could write
 `{ plan: 'founder', source: 'mock', since, founderNumber, expiresAt: null }` (lifetime). Those
@@ -158,6 +160,7 @@ than a prompt.
 | `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro`, the Pro sheet, the Go Pro entry points and the Pro locks. Web only: always off in the native app (see below). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | off | Early-access types for Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | off | Paywall buttons call the mock route. Previews only. |
+| `NEXT_PUBLIC_STRIPE_WEB_PRO` | off | Web only: Get Pro goes to Stripe Checkout (wins over the mock flag) and a Stripe member gets Manage subscription. Server flags and secrets in [STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md). |
 | `NEXT_PUBLIC_TERMS_URL` | unset | The Pro sheet's Terms link. Hidden when unset. |
 | `NEXT_PUBLIC_PRIVACY_URL` | unset | The Pro sheet's Privacy link. Hidden when unset. |
 | `PRO_MOCK_PURCHASE` | off | Server: the mock route answers at all. |
@@ -202,7 +205,8 @@ tokens, phone numbers or uids. To add a tester, put their uid in `PRO_MOCK_UIDS`
 deploy.
 
 Writes (one transaction): Pro is `{ plan: 'pro', source: 'mock', since: serverTimestamp,
-expiresAt: now + 30 days }`. A legacy founder doc is left as it is. CORS is the same
+expiresAt: now + 30 days }`. A legacy founder doc is left as it is, and so is a live Stripe plan;
+any Stripe ids already on the doc are kept ([STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md)). CORS is the same
 allowlist as the other routes (`src/server/http.js`).
 
 The native app calls the production origin (`apiUrl`), where this route is a 404, and its
@@ -211,7 +215,8 @@ paywall is always off, so mock purchases only work on the web preview.
 ## TODOs for real billing
 
 - **Store billing.** iOS: StoreKit 2 (auto-renewable subscription for Pro). Android: Play
-  Billing (subscription). Web: Stripe Checkout.
+  Billing (subscription). Web: Stripe Checkout, built behind flags in test mode
+  ([STRIPE-WEB-PRO.md](STRIPE-WEB-PRO.md)); live mode is still to do.
   RevenueCat could front all three; if used, set `source: 'revenuecat'` and let its webhooks
   write entitlements.
 - **Server-side receipt validation.** Never trust the client: verify App Store signed

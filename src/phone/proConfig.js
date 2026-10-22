@@ -27,6 +27,14 @@ export function proMockPurchaseEnabled() {
   return process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE === '1';
 }
 
+// Web Pro billing with Stripe Checkout (docs/STRIPE-WEB-PRO.md). Web only:
+// the mobile build always defines it off, and the sheet also checks
+// isNativeApp(). With it on, Get Pro starts Checkout and the mock purchase
+// is never called.
+export function stripeWebProEnabled() {
+  return process.env.NEXT_PUBLIC_STRIPE_WEB_PRO === '1';
+}
+
 // Terms and Privacy links on the Pro sheet. Each shows only when its URL is
 // set, so the sheet never links to a page that isn't there.
 export function proTermsUrl() {
@@ -73,4 +81,16 @@ export const PRO_COPY = {
   error: 'Couldn’t finish that. Try again.',
   link: 'Go Pro',
   pro: 'Pro',
+};
+
+// New on-screen strings for Stripe web billing, shown only with
+// NEXT_PUBLIC_STRIPE_WEB_PRO=1 on the web (UX approved them Oct 22).
+// Everything else the Stripe flow shows reuses PRO_COPY (Get Pro, Getting
+// you set…, the error line).
+export const STRIPE_COPY = {
+  // A muted text link under Back to my bets on the success screen; opens the
+  // Stripe customer portal.
+  manage: 'Manage subscription',
+  // Replaces PRO_COPY.finePrint: cancelling is in the Stripe portal, not Settings.
+  finePrint: `Pro renews at $${PRO_MONTHLY_USD}/mo until you cancel.`,
 };

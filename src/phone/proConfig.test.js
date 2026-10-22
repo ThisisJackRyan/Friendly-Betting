@@ -1,14 +1,16 @@
 import {
   EARLY_ACCESS_TYPES,
   PRO_COPY,
+  STRIPE_COPY,
   proEarlyTypesEnabled,
   proMockPurchaseEnabled,
   proPaywallEnabled,
   proPrivacyUrl,
   proTermsUrl,
+  stripeWebProEnabled,
 } from './proConfig';
 
-const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE'];
+const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE', 'NEXT_PUBLIC_STRIPE_WEB_PRO'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
 
 afterEach(() => {
@@ -44,14 +46,27 @@ test('Terms and Privacy URLs: each its own, blank when unset', () => {
 });
 
 test('every flag is off by default and on only for "1"', () => {
+  const all = () => [proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled(), stripeWebProEnabled()];
   FLAGS.forEach((flag) => delete process.env[flag]);
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect(all()).toEqual([false, false, false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = 'true'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect(all()).toEqual([false, false, false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = '1'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([true, true, true]);
+  expect(all()).toEqual([true, true, true, true]);
 });
 
 test('no real early-access types ship yet', () => {
   expect(EARLY_ACCESS_TYPES).toEqual([]);
+});
+
+// Stripe web billing strings, UX approved Oct 22 (docs/STRIPE-WEB-PRO.md): as few
+// as possible, curly apostrophes like the rest of Pro copy (no straight ones),
+// no em dash, no TODO in the text itself, and none of them already in PRO_COPY.
+test('Stripe copy: few, no em dash, TODO or straight apostrophe, nothing PRO_COPY already has', () => {
+  const strings = Object.values(STRIPE_COPY);
+  expect(strings).toEqual(['Manage subscription', 'Pro renews at $3/mo until you cancel.']);
+  strings.forEach((text) => {
+    expect(text).not.toMatch(/—|TODO|'/);
+    expect(Object.values(PRO_COPY).flat()).not.toContain(text);
+  });
 });

@@ -4,16 +4,20 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FiAward, FiRotateCcw, FiSlash, FiUsers, FiX, FiZap } from 'react-icons/fi';
 import { useModalBackground } from '../platform/modalBackground';
+import { isNativeApp } from '../platform/runtime';
 import ProBadge from './ProBadge';
-import { requestMockPurchase } from './entitlementApi';
+import { leaveForBilling } from './billingRedirect';
+import { requestBillingPortal, requestCheckout, requestMockPurchase } from './entitlementApi';
 import { badgeFor } from './entitlement';
 import { refreshEntitlement, useEntitlementState } from './useEntitlement';
 import {
   PRO_COPY,
   PRO_ROW,
+  STRIPE_COPY,
   proMockPurchaseEnabled,
   proPrivacyUrl,
   proTermsUrl,
+  stripeWebProEnabled,
 } from './proConfig';
 
 const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
@@ -23,19 +27,32 @@ const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
 // something instead of flashing past.
 export const RESTORE_MIN_BUSY_MS = 600;
 
+// Back from Stripe Checkout, the webhook may land a moment after the member
+// does: the plan is read again this often, this many times, before the sheet
+// gives up waiting (Restore purchase still works after that).
+export const CONFIRM_EVERY_MS = 2500;
+export const CONFIRM_TRIES = 8;
+
 // The Pro sheet (UX spec, Oct 20): slides up from the bottom, on top of the
 // page that opened it, and is all of /pro. `highlight` is the benefit row
 // (PRO_ROW) to tint: a locked feature opens it on its own row, Go Pro on
 // row 1. onClose: the X, Maybe later, Escape or a tap on the scrim. onDone:
 // Back to my bets on the success screen.
 //
-// Only rendered with the paywall on (proPaywallEnabled). Buying only works
-// with NEXT_PUBLIC_PRO_MOCK_PURCHASE=1 (previews); otherwise the main button
-// is a disabled Coming soon. Restore purchase reads the entitlement again.
-export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone }) {
+// Only rendered with the paywall on (proPaywallEnabled). On the web with
+// NEXT_PUBLIC_STRIPE_WEB_PRO=1, Get Pro goes to Stripe Checkout
+// (docs/STRIPE-WEB-PRO.md) and a Stripe member gets Manage subscription;
+// otherwise buying only works with NEXT_PUBLIC_PRO_MOCK_PURCHASE=1
+// (previews), and without either the main button is a disabled Coming soon.
+// Restore purchase reads the entitlement again. `confirming`: back from a
+// paid Checkout, waiting for the plan to arrive.
+export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone, confirming = false }) {
   const { entitlement, isPro } = useEntitlementState();
-  const purchasable = proMockPurchaseEnabled();
+  const stripeCheckout = stripeWebProEnabled() && !isNativeApp();
+  const purchasable = stripeCheckout || proMockPurchaseEnabled();
   const [buying, setBuying] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [error, setError] = useState('');
   // '', 'busy' or 'nothing'.
   const [restore, setRestore] = useState('');
@@ -57,6 +74,40 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   // The page behind is inert while the sheet is up (unless the sheet sits
   // inside it), and focus goes back to the opener when it closes.
   useModalBackground(dialogRef, mounted);
+
+  // Back from Checkout: read the plan again until it shows up, or give up.
+  useEffect(() => {
+    if (!confirming || !stripeCheckout) return undefined;
+    let stopped = false;
+    let timer;
+    let tries = 0;
+    setWaiting(true);
+    const check = async () => {
+      tries += 1;
+      const found = await refreshEntitlement().catch(() => false);
+      if (stopped) return;
+      if (found || tries >= CONFIRM_TRIES) setWaiting(false);
+      else timer = setTimeout(check, CONFIRM_EVERY_MS);
+    };
+    check();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [confirming, stripeCheckout]);
+
+  // Back from Checkout with the browser's back button: the page may come back
+  // from the cache still showing Getting you set…
+  useEffect(() => {
+    if (!stripeCheckout) return undefined;
+    const onShow = (event) => {
+      if (!event.persisted) return;
+      setBuying(false);
+      setManaging(false);
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, [stripeCheckout]);
 
   useEffect(() => {
     // Focus starts on the sheet itself, so Tab reaches the X first.
@@ -81,11 +132,52 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   // A plan that loads later as Pro swaps in the success screen.
   const success = isPro || restored;
 
+  // Leaves for the member's Stripe customer portal. True once leaving.
+  const openPortal = async () => {
+    const { url } = await requestBillingPortal();
+    return leaveForBilling(url);
+  };
+
+  // Stripe Checkout: the sheet stays on Getting you set… while the page
+  // leaves. Already Pro (found by the server) shows the success screen; a
+  // subscription that is still open goes to the portal instead of a second
+  // one.
+  const checkout = async () => {
+    try {
+      const { url } = await requestCheckout();
+      if (leaveForBilling(url)) return;
+      if (live.current) setError(PRO_COPY.error);
+    } catch (err) {
+      let handled = false;
+      if (err?.code === 'already-pro') handled = await refreshEntitlement().catch(() => false);
+      if (err?.code === 'already-subscribed') {
+        handled = await openPortal().catch(() => false);
+        if (handled) return;
+      }
+      if (!handled && live.current) setError(PRO_COPY.error);
+    }
+    if (live.current) setBuying(false);
+  };
+
+  const manage = async () => {
+    if (managing) return;
+    setManaging(true);
+    setError('');
+    const left = await openPortal().catch(() => false);
+    if (left || !live.current) return;
+    setManaging(false);
+    setError(PRO_COPY.error);
+  };
+
   const buy = async () => {
-    if (buying || !purchasable) return;
+    if (buying || waiting || !purchasable) return;
     setBuying(true);
     setError('');
     setRestore('');
+    if (stripeCheckout) {
+      await checkout();
+      return;
+    }
     try {
       await requestMockPurchase('pro');
       // Read the new plan now rather than wait for the listener.
@@ -128,8 +220,10 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   const successLine = restored ? PRO_COPY.restored : PRO_COPY.owned;
 
   let mainLabel = PRO_COPY.getPro;
-  if (buying) mainLabel = PRO_COPY.buying;
+  if (buying || waiting) mainLabel = PRO_COPY.buying;
   if (!purchasable) mainLabel = PRO_COPY.comingSoon;
+  // Manage subscription: on the web, for a member with a Stripe customer.
+  const manageable = stripeCheckout && Boolean(entitlement?.stripeCustomerId);
 
   const links = [
     <button
@@ -188,9 +282,25 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
               {successLine}
             </h2>
             <div className="pro-sheet-footer">
+              {manageable && error && (
+                <p className="form-error pro-sheet-error" role="alert">
+                  {error}
+                </p>
+              )}
               <button type="button" className="cta press pro-sheet-main" onClick={() => onDone?.()}>
                 {PRO_COPY.backToBets}
               </button>
+              {manageable && (
+                <button
+                  type="button"
+                  className="pro-sheet-manage"
+                  disabled={managing}
+                  aria-busy={managing || undefined}
+                  onClick={manage}
+                >
+                  {STRIPE_COPY.manage}
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -219,7 +329,7 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
                   <p className="pro-price-amount">{PRO_COPY.proPrice}</p>
                   <p className="pro-price-note">{PRO_COPY.proNote}</p>
                 </div>
-                <p className="pro-fine-print">{PRO_COPY.finePrint}</p>
+                <p className="pro-fine-print">{stripeCheckout ? STRIPE_COPY.finePrint : PRO_COPY.finePrint}</p>
                 <p className="pro-sheet-links">
                   {links.map((link, index) => (
                     <Fragment key={link.key}>
@@ -248,8 +358,8 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
               <button
                 type="button"
                 className="cta press pro-sheet-main"
-                disabled={!purchasable || buying}
-                aria-busy={buying || undefined}
+                disabled={!purchasable || buying || waiting}
+                aria-busy={buying || waiting || undefined}
                 onClick={buy}
               >
                 {mainLabel}
