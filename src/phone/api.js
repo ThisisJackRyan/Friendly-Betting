@@ -300,7 +300,8 @@ async function castLegacyVote(code, pick) {
 // list, same time. A pick still only in the bet's `votes` array is copied to
 // the voter's own doc with the new name (taking the time of the copy). Rules
 // from before per-voter docs deny that, so a denied rename is made in the
-// array, the old way.
+// array, the old way. Its promise can answer late; VoteScreen also takes the
+// live snapshot as the confirmation.
 export async function renameVote(code, voterId, name) {
   const trimmed = cleanName(name);
   try {

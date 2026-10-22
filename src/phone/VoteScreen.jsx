@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from '../platform/Link';
 import { useParams } from '../platform/navigation';
 import { FiCheckCircle, FiSlash } from 'react-icons/fi';
@@ -37,6 +37,9 @@ import { NAME_PLACEHOLDER } from './nameEditCopy';
 import { cleanName, NAME_MAX } from './votes';
 
 const LOAD_ERROR = 'Could not open this bet.';
+// How long a name save may show Saving… before the form gives up and shows
+// the save error. A later success still lands.
+export const RENAME_WAIT_MS = 10000;
 
 // The bet with this voter's pick showing `name`, while a rename is saving.
 function withName(bet, voterId, name) {
@@ -62,6 +65,10 @@ const VoteScreen = () => {
   // A name just saved on the voter's pick, shown until a snapshot has it.
   const [renamed, setRenamed] = useState(null);
   const minElapsed = useMinHold(code);
+  const alive = useRef(true);
+  // The name save waiting on a snapshot to confirm it, if any.
+  const renameWait = useRef(null);
+  const renameSeq = useRef(0);
 
   useEffect(() => {
     document.title = 'Make your call · Friendly';
@@ -82,9 +89,24 @@ const VoteScreen = () => {
 
   const existing = voteFor(bet, user?.uid);
   const storedName = existing?.name || '';
+  const storedRef = useRef(null);
+  storedRef.current = existing ? storedName : null;
   useEffect(() => {
     if (renamed !== null && storedName === renamed) setRenamed(null);
   }, [renamed, storedName]);
+  // A snapshot with the new name means the write is on the server, even if
+  // the transaction's own answer is slow to come back.
+  useEffect(() => {
+    const wait = renameWait.current;
+    if (wait && existing && storedName === wait.name) wait.done();
+  }, [existing, storedName]);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const tally = withName(withOptimisticVote(bet, optimistic), user?.uid, renamed);
   const selectedId = pendingId || existing?.optionId || null;
   const selected = (bet?.options || []).find((option) => option.id === selectedId);
@@ -129,18 +151,42 @@ const VoteScreen = () => {
     }
   };
 
-  // Only the name changes; the side stays whatever the bet records.
-  const saveName = async (next) => {
+  // Only the name changes; the side stays whatever the bet records. Done as
+  // soon as renameVote resolves or a snapshot shows the new name; after
+  // RENAME_WAIT_MS with neither it fails, and a later success still lands.
+  const saveName = (next) => new Promise((resolve, reject) => {
+    let settled = false;
+    const seq = ++renameSeq.current;
+    const landed = () => {
+      // A newer save owns the remembered name.
+      if (seq !== renameSeq.current) return;
+      rememberName(next);
+      if (alive.current) setName(next);
+    };
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (renameWait.current === wait) renameWait.current = null;
+      if (err) {
+        if (alive.current) setRenamed(null);
+        reject(err);
+        return;
+      }
+      landed();
+      resolve();
+    };
+    const wait = { name: next, done: () => finish() };
+    // NameEdit shows its own save error for any failure, this one included.
+    const timer = setTimeout(() => finish(new Error()), RENAME_WAIT_MS);
+    renameWait.current = wait;
     setRenamed(next);
-    try {
-      await renameVote(code, user.uid, next);
-    } catch (err) {
-      setRenamed(null);
-      throw err;
-    }
-    if (next) rememberName(next);
-    setName(next);
-  };
+    if (storedRef.current === next) wait.done();
+    renameVote(code, user.uid, next).then(
+      () => (settled ? landed() : finish()),
+      (err) => finish(err),
+    );
+  });
 
   return (
     <main className="phone focus-column">
