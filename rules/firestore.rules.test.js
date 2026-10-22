@@ -514,6 +514,76 @@ describe('pro entitlements', () => {
   });
 });
 
+describe('stripe web billing (docs/STRIPE-WEB-PRO.md)', () => {
+  const own = 'entitlements/creator-1';
+  const stripePro = {
+    plan: 'pro',
+    source: 'stripe',
+    since: 1,
+    expiresAt: 4102444800000,
+    stripeCustomerId: 'cus_test_1',
+    stripeSubscriptionId: 'sub_test_1',
+    stripeStatus: 'active',
+    stripeEventCreated: 1,
+  };
+
+  test('a member reads their own Stripe entitlement, and nobody else can', async () => {
+    await seed({ [own]: stripePro });
+    const snap = await assertSucceeds(creator().doc(own).get());
+    expect(snap.data()).toEqual(stripePro);
+    for (const db of [otherPhone(), anon(), guest()]) await assertFails(db.doc(own).get());
+  });
+
+  test('the owner cannot grant themselves a Stripe plan or Stripe ids', async () => {
+    await assertFails(creator().doc(own).set(stripePro));
+    await assertFails(creator().doc(own).set({ plan: 'pro', source: 'stripe', since: 1, expiresAt: null }));
+    await assertFails(creator().doc(own).set({ stripeCustomerId: 'cus_test_1' }));
+    await assertFails(anon().doc('entitlements/anon-1').set({ ...stripePro }));
+  });
+
+  test('the owner cannot extend, edit or remove their Stripe plan', async () => {
+    await seed({ [own]: { ...stripePro, stripeStatus: 'canceled', expiresAt: 1 } });
+    await assertFails(creator().doc(own).update({ expiresAt: 4102444800000 }));
+    await assertFails(creator().doc(own).update({ stripeStatus: 'active' }));
+    await assertFails(creator().doc(own).update({ stripeCustomerId: 'cus_someone_else' }));
+    await assertFails(creator().doc(own).update({ stripeSubscriptionId: 'sub_other', stripeEventCreated: 9 }));
+    await assertFails(creator().doc(own).set({ ...stripePro, expiresAt: null }));
+    await assertFails(creator().doc(own).delete());
+  });
+
+  test('others cannot write Stripe fields on anyone’s entitlement', async () => {
+    await seed({ [own]: stripePro });
+    for (const db of [otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc(own).update({ stripeCustomerId: 'cus_evil' }));
+      await assertFails(db.doc(own).set({ ...stripePro, stripeCustomerId: 'cus_evil' }));
+    }
+  });
+
+  test('no client reads or writes the processed-event log (stripeEvents)', async () => {
+    await seed({ 'stripeEvents/evt_test_1': { type: 'customer.subscription.updated', created: 1, processedAt: 1 } });
+    for (const db of [creator(), otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc('stripeEvents/evt_test_1').get());
+      await assertFails(db.collection('stripeEvents').get());
+      await assertFails(db.doc('stripeEvents/evt_test_1').set({ type: 'x', created: 2 }));
+      await assertFails(db.doc('stripeEvents/evt_test_1').update({ created: 2 }));
+      await assertFails(db.doc('stripeEvents/evt_test_1').delete());
+      await assertFails(db.doc('stripeEvents/evt_test_new').set({ type: 'x', created: 2 }));
+    }
+  });
+
+  test('no client reads or writes the customer-to-uid map (stripeCustomers), not even its own', async () => {
+    await seed({ 'stripeCustomers/cus_test_1': { uid: 'creator-1' } });
+    for (const db of [creator(), otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc('stripeCustomers/cus_test_1').get());
+      await assertFails(db.collection('stripeCustomers').get());
+      await assertFails(db.collection('stripeCustomers').where('uid', '==', 'creator-1').get());
+      await assertFails(db.doc('stripeCustomers/cus_test_1').set({ uid: 'creator-9' }));
+      await assertFails(db.doc('stripeCustomers/cus_test_1').delete());
+      await assertFails(db.doc('stripeCustomers/cus_test_2').set({ uid: 'creator-1' }));
+    }
+  });
+});
+
 describe('meta', () => {
   const founders = 'meta/founders';
 
