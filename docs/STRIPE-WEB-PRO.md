@@ -117,7 +117,7 @@ entitlements/{uid}
   plan: 'pro', source: 'stripe', since, expiresAt   // the shape the app already reads
   stripeCustomerId, stripeSubscriptionId,           // for the portal and for ordering
   stripeStatus, stripeEventCreated                  // last applied status and event.created (s)
-stripeEvents/{eventId}      { type, created, processedAt }   // server only
+stripeEvents/{eventId}      { type, created, processedAt, expireAt }   // server only
 stripeCustomers/{customerId} { uid }                         // server only
 ```
 
@@ -130,9 +130,12 @@ stripeCustomers/{customerId} { uid }                         // server only
   the doc stays and `expiresAt` becomes now (or `ended_at` if earlier, never later than it
   already was), so `isProEntitlement` returns false. Nothing is deleted. A failed renewal
   (`past_due`) ends Pro at once; if Stripe's retry then succeeds, `updated` -> `active` brings it
-  back. (If a grace period is wanted later, add `past_due` to `LIVE_STATUSES`.)
+  back. Keeping Pro during `past_due` is an [open question](#open-questions).
 - **Idempotent.** `stripeEvents/{event.id}` is read and written inside the same transaction as
-  the entitlement: a redelivered event changes nothing.
+  the entitlement: a redelivered event changes nothing. Each record has `expireAt` (a Timestamp
+  90 days out) so a Firestore TTL policy can delete it; see the dashboard setup. 90 days is well
+  past Stripe's 3 days of retries and the 30 days an event can be resent, and a record deleted
+  later only means a very late resend is applied again, still ordered by `stripeEventCreated`.
 - **Ordered.** For the subscription already on the doc, an event with `created` older than
   `stripeEventCreated` is ignored, and once that subscription is `canceled` or
   `incomplete_expired` (Stripe never revives those) no later event about it grants Pro. So a late
@@ -287,6 +290,17 @@ change; it needs the account owner.
    default redirect to the base URL + `/pro`. To use a non-default configuration, put its
    `bpc_...` id in `STRIPE_PORTAL_CONFIGURATION_ID`.
 5. Optional: Settings > Branding, and the business name shown on Checkout.
+6. **Firestore TTL on `stripeEvents`** (recommended; Firebase, not Stripe). Without it the
+   collection grows by a few docs per subscription per month forever. Firestore TTL is per
+   collection group and field, and the project is shared, so this is a one-time step:
+   - Console: Firestore > Time-to-live > Create policy: collection group `stripeEvents`,
+     timestamp field `expireAt`.
+   - Or `gcloud firestore fields ttls update expireAt --collection-group=stripeEvents
+     --enable-ttl --project=<firebase project id>`.
+
+   Docs are deleted some time after `expireAt` (typically within 24 hours). Records written
+   before `expireAt` existed have no such field and are never deleted by the policy; delete any
+   by hand.
 
 ## Local testing
 
@@ -334,6 +348,16 @@ with the real library.
 9. Before any production or live-mode work: Terms and Privacy URLs set, live product and price,
    `STRIPE_ALLOW_LIVE` review, App Store rules for the native apps (docs/PRO.md), and the mock
    [pre-launch cleanup](PRO.md#pre-launch-cleanup).
+
+## Open questions
+
+- **Keep Pro during `past_due`?** Today a failed renewal ends Pro at once (`past_due` is not in
+  `LIVE_STATUSES`), and Stripe's retry bringing the subscription back to `active` restores it.
+  A grace period (Pro kept while Stripe retries the card) is kinder to a member whose card just
+  expired, but gives away Pro for the retry window if it never pays. A product decision; the
+  code change would be adding `past_due` to `LIVE_STATUSES`; Pro would then last until Stripe's
+  retries give up and the subscription moves to `canceled` or `unpaid` (the dashboard's retry
+  settings). No change made.
 
 ## Out of scope
 

@@ -67,6 +67,11 @@ const validCustomer = (id) => typeof id === 'string' && CUSTOMER_PATTERN.test(id
 const idOf = (value) => (typeof value === 'string' ? value : value?.id || '');
 
 const SECOND = 1000;
+// stripeEvents/{eventId} carry expireAt this far out, for a Firestore TTL
+// policy (docs/STRIPE-WEB-PRO.md). Well past Stripe's 3 days of retries and
+// the 30 days an event can be resent from the dashboard.
+export const EVENT_RECORD_DAYS = 90;
+const DAY = 24 * 60 * 60 * SECOND;
 
 // Checkout -----------------------------------------------------------------
 
@@ -238,7 +243,7 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
 // is written. "Nothing" includes stripeEvents: every preview's endpoint gets
 // every event of the shared test account, and one that skips an event must
 // not mark it handled for a preview that has the uid on its list.
-export async function applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp, allowed = true }) {
+export async function applySubscriptionEvent({ db, event, uid, state, eventCreated, now, since, toTimestamp = (ms) => ms, allowed = true }) {
   if (!allowed && state.live) return { applied: false, reason: 'not-allowlisted' };
   const eventRef = db.doc(`stripeEvents/${event.id}`);
   const entitlementRef = db.doc(`entitlements/${uid}`);
@@ -249,7 +254,7 @@ export async function applySubscriptionEvent({ db, event, uid, state, eventCreat
     const existing = snap.exists ? snap.data() : null;
     if (!allowed && existing?.stripeSubscriptionId !== state.subscriptionId) return { applied: false, reason: 'not-allowlisted' };
     const next = nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp });
-    tx.set(eventRef, { type: event.type, created: event.created, processedAt: since });
+    tx.set(eventRef, { type: event.type, created: event.created, processedAt: since, expireAt: toTimestamp(now + EVENT_RECORD_DAYS * DAY) });
     if (validCustomer(state.customerId)) tx.set(db.doc(`stripeCustomers/${state.customerId}`), { uid });
     if (next) tx.set(entitlementRef, next);
     return { applied: Boolean(next) };

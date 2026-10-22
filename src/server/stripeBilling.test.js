@@ -619,7 +619,16 @@ describe('webhook route: events', () => {
     expect(res.status).toBe(200);
     expect(db.writes.length).toBe(writes);
     expect(ent()).toEqual(first);
-    expect(db.data(`stripeEvents/${evt.id}`)).toEqual({ type: 'customer.subscription.created', created: SEC, processedAt: 'SERVER_TIME' });
+    expect(db.data(`stripeEvents/${evt.id}`)).toEqual({ type: 'customer.subscription.created', created: SEC, processedAt: 'SERVER_TIME', expireAt: { ts: expect.any(Number) } });
+  });
+
+  test('the event record carries an expireAt Timestamp 90 days out, for a TTL policy', async () => {
+    const before = Date.now();
+    const evt = event('customer.subscription.created', subscription());
+    await deliver(evt);
+    const { ts } = db.data(`stripeEvents/${evt.id}`).expireAt;
+    expect(ts).toBeGreaterThanOrEqual(before + 90 * DAY * 1000);
+    expect(ts).toBeLessThanOrEqual(Date.now() + 90 * DAY * 1000);
   });
 
   test('out of order: an older updated event after a delete cannot bring Pro back', async () => {
