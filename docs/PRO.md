@@ -51,6 +51,13 @@ any more: like the rest of `meta` it is closed by default. Covered in
 `rules/firestore.rules.test.js` (`pro entitlements`, `meta`). The rules file is not
 auto-deployed (see the note at its top).
 
+### Post-deploy steps (after the `entitlements` rules are live)
+
+1. Remove the permission-denied => no-plan mapping in src/phone/entitlementApi.js.
+2. A session that was open across the rules deploy needs a reload to see Pro: it remembers a
+   denied read for the rest of the session (see Client), so its listener and Restore purchase
+   keep answering no plan until the page or app reloads.
+
 ## Client
 
 - `src/phone/entitlementApi.js`: `subscribeEntitlement(uid, cb)` (onSnapshot of the user's own
@@ -58,7 +65,10 @@ auto-deployed (see the note at its top).
   `requestMockPurchase(plan)`. The only Pro reads. Both treat `permission-denied` on the
   user's own doc as no entitlement, like a missing doc, so rules without the `entitlements`
   block (not yet deployed) read as not Pro rather than an error; any other error is still an
-  error. Jest mocks it for every test in `src/setupTests.js`.
+  error. A denied read is remembered per uid for the session, so Restore purchase after the
+  listener was denied answers at once instead of waiting on another server read. Preview and dev
+  builds log a denied read with its error code only (`console.info`, never the uid, path or
+  error); production builds log nothing. Jest mocks it for every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.
   `useEntitlement()` returns `{ entitlement, isPro, loading }` and keeps `src/ads/pro.js`
   current through `setProEntitlement`, so the ad service's synchronous `isPro()` is right on

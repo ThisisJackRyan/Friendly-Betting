@@ -88,9 +88,17 @@ bet. Fine at friendly-bet scale; if lists grow to hundreds, denormalize
   way, in the bet's `votes` array (`castLegacyVote`, `renameLegacyVote`). Any other
   error is thrown as before. Under the phase-1 rules the fallback only succeeds for a
   first pick (append); a refusal on both paths surfaces the refusal.
+- **Remembered for the session:** a denied vote-doc read (listener, list or the
+  rename's read of the voter's doc), or a denied vote-doc write whose array fallback
+  then succeeds, sets `voteDocsDenied` in `api.js` for every bet. From then on no vote
+  listener opens, reads answer no docs, and picks and renames go straight to the array,
+  so the live rules log no more 403s. Neither signal can happen under the phase-1 rules
+  (vote docs are readable by anyone, and they refuse the array write for anything they
+  refuse as a doc), so behaviour there is unchanged. A session open across the rules
+  deploy keeps using the array until a reload.
 - `deleteBet` client fallback (no Admin credentials): deletes the vote docs and the
-  bet in one batch. The rules only let the creator delete vote docs in a write that
-  also deletes the bet.
+  bet in one transaction, listing the vote docs inside it. The rules only let the
+  creator delete vote docs in a write that also deletes the bet.
 
 ## Rules
 

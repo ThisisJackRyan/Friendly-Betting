@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Paywall from './Paywall';
-import ProSheet from './ProSheet';
+import ProSheet, { RESTORE_MIN_BUSY_MS } from './ProSheet';
 import EntitlementSync from './EntitlementSync';
 import { fetchEntitlement, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
@@ -71,6 +71,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   FLAGS.forEach((flag) => {
     if (saved[flag] === undefined) delete process.env[flag];
     else process.env[flag] = saved[flag];
@@ -344,7 +345,7 @@ describe('Restore purchase', () => {
     fetchEntitlement.mockResolvedValue(null);
     await openSheet();
     await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
-    const note = screen.getByText(SPEC.nothing);
+    const note = await screen.findByText(SPEC.nothing);
     expect(note).toHaveClass('pro-sheet-note');
     expect(note.nextElementSibling).toBe(main());
     expect(screen.getByRole('button', { name: SPEC.restore })).toBeEnabled();
@@ -354,14 +355,47 @@ describe('Restore purchase', () => {
     fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: 1 });
     await openSheet();
     await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
+    expect(await screen.findByText(SPEC.nothing)).toBeInTheDocument();
+  });
+
+  test('Restoring… (aria-busy) shows from the tap until the answer, which replaces it', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    let finish;
+    fetchEntitlement.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    await openSheet();
+    await user.click(screen.getByRole('button', { name: SPEC.restore }));
+    const busy = screen.getByRole('button', { name: SPEC.restoring });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    // A slow read: still Restoring… seconds later.
+    await act(async () => { await jest.advanceTimersByTimeAsync(4000); });
+    expect(screen.getByRole('button', { name: SPEC.restoring })).toBeDisabled();
+    expect(screen.queryByText(SPEC.nothing)).toBeNull();
+    await act(async () => finish(null));
     expect(screen.getByText(SPEC.nothing)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: SPEC.restoring })).toBeNull();
+    expect(screen.getByRole('button', { name: SPEC.restore })).not.toHaveAttribute('aria-busy');
+  });
+
+  test('an answer that comes back at once still shows Restoring… for RESTORE_MIN_BUSY_MS', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    fetchEntitlement.mockResolvedValue(null);
+    await openSheet();
+    await user.click(screen.getByRole('button', { name: SPEC.restore }));
+    await act(async () => { await jest.advanceTimersByTimeAsync(RESTORE_MIN_BUSY_MS - 1); });
+    expect(screen.getByRole('button', { name: SPEC.restoring })).toBeDisabled();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText(SPEC.nothing)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: SPEC.restore })).toBeEnabled();
   });
 
   test('a failed read shows the error and keeps the last known plan', async () => {
     fetchEntitlement.mockRejectedValue(new Error('offline'));
     await openSheet();
     await userEvent.click(screen.getByRole('button', { name: SPEC.restore }));
-    expect(screen.getByRole('alert')).toHaveTextContent(SPEC.error);
+    expect(await screen.findByRole('alert')).toHaveTextContent(SPEC.error);
     expect(screen.getByRole('button', { name: SPEC.restore })).toBeEnabled();
   });
 });

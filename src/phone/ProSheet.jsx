@@ -18,6 +18,11 @@ import {
 
 const BENEFIT_ICONS = [FiSlash, FiAward, FiRotateCcw, FiUsers, FiZap];
 
+// Restoring… stays up at least this long, so an answer that comes back at
+// once (a read already denied this session) still shows the tap did
+// something instead of flashing past.
+export const RESTORE_MIN_BUSY_MS = 600;
+
 // The Pro sheet (UX spec, Oct 20): slides up from the bottom, on top of the
 // page that opened it, and is all of /pro. `highlight` is the benefit row
 // (PRO_ROW) to tint: a locked feature opens it on its own row, Go Pro on
@@ -38,12 +43,14 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   const [mounted, setMounted] = useState(false);
   const dialogRef = useRef(null);
   const live = useRef(true);
+  const restoreHold = useRef(null);
 
   useEffect(() => {
     live.current = true;
     setMounted(true);
     return () => {
       live.current = false;
+      clearTimeout(restoreHold.current);
     };
   }, []);
 
@@ -90,16 +97,27 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
     }
   };
 
+  // Restoring… from the tap until the answer; Nothing to restore and the
+  // error wait out RESTORE_MIN_BUSY_MS. A restored plan swaps in the success
+  // screen at once.
   const runRestore = async () => {
     if (restore === 'busy' || buying) return;
     setRestore('busy');
     setError('');
+    const started = Date.now();
+    const held = () => new Promise((resolve) => {
+      const left = RESTORE_MIN_BUSY_MS - (Date.now() - started);
+      if (left <= 0) resolve();
+      else restoreHold.current = setTimeout(resolve, left);
+    });
     try {
       const found = await refreshEntitlement();
+      if (!found) await held();
       if (!live.current) return;
       setRestored(found);
       setRestore(found ? '' : 'nothing');
     } catch {
+      await held();
       if (!live.current) return;
       setRestore('');
       setError(PRO_COPY.error);
@@ -114,7 +132,14 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   if (!purchasable) mainLabel = PRO_COPY.comingSoon;
 
   const links = [
-    <button key="restore" type="button" className="pro-sheet-link" disabled={restore === 'busy' || buying} onClick={runRestore}>
+    <button
+      key="restore"
+      type="button"
+      className="pro-sheet-link"
+      disabled={restore === 'busy' || buying}
+      aria-busy={restore === 'busy' || undefined}
+      onClick={runRestore}
+    >
       {restore === 'busy' ? PRO_COPY.restoring : PRO_COPY.restore}
     </button>,
   ];

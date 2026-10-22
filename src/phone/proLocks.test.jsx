@@ -216,3 +216,26 @@ describe('head-to-head stats (Friends on My bets)', () => {
     expect(friends()).toHaveFocus();
   });
 });
+
+// Every Restore purchase entry point is the Pro sheet's own link; each shows
+// Restoring… (disabled, aria-busy) from the tap until the answer.
+describe.each([
+  ['My bets (Friends)', () => <MyBetsList user={MAYA} />, () => within(screen.getByRole('group', { name: 'Filter bets by status' })).getByRole('button', { name: /^Friends/ })],
+  ['Run it back', () => <RunItBack bet={SETTLED} code="old123" user={MAYA} />, () => screen.getByRole('button', { name: /^Run it back/ })],
+])('Restore purchase from %s', (_label, element, opener) => {
+  test('Restoring… while the read is out, then Nothing to restore on this account.', async () => {
+    setup();
+    let answer;
+    fetchEntitlement.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    await show(element());
+    await userEvent.click(opener());
+    const sheet = screen.getByRole('dialog', { name: SHEET });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Restore purchase' }));
+    const busy = within(sheet).getByRole('button', { name: 'Restoring…' });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    await act(async () => answer(null));
+    expect(await within(sheet).findByRole('status')).toHaveTextContent('Nothing to restore on this account.');
+    expect(within(sheet).getByRole('button', { name: 'Restore purchase' })).toBeEnabled();
+  });
+});

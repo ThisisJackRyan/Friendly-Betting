@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import { navigation } from 'next/navigation';
 import { useIdentity } from './identity';
+import { __resetVoteRulesForTests } from './api';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -118,6 +119,7 @@ const openBet = {
 };
 
 beforeEach(() => {
+  __resetVoteRulesForTests();
   fake.held = false;
   fake.queue = [];
   fake.docs.clear();

@@ -1,7 +1,8 @@
 import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
 import {
-  callOffBet, castVote, deleteBet, renameVote, saveBet, settleBet, subscribeBet, subscribeMyBets, undoSettle,
+  __resetVoteRulesForTests, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
+  subscribeMyBets, undoSettle,
 } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
@@ -40,6 +41,7 @@ let voteRules;
 let clock;
 let tx;
 beforeEach(() => {
+  __resetVoteRulesForTests();
   stored = {
     schemaVersion: 2, status: 'open', createdByID: 'creator', question: 'Game on?', stake: 'Pizza',
     options: [{ id: 'a', label: 'Yes' }, { id: 'b', label: 'No' }],
@@ -710,5 +712,107 @@ describe('live listeners merge the bet with its vote docs', () => {
     expect(votesListener('one').stopped).toBe(true);
     stop();
     expect(listeners.every((item) => item.stopped)).toBe(true);
+  });
+});
+
+describe('a session that learns the rules deny vote docs', () => {
+  const voteWrites = () => [...tx.set.mock.calls, ...tx.update.mock.calls].filter(([ref]) => isVoteRef(ref));
+  const voteReads = () => tx.get.mock.calls.filter(([ref]) => isVoteRef(ref));
+
+  test('a denied vote-doc read is remembered: later picks, renames and reads skip vote docs', async () => {
+    voteRules = false;
+    await expect(readVoteDocs('abc123')).resolves.toEqual([]);
+    expect(getDocs).toHaveBeenCalledTimes(1);
+
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(voteWrites()).toEqual([]);
+    expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(rememberBet).toHaveBeenCalledWith('maya', 'abc123');
+
+    await renameVote('abc123', 'maya', 'May');
+    expect(runTransaction).toHaveBeenCalledTimes(2);
+    expect(voteReads()).toEqual([]);
+    expect(stored.votes[2].name).toBe('May');
+
+    await readVoteDocs('other');
+    await settleBet('abc123', 'a');
+    expect(getDocs).toHaveBeenCalledTimes(1);
+  });
+
+  test('a denied vote listen is remembered: the next subscribeBet opens no votes listener', () => {
+    const listeners = [];
+    onSnapshot.mockImplementation((ref, next, error) => {
+      listeners.push({ ref, next, error });
+      return () => {};
+    });
+    subscribeBet('abc123', () => {});
+    listeners.find((item) => item.ref.path === 'bets/abc123/votes').error(denied());
+    const onChange = jest.fn();
+    subscribeBet('two', onChange);
+    expect(listeners.filter((item) => item.ref.path).map((item) => item.ref.path)).toEqual(['bets/abc123/votes']);
+    listeners[listeners.length - 1].next({ id: 'two', exists: () => true, data: () => stored, metadata: { fromCache: false } });
+    expect(onChange).toHaveBeenCalledWith({ id: 'two', ...stored }, undefined, { fromCache: false });
+  });
+
+  test('a denied pick whose array fallback succeeds is remembered: the next pick is one transaction', async () => {
+    voteRules = false;
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(runTransaction).toHaveBeenCalledTimes(2);
+    runTransaction.mockClear();
+    tx.set.mockClear();
+    await castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'b' });
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(voteWrites()).toEqual([]);
+  });
+
+  test('a denied rename read is remembered after its array fallback', async () => {
+    voteRules = false;
+    await renameVote('abc123', 'jack', 'John');
+    expect(voteReads()).toHaveLength(1);
+    tx.get.mockClear();
+    await renameVote('abc123', 'jack', 'Johnny');
+    expect(voteReads()).toEqual([]);
+    expect(stored.votes[0].name).toBe('Johnny');
+  });
+
+  test('a denied pick whose fallback also fails teaches nothing (the bet closed meanwhile)', async () => {
+    let attempt = 0;
+    const realRun = runTransaction.getMockImplementation();
+    runTransaction.mockImplementation(async (db, run) => {
+      attempt += 1;
+      if (attempt === 1) throw denied();
+      if (attempt === 2) throw Object.assign(new Error('This bet is closed.'), { code: 'permission-denied' });
+      return realRun(db, run);
+    });
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('This bet is closed.');
+    await castVote('abc123', { voterId: 'maya', name: '', optionId: 'a' });
+    expect(voteDocs.maya).toMatchObject({ voterId: 'maya', optionId: 'a' });
+  });
+
+  test('other errors are not swallowed or remembered', async () => {
+    const offline = Object.assign(new Error('offline'), { code: 'unavailable' });
+    getDocs.mockRejectedValueOnce(offline);
+    await expect(readVoteDocs('abc123')).rejects.toBe(offline);
+    await readVoteDocs('abc123');
+    expect(getDocs).toHaveBeenCalledTimes(2);
+
+    runTransaction.mockRejectedValueOnce(offline);
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toBe(offline);
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    await castVote('abc123', { voterId: 'maya', name: '', optionId: 'a' });
+    expect(voteDocs.maya).toMatchObject({ optionId: 'a' });
+  });
+
+  test('with the per-voter rules deployed, every call keeps using vote docs', async () => {
+    await readVoteDocs('abc123');
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    await renameVote('abc123', 'maya', 'May');
+    await castVote('abc123', { voterId: 'maya', name: 'May', optionId: 'b' });
+    await readVoteDocs('abc123');
+    expect(getDocs).toHaveBeenCalledTimes(2);
+    expect(voteDocs.maya).toMatchObject({ voterId: 'maya', name: 'May', optionId: 'b' });
+    expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam']);
+    expect(voteReads()).toHaveLength(1);
   });
 });

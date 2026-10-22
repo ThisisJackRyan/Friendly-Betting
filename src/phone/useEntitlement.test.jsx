@@ -6,6 +6,7 @@ import { isPro, whenProKnown } from '../ads/pro';
 import { __resetAdsForTests, canShowInterstitial, showInterstitial } from '../ads/adService';
 import { showHouseAd } from '../ads/HouseAd';
 import EntitlementSync from './EntitlementSync';
+import { __resetDeniedForTests } from './entitlementApi';
 
 // The real entitlementApi on a fake Firestore: only onSnapshot is stubbed.
 jest.unmock('./entitlementApi');
@@ -48,6 +49,8 @@ beforeEach(() => {
   useSignedInUser.mockReset();
   useSignedInUser.mockReturnValue(creator);
   __resetEntitlementForTests();
+  __resetDeniedForTests();
+  getDocFromServer.mockReset();
   __resetAdsForTests();
   localStorage.clear();
   showHouseAd.mockClear();
@@ -159,6 +162,13 @@ test('a denied read on Restore purchase is nothing to restore, not an error', as
   };
   getDocFromServer.mockRejectedValue(denied());
   expect(await refresh()).toEqual({ found: false });
+  // The listener's denial already answered it: no server read this session.
+  expect(getDocFromServer).not.toHaveBeenCalled();
+  // A fresh session (no denial seen yet) asks the server; a denied answer is no plan.
+  __resetDeniedForTests();
+  expect(await refresh()).toEqual({ found: false });
+  expect(getDocFromServer).toHaveBeenCalledTimes(1);
+  __resetDeniedForTests();
   getDocFromServer.mockResolvedValue({ exists: () => false, data: () => undefined });
   expect(await refresh()).toEqual({ found: false });
   getDocFromServer.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));

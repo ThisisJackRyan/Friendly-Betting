@@ -90,6 +90,27 @@ function isDenied(err) {
   return PERMISSION_DENIED.includes(err?.code);
 }
 
+// Set once this session learns the live rules have no per-voter docs, so
+// every later vote-doc read and write is skipped (no more console 403s) and
+// picks go straight to the array. It covers every bet, as the rules do. Two
+// signals only, both impossible under rules with per-voter docs: a denied
+// read of vote docs (those rules let anyone read them), or a denied vote-doc
+// write whose array fallback then succeeded (those rules refuse the array
+// write for anything they refuse as a doc). A denied write whose fallback
+// also fails (the bet closed meanwhile) teaches nothing. A session open
+// across the rules deploy keeps the array until a reload; the array still
+// takes first picks then (docs/VOTE-SECURITY.md).
+let voteDocsDenied = false;
+
+function noteVoteDocsDenied() {
+  voteDocsDenied = true;
+}
+
+// Tests only.
+export function __resetVoteRulesForTests() {
+  voteDocsDenied = false;
+}
+
 function votesRef(code) {
   return collection(db, 'bets', code, 'votes');
 }
@@ -107,21 +128,31 @@ function voteDocsOf(snap) {
 
 // The bet's vote docs, read once. Denied (rules without per-voter docs): none.
 export async function readVoteDocs(code) {
+  if (voteDocsDenied) return [];
   try {
     return voteDocsOf(await getDocs(votesRef(code)));
   } catch (err) {
-    if (isDenied(err)) return [];
-    throw err;
+    if (!isDenied(err)) throw err;
+    noteVoteDocsDenied();
+    return [];
   }
 }
 
 // Calls `onDocs` with the bet's vote docs on every change. A failed listen
 // (denied by rules without per-voter docs, or dropped) counts as no new docs.
+// Once denied this session, no listener is opened at all.
 function subscribeVoteDocs(code, onDocs) {
+  if (voteDocsDenied) {
+    onDocs(null);
+    return () => {};
+  }
   return onSnapshot(
     votesRef(code),
     (snap) => onDocs(voteDocsOf(snap)),
-    () => onDocs(null),
+    (err) => {
+      if (isDenied(err)) noteVoteDocsDenied();
+      onDocs(null);
+    },
   );
 }
 
@@ -266,9 +297,15 @@ async function readPickBet(tx, code, pick) {
 // The voter's pick goes in their own doc, bets/{code}/votes/{uid}, which only
 // they can write. A new side moves them to the end of the list, as before.
 // Rules from before per-voter docs deny that write, so a denied one is made
-// the old way, in the bet's `votes` array.
+// the old way, in the bet's `votes` array; once the session knows that
+// (voteDocsDenied), picks skip the doc and go there directly.
 export async function castVote(code, vote) {
   const pick = { voterId: vote.voterId, name: cleanName(vote.name), optionId: vote.optionId };
+  if (voteDocsDenied) {
+    await castLegacyVote(code, pick);
+    rememberBet(pick.voterId, code);
+    return;
+  }
   try {
     await runTransaction(db, async (tx) => {
       await readPickBet(tx, code, pick);
@@ -277,6 +314,7 @@ export async function castVote(code, vote) {
   } catch (err) {
     if (!isDenied(err)) throw err;
     await castLegacyVote(code, pick);
+    noteVoteDocsDenied();
   }
   rememberBet(pick.voterId, code);
 }
@@ -299,16 +337,25 @@ async function castLegacyVote(code, pick) {
 // there than the voter's doc (mergeVotes keeps the later one), is copied to
 // the voter's own doc with the new name (taking the time of the copy). Rules
 // from before per-voter docs deny that, so a denied rename is made in the
-// array, the old way. Its promise can answer late; VoteScreen also takes the
-// live snapshot as the confirmation.
+// array, the old way, and so is every rename once the session knows the rules
+// deny vote docs (voteDocsDenied). Its promise can answer late; VoteScreen
+// also takes the live snapshot as the confirmation.
 export async function renameVote(code, voterId, name) {
   const trimmed = cleanName(name);
+  if (voteDocsDenied) {
+    await renameLegacyVote(code, voterId, trimmed);
+    return;
+  }
   try {
     await runTransaction(db, async (tx) => {
       const data = await readOpenBet(tx, code);
       if (!voterId) throw new Error('Your pick isn’t in yet.');
       const ref = voteRef(code, voterId);
-      const own = await tx.get(ref);
+      // A denied read of the voter's own doc is a sure sign of the old rules.
+      const own = await tx.get(ref).catch((err) => {
+        if (isDenied(err)) noteVoteDocsDenied();
+        throw err;
+      });
       const doc = own.exists() ? voteFromDoc(voterId, own.data()) : null;
       const mine = mergeVotes(data.votes, doc ? [doc] : []).filter((item) => item.voterId === voterId).pop();
       if (!mine) throw new Error('Your pick isn’t in yet.');
@@ -321,6 +368,7 @@ export async function renameVote(code, voterId, name) {
   } catch (err) {
     if (!isDenied(err)) throw err;
     await renameLegacyVote(code, voterId, trimmed);
+    noteVoteDocsDenied();
   }
 }
 

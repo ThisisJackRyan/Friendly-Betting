@@ -1,7 +1,7 @@
 import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import * as entitlementApi from './entitlementApi';
 
-const { fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
+const { __resetDeniedForTests, fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
@@ -18,6 +18,8 @@ jest.mock('../Config/firebase-config', () => ({
 }));
 
 beforeEach(() => {
+  __resetDeniedForTests();
+  getDocFromServer.mockReset();
   global.fetch = jest.fn();
   mockAuth.currentUser = { getIdToken: jest.fn(async () => 'id-token') };
 });
@@ -28,7 +30,9 @@ afterEach(() => {
 });
 
 test('only the entitlement reads and the mock purchase: no founder count', () => {
-  expect(Object.keys(entitlementApi).sort()).toEqual(['fetchEntitlement', 'requestMockPurchase', 'subscribeEntitlement']);
+  expect(Object.keys(entitlementApi).sort()).toEqual([
+    '__resetDeniedForTests', 'fetchEntitlement', 'logsDeniedReads', 'requestMockPurchase', 'subscribeEntitlement',
+  ]);
 });
 
 test('a mock purchase posts the plan with the ID token', async () => {
@@ -149,5 +153,115 @@ describe('subscribeEntitlement', () => {
     const err = failure('unavailable');
     sink.error(err);
     expect(onChange.mock.calls).toEqual([[undefined, err]]);
+  });
+});
+
+describe('a denied read this session', () => {
+  let sink;
+  beforeEach(() => {
+    onSnapshot.mockReset();
+    onSnapshot.mockImplementation((ref, next, error) => {
+      sink = { ref, next, error };
+      return () => {};
+    });
+  });
+
+  test('a Restore after the listener was denied answers no plan without a server read', async () => {
+    subscribeEntitlement('jack', () => {});
+    sink.error(failure('permission-denied'));
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+    expect(getDocFromServer).not.toHaveBeenCalled();
+    // Only for that user.
+    getDocFromServer.mockResolvedValue(snapOf({ plan: 'pro' }));
+    await expect(fetchEntitlement('maya')).resolves.toEqual({ plan: 'pro' });
+  });
+
+  test('a denied Restore makes the next one answer at once', async () => {
+    getDocFromServer.mockRejectedValueOnce(failure('permission-denied'));
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+    expect(getDocFromServer).toHaveBeenCalledTimes(1);
+  });
+
+  test('allowed reads and other errors are never remembered', async () => {
+    subscribeEntitlement('jack', () => {});
+    sink.next(snapOf(null));
+    sink.error(failure('unavailable'));
+    getDocFromServer.mockRejectedValueOnce(failure('unavailable'));
+    await expect(fetchEntitlement('jack')).rejects.toMatchObject({ code: 'unavailable' });
+    getDocFromServer.mockResolvedValueOnce(snapOf({ plan: 'pro' }));
+    await expect(fetchEntitlement('jack')).resolves.toEqual({ plan: 'pro' });
+    expect(getDocFromServer).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('logging a denied read', () => {
+  const ENV_KEYS = ['NEXT_PUBLIC_VERCEL_ENV', 'NODE_ENV'];
+  let saved;
+  let info;
+  beforeEach(() => {
+    saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+    info = jest.spyOn(console, 'info').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    onSnapshot.mockImplementation((_ref, _next, error) => {
+      error(failure('permission-denied'));
+      return () => {};
+    });
+  });
+  afterEach(() => {
+    ENV_KEYS.forEach((key) => {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    });
+    jest.restoreAllMocks();
+  });
+  const setEnv = (vercel, node) => {
+    if (vercel === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    else process.env.NEXT_PUBLIC_VERCEL_ENV = vercel;
+    process.env.NODE_ENV = node;
+  };
+  const consoleCalls = () => ['log', 'info', 'warn', 'error'].flatMap((name) => console[name].mock.calls);
+
+  test.each([
+    ['a Vercel preview', 'preview', 'production'],
+    ['Vercel development', 'development', 'production'],
+    ['next dev', undefined, 'development'],
+    ['the mobile dev server (Vercel env empty)', '', 'development'],
+  ])('%s logs the code only, for the listener and for Restore', async (_label, vercel, node) => {
+    setEnv(vercel, node);
+    subscribeEntitlement('uid-secret-123', () => {});
+    getDocFromServer.mockRejectedValueOnce(failure('permission-denied'));
+    await fetchEntitlement('uid-secret-456');
+    expect(info.mock.calls).toEqual([
+      ['Entitlement read denied; treated as no plan.', 'permission-denied'],
+      ['Entitlement read denied; treated as no plan.', 'permission-denied'],
+    ]);
+    const logged = JSON.stringify(consoleCalls());
+    expect(logged).not.toMatch(/uid-secret|entitlements\//);
+    info.mock.calls.flat().forEach((arg) => expect(typeof arg).toBe('string'));
+  });
+
+  test.each([
+    ['a production web build', 'production', 'production'],
+    ['a production mobile build (Vercel env empty)', '', 'production'],
+    ['no env at all', undefined, 'production'],
+  ])('%s logs nothing', async (_label, vercel, node) => {
+    setEnv(vercel, node);
+    subscribeEntitlement('jack', () => {});
+    getDocFromServer.mockRejectedValueOnce(failure('permission-denied'));
+    await fetchEntitlement('maya');
+    expect(consoleCalls()).toEqual([]);
+  });
+
+  test('other errors are not logged as denied', async () => {
+    setEnv('preview', 'production');
+    onSnapshot.mockImplementation((_ref, _next, error) => {
+      error(failure('unavailable'));
+      return () => {};
+    });
+    subscribeEntitlement('jack', () => {});
+    expect(info).not.toHaveBeenCalled();
   });
 });
