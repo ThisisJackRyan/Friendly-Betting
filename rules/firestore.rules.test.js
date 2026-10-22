@@ -250,7 +250,7 @@ describe('votes', () => {
   });
 
   test('voters can still vote on legacy bets', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/legacy1').update({ votes: nextVotes }));
+    await assertSucceeds(anon('anon-2').doc('bets/legacy1').update({ votes: [nextVotes[1]] }));
   });
 
   test('a voter cannot change status or winnerId', async () => {
@@ -266,11 +266,13 @@ describe('votes', () => {
     await assertFails(anon('anon-2').doc('bets/settled').update({ votes: nextVotes }));
   });
 
-  // renameVote: the same votes-only update, with only the name changed.
+  // renameVote from an older build rewrote the voter's entry in place. The
+  // phase-1 rule (docs/VOTE-SECURITY.md) only lets the list grow, so that is
+  // refused now; rules/votes.rules.test.js covers renames on vote docs.
   const renamed = [{ ...openBet.votes[0], name: 'Sammy' }];
 
-  test('a voter renames their own pick on an open bet', async () => {
-    await assertSucceeds(anon('anon-1').doc('bets/abc123').update({ votes: renamed }));
+  test('an in-place rename of the legacy list is refused, even of one\'s own pick', async () => {
+    await assertFails(anon('anon-1').doc('bets/abc123').update({ votes: renamed }));
   });
 
   test('no renames on a settled or called-off bet, or signed out', async () => {
