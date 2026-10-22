@@ -1,12 +1,22 @@
-import { deleteDoc, runTransaction } from 'firebase/firestore';
+import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
-import { callOffBet, castVote, deleteBet, renameVote, saveBet, settleBet, undoSettle } from './api';
+import {
+  callOffBet, castVote, deleteBet, renameVote, saveBet, settleBet, subscribeBet, subscribeMyBets, undoSettle,
+} from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
-  doc: (_db, collection, id) => ({ collection, id }),
+  // bets/{code} -> { collection: 'bets', id }; bets/{code}/votes/{uid} ->
+  // { collection: 'bets/{code}/votes', id: uid }.
+  doc: (_db, ...path) => ({ collection: path.slice(0, -1).join('/'), id: path[path.length - 1] }),
+  collection: (_db, ...path) => ({ path: path.join('/') }),
+  query: (ref) => ref,
+  where: () => null,
+  getDocs: jest.fn(),
+  onSnapshot: jest.fn(),
+  writeBatch: jest.fn(),
   runTransaction: jest.fn(),
   deleteDoc: jest.fn(async () => {}),
   serverTimestamp: () => 'SERVER_TIME',
@@ -18,7 +28,16 @@ jest.mock('./resultTexts', () => ({
   apiUrl: (path) => `https://www.friendly-bets.com${path}`,
 }));
 
+const denied = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+const isVoteRef = (ref) => /^bets\/[^/]+\/votes$/.test(ref?.collection || ref?.path || '');
+
 let stored;
+// bets/abc123/votes/{uid}, by uid.
+let voteDocs;
+// false: the live rules from before per-voter docs, which deny every read
+// and write of bets/{code}/votes.
+let voteRules;
+let clock;
 let tx;
 beforeEach(() => {
   stored = {
@@ -26,16 +45,51 @@ beforeEach(() => {
     options: [{ id: 'a', label: 'Yes' }, { id: 'b', label: 'No' }],
     votes: [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }],
   };
+  voteDocs = {};
+  voteRules = true;
+  clock = 100;
   auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }] };
+  // Vote doc writes wait for the commit, where rules without per-voter docs refuse them.
+  let pending = [];
   tx = {
-    get: jest.fn(async () => ({ exists: () => Boolean(stored), data: () => JSON.parse(JSON.stringify(stored)) })),
-    update: jest.fn((_ref, patch) => {
+    get: jest.fn(async (ref) => {
+      if (isVoteRef(ref)) {
+        if (!voteRules) throw denied();
+        const data = voteDocs[ref.id];
+        return { exists: () => Boolean(data), data: () => JSON.parse(JSON.stringify(data)) };
+      }
+      return { exists: () => Boolean(stored), data: () => JSON.parse(JSON.stringify(stored)) };
+    }),
+    update: jest.fn((ref, patch) => {
+      if (isVoteRef(ref)) {
+        pending.push(() => { voteDocs[ref.id] = { ...voteDocs[ref.id], ...patch }; });
+        return;
+      }
       stored = { ...stored, ...patch };
       Object.keys(patch).forEach((key) => { if (patch[key] === 'DELETE_FIELD') delete stored[key]; });
     }),
+    set: jest.fn((ref, data) => {
+      pending.push(() => {
+        clock += 1;
+        voteDocs[ref.id] = { ...data, at: data.at === 'SERVER_TIME' ? { seconds: clock, nanoseconds: 0 } : data.at };
+      });
+    }),
   };
   runTransaction.mockReset();
-  runTransaction.mockImplementation(async (_db, run) => run(tx));
+  runTransaction.mockImplementation(async (_db, run) => {
+    pending = [];
+    const result = await run(tx);
+    if (pending.length && !voteRules) throw denied();
+    pending.forEach((apply) => apply());
+    return result;
+  });
+  getDocs.mockReset();
+  getDocs.mockImplementation(async (ref) => {
+    if (isVoteRef(ref) && !voteRules) throw denied();
+    return {
+      docs: Object.entries(voteDocs).map(([id, data]) => ({ id, data: () => JSON.parse(JSON.stringify(data)) })),
+    };
+  });
   rememberBet.mockClear();
   requestResultTexts.mockReset();
 });
@@ -118,12 +172,92 @@ test('only a committed pick subscribes the participant to results', async () => 
   await expect(castVote('abc123', { ...vote, optionId: 'b' })).rejects.toThrow('closed');
 });
 
-test('renameVote changes only the name on the voter\'s own pick, in place', async () => {
+test('castVote writes only the voter\'s own doc, with a capped name and server time', async () => {
+  await castVote('abc123', { voterId: 'maya', name: `  ${'M'.repeat(40)}  `, optionId: 'b' });
+  expect(tx.update).not.toHaveBeenCalled();
+  expect(tx.set).toHaveBeenCalledTimes(1);
+  expect(tx.set.mock.calls[0][0]).toEqual({ collection: 'bets/abc123/votes', id: 'maya' });
+  expect(tx.set.mock.calls[0][1]).toEqual({ voterId: 'maya', name: 'M'.repeat(30), optionId: 'b', at: 'SERVER_TIME' });
+  expect(stored.votes).toHaveLength(2);
+  expect(rememberBet).toHaveBeenCalledWith('maya', 'abc123');
+});
+
+test('castVote on rules without per-voter docs falls back to the array, the old way', async () => {
+  voteRules = false;
+  stored.votes = [{ voterId: 'jack', name: 'Jack', optionId: 'a', at: 5 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 6 }];
+  await castVote('abc123', { voterId: 'jack', name: ' Jackie ', optionId: 'b' });
+  expect(voteDocs).toEqual({});
+  expect(stored.votes.map((vote) => [vote.voterId, vote.optionId, vote.name])).toEqual([['sam', 'b', 'Sam'], ['jack', 'b', 'Jackie']]);
+  expect(Object.keys(stored.votes[1])).toEqual(['voterId', 'name', 'optionId', 'at']);
+  expect(rememberBet).toHaveBeenCalledWith('jack', 'abc123');
+});
+
+test('castVote falls back only on a permission refusal, never on other errors', async () => {
+  runTransaction.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 'unavailable' }));
+  await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toMatchObject({ code: 'unavailable' });
+  expect(runTransaction).toHaveBeenCalledTimes(1);
+  await expect(castVote('abc123', { voterId: 'maya', optionId: 'zzz' })).rejects.toThrow('Pick one');
+  expect(runTransaction).toHaveBeenCalledTimes(2);
+});
+
+test('a refusal on both paths (say, the bet closed meanwhile) surfaces the refusal', async () => {
+  runTransaction.mockRejectedValue(denied());
+  await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toMatchObject({ code: 'permission-denied' });
+  expect(runTransaction).toHaveBeenCalledTimes(2);
+  expect(rememberBet).not.toHaveBeenCalled();
+});
+
+test('renameVote changes only the name on the voter\'s own doc', async () => {
+  voteDocs.jack = { voterId: 'jack', name: '', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } };
+  await renameVote('abc123', 'jack', '  John ');
+  expect(tx.set).not.toHaveBeenCalled();
+  expect(tx.update).toHaveBeenCalledTimes(1);
+  expect(tx.update.mock.calls[0]).toEqual([{ collection: 'bets/abc123/votes', id: 'jack' }, { name: 'John' }]);
+  expect(voteDocs.jack).toEqual({ voterId: 'jack', name: 'John', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } });
+});
+
+test('renameVote caps the name at 30', async () => {
+  voteDocs.jack = { voterId: 'jack', name: '', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } };
+  await renameVote('abc123', 'jack', 'J'.repeat(31));
+  expect(voteDocs.jack.name).toBe('J'.repeat(30));
+});
+
+test('renameVote copies a pick still only in the array to the voter\'s doc, same side', async () => {
+  await renameVote('abc123', 'jack', 'John');
+  expect(tx.set.mock.calls[0][1]).toEqual({ voterId: 'jack', name: 'John', optionId: 'a', at: 'SERVER_TIME' });
+  expect(stored.votes[0].name).toBe('Jack');
+});
+
+test('renameVote on rules without per-voter docs renames in the array, in place', async () => {
+  voteRules = false;
   stored.votes = [{ voterId: 'jack', name: '', optionId: 'a', at: 5 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 6 }];
   await renameVote('abc123', 'jack', '  John ');
   expect(tx.update).toHaveBeenCalledTimes(1);
   expect(Object.keys(tx.update.mock.calls[0][1])).toEqual(['votes']);
   expect(stored.votes).toEqual([{ voterId: 'jack', name: 'John', optionId: 'a', at: 5 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 6 }]);
+});
+
+test('settleBet counts the merged votes: array, vote docs, and a doc over its array entry', async () => {
+  voteDocs.sam = { voterId: 'sam', name: 'Sammy', optionId: 'a', at: { seconds: 9, nanoseconds: 0 } };
+  voteDocs.maya = { voterId: 'maya', name: 'Maya', optionId: 'b', at: { seconds: 8, nanoseconds: 0 } };
+  const result = await settleBet('abc123', 'a');
+  expect(stored.settlement.winners).toEqual([{ voterId: 'jack', name: 'Jack' }, { voterId: 'sam', name: 'Sammy' }]);
+  expect(stored.settlement.recipients).toEqual([
+    { voterId: 'jack', won: true }, { voterId: 'maya', won: false }, { voterId: 'sam', won: true },
+  ]);
+  expect(result.votes.map((vote) => vote.voterId)).toEqual(['jack', 'maya', 'sam']);
+});
+
+test('settleBet on rules without per-voter docs settles from the array', async () => {
+  voteRules = false;
+  await settleBet('abc123', 'b');
+  expect(stored.settlement.winners).toEqual([{ voterId: 'sam', name: 'Sam' }]);
+});
+
+test('undo and call off hand back the merged votes', async () => {
+  voteDocs.maya = { voterId: 'maya', name: 'Maya', optionId: 'b', at: { seconds: 8, nanoseconds: 0 } };
+  const off = await callOffBet('abc123');
+  expect(off.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
 });
 
 test('renameVote refuses with no pick, on a closed bet, or a gone bet, before writing', async () => {
@@ -135,6 +269,7 @@ test('renameVote refuses with no pick, on a closed bet, or a gone bet, before wr
   stored = null;
   await expect(renameVote('abc123', 'jack', 'John')).rejects.toThrow('gone');
   expect(tx.update).not.toHaveBeenCalled();
+  expect(tx.set).not.toHaveBeenCalled();
 });
 
 test('invalid picks and late edits cannot alter the final result', async () => {
@@ -162,6 +297,7 @@ test('deadline expiry blocks new picks but still lets the creator settle', async
   await expect(castVote('abc123', { voterId: 'late', optionId: 'a' })).rejects.toThrow('closed');
   expect(rememberBet).not.toHaveBeenCalled();
   expect(tx.update).not.toHaveBeenCalled();
+  expect(tx.set).not.toHaveBeenCalled();
   const result = await settleBet('abc123', 'a');
   expect(result.status).toBe('closed');
   expect(result.settlement.recipients).toHaveLength(2);
@@ -193,9 +329,10 @@ test('a failed settle never asks for result texts', async () => {
 test('votes and settlements never carry a phone number', async () => {
   await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a', phone: '+12025550143' });
   await settleBet('abc123', 'a');
-  const written = JSON.stringify(tx.update.mock.calls.map(([, patch]) => patch));
+  const written = JSON.stringify([...tx.update.mock.calls, ...tx.set.mock.calls].map(([, patch]) => patch));
   expect(written).not.toMatch(/phone|e164|2025550143/i);
   expect(JSON.stringify(stored)).not.toMatch(/phone|e164|2025550143/i);
+  expect(JSON.stringify(voteDocs)).not.toMatch(/phone|e164|2025550143/i);
 });
 
 describe('deleteBet', () => {
@@ -233,6 +370,20 @@ describe('deleteBet', () => {
     respond(503, { error: 'not-configured' });
     await deleteBet('abc123');
     expect(deleteDoc).toHaveBeenCalledWith({ collection: 'bets', id: 'abc123' });
+  });
+
+  test('the client fallback deletes the vote docs in one batch with the bet', async () => {
+    respond(503, { error: 'not-configured' });
+    voteDocs.maya = { voterId: 'maya', name: 'Maya', optionId: 'b', at: { seconds: 8, nanoseconds: 0 } };
+    const batch = { delete: jest.fn(), commit: jest.fn(async () => {}) };
+    writeBatch.mockReturnValue(batch);
+    await deleteBet('abc123');
+    expect(batch.delete.mock.calls).toEqual([
+      [{ collection: 'bets/abc123/votes', id: 'maya' }],
+      [{ collection: 'bets', id: 'abc123' }],
+    ]);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+    expect(deleteDoc).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -329,6 +480,7 @@ describe('called-off bets', () => {
     stored = { ...stored, ...patch };
     await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('This bet is closed.');
     expect(tx.update).not.toHaveBeenCalled();
+    expect(tx.set).not.toHaveBeenCalled();
     expect(rememberBet).not.toHaveBeenCalled();
   });
 
@@ -424,5 +576,80 @@ describe('callOffBet', () => {
   test('a called-off bet takes no votes', async () => {
     await callOffBet('abc123');
     await expect(castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' })).rejects.toThrow('This bet is closed.');
+  });
+});
+
+describe('live listeners merge the bet with its vote docs', () => {
+  // onSnapshot by target: the bet doc or a votes collection.
+  let listeners;
+  beforeEach(() => {
+    listeners = [];
+    onSnapshot.mockReset();
+    onSnapshot.mockImplementation((ref, next, error) => {
+      const entry = { ref, next, error, stopped: false };
+      listeners.push(entry);
+      return () => { entry.stopped = true; };
+    });
+  });
+  const betListener = () => listeners.find((item) => item.ref.collection === 'bets');
+  const votesListener = (code = 'abc123') => listeners.find((item) => item.ref.path === `bets/${code}/votes`);
+  const betSnap = (data, fromCache = false) => ({
+    id: 'abc123', exists: () => Boolean(data), data: () => data, metadata: { fromCache },
+  });
+  const voteSnap = (docs) => ({
+    docs: Object.entries(docs).map(([id, data]) => ({ id, data: () => data })),
+  });
+
+  test('subscribeBet waits for both, then merges; a vote doc wins over its array entry', () => {
+    const onChange = jest.fn();
+    const stop = subscribeBet('abc123', onChange);
+    betListener().next(betSnap(stored));
+    expect(onChange).not.toHaveBeenCalled();
+    votesListener().next(voteSnap({ sam: { voterId: 'sam', name: 'Sammy', optionId: 'a', at: { seconds: 9, nanoseconds: 0 } } }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].votes).toEqual([
+      { voterId: 'jack', name: 'Jack', optionId: 'a' },
+      { voterId: 'sam', name: 'Sammy', optionId: 'a', at: 9000 },
+    ]);
+    votesListener().next(voteSnap({}));
+    expect(onChange.mock.calls[1][0].votes).toEqual(stored.votes);
+    stop();
+    expect(listeners.every((item) => item.stopped)).toBe(true);
+  });
+
+  test('subscribeBet on rules without per-voter docs shows the array once the votes listen is refused', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().error(denied());
+    betListener().next(betSnap(stored));
+    expect(onChange).toHaveBeenCalledWith({ id: 'abc123', ...stored }, undefined, { fromCache: false });
+  });
+
+  test('subscribeBet still reports a gone bet and a bet listen error', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(null));
+    expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: false });
+    const err = new Error('offline');
+    betListener().error(err);
+    expect(onChange).toHaveBeenLastCalledWith(undefined, err);
+  });
+
+  test('subscribeMyBets merges each bet\'s vote docs and closes listeners with the list', () => {
+    const onChange = jest.fn();
+    const stop = subscribeMyBets('creator', onChange);
+    const list = listeners[0];
+    list.next({ docs: [
+      { id: 'one', data: () => ({ createdAt: 1, votes: [{ voterId: 'jack', name: 'Jack', optionId: 'a', at: 1 }] }) },
+      { id: 'two', data: () => ({ createdAt: 2, votes: [] }) },
+    ] });
+    expect(onChange.mock.calls[0][0].map((bet) => bet.id)).toEqual(['two', 'one']);
+    votesListener('one').next(voteSnap({ maya: { voterId: 'maya', name: 'Maya', optionId: 'b', at: { seconds: 2, nanoseconds: 0 } } }));
+    expect(onChange.mock.calls[1][0][1].votes.map((vote) => vote.voterId)).toEqual(['jack', 'maya']);
+    list.next({ docs: [{ id: 'two', data: () => ({ createdAt: 2, votes: [] }) }] });
+    expect(votesListener('one').stopped).toBe(true);
+    stop();
+    expect(listeners.every((item) => item.stopped)).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
 import { castVote, renameVote, settleBet, subscribeBet } from './api';
 import { NAME_EDIT_COPY } from './nameEditCopy';
-import { useIdentity } from './identity';
+import { rememberName, useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 import { buildSettlement } from './settlement';
@@ -1038,6 +1038,26 @@ describe('adding or editing a name after picking', () => {
     expect(edit).toHaveFocus();
   });
 
+  test('both name inputs stop at 30 characters', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const first = await screen.findByLabelText(/your name/i);
+    expect(first).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(first);
+    await userEvent.type(first, 'x'.repeat(40));
+    expect(first).toHaveValue('x'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'x'.repeat(30), optionId: 'a' });
+
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('x'.repeat(30)) }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'y'.repeat(40));
+    expect(input).toHaveValue('y'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+    expect(renameVote).toHaveBeenCalledWith('abc123', 'anon-1', 'y'.repeat(30));
+  });
+
   test('prefills the current name, and cancel leaves it alone', async () => {
     current = pickedAs('Sam');
     renderAt('/b/abc123', <VoteScreen />);
@@ -1071,6 +1091,124 @@ describe('adding or editing a name after picking', () => {
     await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.cancel }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') })).toBeInTheDocument();
+  });
+
+  describe('a slow save', () => {
+    let user;
+    const renamedTo = (bet, name) => ({ ...bet, votes: bet.votes.map((v) => (v.voterId === 'anon-1' ? { ...v, name } : v)) });
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      rememberName.mockClear();
+      current = pickedAs('Sam');
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    async function saveAs(name) {
+      renderAt('/b/abc123', <VoteScreen />);
+      act(() => jest.advanceTimersByTime(500));
+      await user.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+      const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+      await user.clear(input);
+      await user.type(input, name);
+      await user.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.saving })).toBeDisabled();
+      return input;
+    }
+
+    test('the snapshot showing the new name ends Saving… even if the write never answers', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+
+      publish(renamedTo(current, 'John'));
+      const edit = await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') });
+      expect(edit).toHaveFocus();
+      expect(screen.queryByRole('button', { name: NAME_EDIT_COPY.saving })).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledWith('John');
+
+      act(() => jest.advanceTimersByTime(20000));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('with no answer and no snapshot, Saving… ends with the save error', async () => {
+      let land = () => {};
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        land = resolve;
+      }));
+      const input = await saveAs('John');
+
+      act(() => jest.advanceTimersByTime(9000));
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.saving })).toBeDisabled();
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeEnabled();
+      expect(input).toBeEnabled();
+      expect(input).toHaveValue('John');
+      expect(rememberName).not.toHaveBeenCalled();
+
+      // A success after that still lands, and the form closes on it.
+      await act(async () => {
+        land();
+      });
+      expect(rememberName).toHaveBeenCalledWith('John');
+      publish(renamedTo(current, 'John'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('a refused save ends Saving… with the save error', async () => {
+      let refuse = () => {};
+      renameVote.mockImplementation(() => new Promise((_resolve, reject) => {
+        refuse = reject;
+      }));
+      await saveAs('John');
+      await act(async () => {
+        refuse(new Error('This bet is closed.'));
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeEnabled();
+      expect(rememberName).not.toHaveBeenCalled();
+    });
+
+    test('a write that answers before any snapshot closes the form', async () => {
+      let land = () => {};
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        land = resolve;
+      }));
+      await saveAs('John');
+      await act(async () => {
+        land();
+      });
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toHaveFocus();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledWith('John');
+    });
+
+    test('leaving the page mid-save updates nothing after unmount', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        let land = () => {};
+        renameVote.mockImplementation(() => new Promise((resolve) => {
+          land = resolve;
+        }));
+        await saveAs('John');
+        cleanup();
+        await act(async () => {
+          land();
+          jest.advanceTimersByTime(20000);
+        });
+        expect(error).not.toHaveBeenCalled();
+      } finally {
+        error.mockRestore();
+      }
+    });
   });
 
   test('not offered once picks are closed or the bet is settled', async () => {

@@ -131,34 +131,44 @@ async function mockCrew(page, { votes, share, patch, serverTime = false } = {}) 
   await page.route('**/src/phone/api.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `import { buildSettlement } from ${JSON.stringify(new URL('./settlement.js', route.request().url()).href)};
+      import { cleanName, withVotes } from ${JSON.stringify(new URL('./votes.js', route.request().url()).href)};
       // Kept in sessionStorage so a settle survives page.goto within the test.
+      // The seeded picks sit in the bet's legacy votes array; picks made here
+      // go in per-voter docs (bets/{code}/votes/{uid}), and every read gets
+      // both merged, as the real api does (docs/VOTE-SECURITY.md).
       let bet = JSON.parse(sessionStorage.getItem('crew-bet') || 'null') || ${JSON.stringify(bet)};
+      let docs = JSON.parse(sessionStorage.getItem('crew-votes') || '{}');
+      const merged = () => withVotes(bet, Object.values(docs));
       const listeners = new Set();
-      export const subscribeBet = (code, cb) => { listeners.add(cb); cb(bet); return () => listeners.delete(cb); };
-      export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
+      const publish = () => {
+        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
+        sessionStorage.setItem('crew-votes', JSON.stringify(docs));
+        listeners.forEach(cb => cb(merged()));
+        return merged();
+      };
+      export const subscribeBet = (code, cb) => { listeners.add(cb); cb(merged()); return () => listeners.delete(cb); };
+      export const subscribeMyBets = (uid, cb) => { cb([merged()]); return () => {}; };
       export const hydrateBet = async b => b;
       export const createBet = async () => 'crew123';
       export const saveBet = async () => 'crew123';
       export const castVote = async (code, vote) => {
-        bet = { ...bet, votes: [...bet.votes.filter(v => v.voterId !== vote.voterId), { ...vote, at: 1 }] };
-        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
-        listeners.forEach(cb => cb(bet));
+        docs = { ...docs, [vote.voterId]: { voterId: vote.voterId, name: cleanName(vote.name), optionId: vote.optionId, at: Date.now() } };
+        publish();
       };
+      // Same side and time on the voter's doc; a pick only in the array is copied over.
       export const renameVote = async (code, voterId, name) => {
-        bet = { ...bet, votes: bet.votes.map(v => v.voterId === voterId ? { ...v, name } : v) };
-        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
-        listeners.forEach(cb => cb(bet));
+        const own = docs[voterId] || { ...merged().votes.find(v => v.voterId === voterId), at: Date.now() };
+        docs = { ...docs, [voterId]: { ...own, name: cleanName(name) } };
+        publish();
       };
       export const deleteBet = async () => {};
       export const settleBet = async (code, winnerId) => {
-        bet = { ...bet, status: 'closed', winnerId, settledAt: ${serverTime ? 'null' : 123}, settlement: buildSettlement(bet, winnerId) };
-        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
-        listeners.forEach(cb => cb(bet)); return bet;
+        bet = { ...bet, status: 'closed', winnerId, settledAt: ${serverTime ? 'null' : 123}, settlement: buildSettlement(merged(), winnerId) };
+        return publish();
       };
       const save = (next) => {
         bet = next;
-        sessionStorage.setItem('crew-bet', JSON.stringify(bet));
-        listeners.forEach(cb => cb(bet)); return bet;
+        return publish();
       };
       export const undoSettle = async () => {
         window.undoCalls = (window.undoCalls || 0) + 1;
@@ -1052,5 +1062,38 @@ test('My bets with the paywall on: the Go Pro chip right of the heading, and Fri
   await expect(sheet.locator('.pro-benefits li.is-highlighted')).toHaveText('Head-to-head stats with friends');
   await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+// Per-voter vote docs (docs/VOTE-SECURITY.md): the seeded picks are in the
+// bet's legacy array, a pick made here goes in the voter's own doc, and the
+// tally reads both merged. Jack picks, renames (same side, capped at 30), and
+// the tally shows the new name next to Sam's array pick.
+test('a pick and a name edit land in the tally, merged with the older picks', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockCrew(page, { votes: [{ voterId: 'sam', name: 'Sam', optionId: 'b' }], share: 'dismiss' });
+
+  await page.goto('/b/crew123');
+  const name = page.getByLabel(/Your name/);
+  await expect(name).toHaveAttribute('maxlength', '30');
+  await page.getByRole('button', { name: 'Bears', exact: true }).click();
+  await expect(page.getByText(/You’re on/)).toContainText('Bears');
+
+  await page.getByRole('button', { name: 'Edit your name, currently Jack' }).click();
+  const edit = page.getByRole('textbox', { name: 'Your name' });
+  await expect(edit).toHaveAttribute('maxlength', '30');
+  await edit.fill('Jackie');
+  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit your name, currently Jackie' })).toBeVisible();
+  await expect(page.getByText(/You’re on/)).toContainText('Bears');
+  const docs = await page.evaluate(() => JSON.parse(sessionStorage.getItem('crew-votes')));
+  expect(docs.jack).toMatchObject({ voterId: 'jack', name: 'Jackie', optionId: 'a' });
+  expect(Object.keys(docs)).toEqual(['jack']);
+
+  await page.goto('/t/crew123');
+  await expect(page.getByRole('list', { name: 'Picked by Jackie' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Picked by Sam' })).toBeVisible();
+  await expect(page.getByText('2 picks')).toBeVisible();
   expect(errors).toEqual([]);
 });

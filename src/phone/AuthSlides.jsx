@@ -261,31 +261,108 @@ export function PhoneBody({ formatted, onNational, busy, check }) {
   );
 }
 
-export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, check }) {
-  const refs = useRef([]);
+// The text a change put into a cell that held `prev`. A filled cell normally
+// has its digit selected, so the value is just the new text; when it was not
+// (iOS can leave the caret before the digit), the value is the old digit plus
+// the new text in either order, and the caret marks where the new text ends.
+function insertedText(target, nativeEvent, prev) {
+  const value = String(target.value || '');
+  const type = nativeEvent?.inputType || '';
+  if (!prev || value.length <= prev.length) return value;
+  if (type === 'insertReplacementText' || type === 'insertFromPaste') return value;
+  const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : value.length;
+  const begin = end - (value.length - prev.length);
+  if (begin >= 0 && value.slice(0, begin) + value.slice(end) === prev) return value.slice(begin, end);
+  if (value.replace(/\D/g, '').length >= 6) return value;
+  if (value.startsWith(prev)) return value.slice(prev.length);
+  if (value.endsWith(prev)) return value.slice(0, value.length - prev.length);
+  return value;
+}
 
-  const write = (index, raw) => {
-    const chars = String(raw || '').replace(/\D/g, '');
-    if (!chars) {
-      const cleared = otp.slice();
-      cleared[index] = '';
-      onOtp(cleared, '');
-      return;
-    }
-    const next = otp.slice();
-    chars
-      .slice(0, 6 - index)
-      .split('')
-      .forEach((char, offset) => {
-        next[index + offset] = char;
-      });
+function selectCell(node) {
+  if (!node) return;
+  try {
+    node.select();
+  } catch {
+    // Selection is a convenience; typing still replaces the digit.
+  }
+}
+
+export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, error = '', check }) {
+  const refs = useRef([]);
+  // The latest code, so events that land before a re-render build on each
+  // other instead of on the code from the last render.
+  const otpRef = useRef(otp);
+  const shown = useRef(otp);
+  if (shown.current !== otp) {
+    shown.current = otp;
+    otpRef.current = otp;
+  }
+  const lastBusy = useRef(busy);
+
+  const focusCell = (index) => {
+    const node = refs.current[index];
+    if (!node) return;
+    node.focus();
+    selectCell(node);
+  };
+
+  const commit = (next, focusAt) => {
+    otpRef.current = next;
     const completed = next.every(Boolean) ? next.join('') : '';
     onOtp(next, completed);
-    if (!completed) {
-      const focusAt = Math.min(index + chars.length, 5);
-      refs.current[focusAt]?.focus();
-    }
+    if (!completed && focusAt != null) focusCell(Math.max(0, Math.min(focusAt, 5)));
   };
+
+  // Digits from `raw` go in from `index`. A whole code (6 or more digits, as
+  // autofill or a paste gives) always fills from the first box.
+  const fill = (index, raw) => {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return false;
+    if (digits.length >= 6) {
+      commit(digits.slice(0, 6).split(''), 5);
+      return true;
+    }
+    const next = otpRef.current.slice();
+    const placed = digits.slice(0, 6 - index).split('');
+    placed.forEach((char, offset) => {
+      next[index + offset] = char;
+    });
+    commit(next, index + placed.length);
+    return true;
+  };
+
+  const clear = (index, focusAt) => {
+    const next = otpRef.current.slice();
+    next[index] = '';
+    commit(next, focusAt);
+  };
+
+  const onChange = (index, event) => {
+    const prev = otpRef.current[index] || '';
+    const value = String(event.target.value || '');
+    if (!value) {
+      if (prev) clear(index, null);
+      return;
+    }
+    // Anything without a digit leaves the cell as it was.
+    fill(index, insertedText(event.target, event.nativeEvent, prev));
+  };
+
+  const onKeyDown = (index, event) => {
+    if (event.key !== 'Backspace') return;
+    event.preventDefault();
+    if (otpRef.current[index]) clear(index, index);
+    else if (index > 0) clear(index - 1, index - 1);
+  };
+
+  // A failed verify had the boxes disabled; put focus back in the last one so
+  // the code can be fixed right away.
+  useEffect(() => {
+    const was = lastBusy.current;
+    lastBusy.current = busy;
+    if (was === 'verify' && !busy && error) focusCell(5);
+  }, [busy, error]);
 
   return (
     <>
@@ -302,21 +379,15 @@ export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, che
             aria-label={`Digit ${index + 1}`}
             value={digit}
             disabled={Boolean(busy)}
-            onChange={(event) => write(index, event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Backspace' && !otp[index] && index > 0) {
-                event.preventDefault();
-                const next = otp.slice();
-                next[index - 1] = '';
-                onOtp(next, '');
-                refs.current[index - 1]?.focus();
-              }
-            }}
+            onFocus={(event) => selectCell(event.currentTarget)}
+            onClick={(event) => selectCell(event.currentTarget)}
+            onChange={(event) => onChange(index, event)}
+            onKeyDown={(event) => onKeyDown(index, event)}
             onPaste={(event) => {
               const text = event.clipboardData?.getData('text') || '';
               if (!text) return;
               event.preventDefault();
-              write(index, text);
+              fill(index, text);
             }}
           />
         ))}
@@ -502,6 +573,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = nu
             onResend={onResend}
             onChangeNumber={() => go(1)}
             busy={phone.busy}
+            error={phone.error}
           />
           <PhoneAlert error={phone.error} code={phone.errorCode} />
         </AuthChrome>

@@ -4,11 +4,13 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
@@ -18,6 +20,7 @@ import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
 import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
+import { cleanName, voteFromDoc, withVotes } from './votes';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -78,30 +81,128 @@ export async function saveBet(existingCode, fields) {
   return createBet(fields);
 }
 
-export function subscribeMyBets(uid, onChange) {
-  const betsQuery = query(collection(db, 'bets'), where('createdByID', '==', uid));
+// Each voter's pick is its own doc at bets/{code}/votes/{uid}; older picks
+// are still in the bet's `votes` array (docs/VOTE-SECURITY.md). Readers get
+// both merged into `votes` (withVotes). Rules from before per-voter docs deny
+// any read or write of the subcollection, so a denied read means no docs and
+// a denied write falls back to the array.
+const PERMISSION_DENIED = ['permission-denied', 'firestore/permission-denied'];
+
+function isDenied(err) {
+  return PERMISSION_DENIED.includes(err?.code);
+}
+
+function votesRef(code) {
+  return collection(db, 'bets', code, 'votes');
+}
+
+function voteRef(code, voterId) {
+  return doc(db, 'bets', code, 'votes', voterId);
+}
+
+// A pick saving offline has no server time yet; the estimate keeps its place.
+function voteDocsOf(snap) {
+  return snap.docs
+    .map((item) => voteFromDoc(item.id, item.data({ serverTimestamps: 'estimate' })))
+    .filter(Boolean);
+}
+
+// The bet's vote docs, read once. Denied (rules without per-voter docs): none.
+export async function readVoteDocs(code) {
+  try {
+    return voteDocsOf(await getDocs(votesRef(code)));
+  } catch (err) {
+    if (isDenied(err)) return [];
+    throw err;
+  }
+}
+
+// Calls `onDocs` with the bet's vote docs on every change. A failed listen
+// (denied by rules without per-voter docs, or dropped) counts as no new docs.
+function subscribeVoteDocs(code, onDocs) {
   return onSnapshot(
-    betsQuery,
-    (snap) => {
-      const rows = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
-      rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      onChange(rows);
-    },
-    (err) => onChange(null, err),
+    votesRef(code),
+    (snap) => onDocs(voteDocsOf(snap)),
+    () => onDocs(null),
   );
 }
 
+export function subscribeMyBets(uid, onChange) {
+  const betsQuery = query(collection(db, 'bets'), where('createdByID', '==', uid));
+  // One vote listener per bet in the list, opened and closed with the list.
+  const voteDocs = new Map();
+  const voteStops = new Map();
+  let rows = null;
+  let stopped = false;
+  const emit = () => {
+    if (rows && !stopped) onChange(rows.map((bet) => withVotes(bet, voteDocs.get(bet.id))));
+  };
+  const stopBets = onSnapshot(
+    betsQuery,
+    (snap) => {
+      rows = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+      rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const ids = new Set(rows.map((bet) => bet.id));
+      voteStops.forEach((stop, id) => {
+        if (ids.has(id)) return;
+        stop();
+        voteStops.delete(id);
+        voteDocs.delete(id);
+      });
+      rows.forEach((bet) => {
+        if (voteStops.has(bet.id)) return;
+        voteStops.set(bet.id, subscribeVoteDocs(bet.id, (docs) => {
+          if (!docs) return;
+          voteDocs.set(bet.id, docs);
+          emit();
+        }));
+      });
+      emit();
+    },
+    (err) => onChange(null, err),
+  );
+  return () => {
+    stopped = true;
+    stopBets();
+    voteStops.forEach((stop) => stop());
+    voteStops.clear();
+  };
+}
+
+// The bet doc and its vote docs, merged. Nothing is reported until both have
+// answered once (a failed vote listen counts as an answer), so the tally
+// never flashes the array alone.
 export function subscribeBet(code, onChange) {
-  return onSnapshot(
+  let bet;
+  let meta;
+  let docs = null;
+  let failed = false;
+  const emit = () => {
+    if (failed || bet === undefined || docs === null) return;
+    if (!bet) onChange(null, undefined, meta);
+    else onChange(withVotes(bet, docs), undefined, meta);
+  };
+  const stopBet = onSnapshot(
     doc(db, 'bets', code),
     (snap) => {
       // fromCache tells a server-confirmed delete from an offline cache miss.
-      const meta = { fromCache: Boolean(snap.metadata?.fromCache) };
-      if (!snap.exists()) onChange(null, undefined, meta);
-      else onChange({ id: snap.id, ...snap.data() }, undefined, meta);
+      meta = { fromCache: Boolean(snap.metadata?.fromCache) };
+      bet = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+      emit();
     },
-    (err) => onChange(undefined, err),
+    (err) => {
+      failed = true;
+      onChange(undefined, err);
+    },
   );
+  const stopVotes = subscribeVoteDocs(code, (next) => {
+    docs = next || docs || [];
+    emit();
+  });
+  return () => {
+    stopBet();
+    stopVotes();
+  };
 }
 
 export async function hydrateBet(bet, readDoc = getDoc) {
@@ -143,46 +244,95 @@ export async function hydrateBet(bet, readDoc = getDoc) {
   };
 }
 
+// The checks every pick runs inside its transaction, before writing.
+async function readOpenBet(tx, code) {
+  const snap = await tx.get(doc(db, 'bets', code));
+  if (!snap.exists()) throw new Error('This bet is gone.');
+  const data = snap.data();
+  // The rules refuse closed and called-off bets too; this says so first.
+  if (!votingOpen(data)) throw new Error('This bet is closed.');
+  return data;
+}
+
+// readOpenBet, plus a signed-in voter and one of the bet's sides.
+async function readPickBet(tx, code, pick) {
+  const data = await readOpenBet(tx, code);
+  if (!pick.voterId) throw new Error('Still connecting. Try your pick again.');
+  const full = await hydrateBet(data, (legacyRef) => tx.get(legacyRef));
+  if (!full.options.some((option) => option.id === pick.optionId)) {
+    throw new Error('Pick one of this bet’s sides.');
+  }
+  return data;
+}
+
+// The voter's pick goes in their own doc, bets/{code}/votes/{uid}, which only
+// they can write. A new side moves them to the end of the list, as before.
+// Rules from before per-voter docs deny that write, so a denied one is made
+// the old way, in the bet's `votes` array.
 export async function castVote(code, vote) {
+  const pick = { voterId: vote.voterId, name: cleanName(vote.name), optionId: vote.optionId };
+  try {
+    await runTransaction(db, async (tx) => {
+      await readPickBet(tx, code, pick);
+      tx.set(voteRef(code, pick.voterId), { ...pick, at: serverTimestamp() });
+    });
+  } catch (err) {
+    if (!isDenied(err)) throw err;
+    await castLegacyVote(code, pick);
+  }
+  rememberBet(pick.voterId, code);
+}
+
+// castVote's write for rules without per-voter docs: the voter's entry in the
+// bet's `votes` array, replaced and moved to the end.
+async function castLegacyVote(code, pick) {
   const ref = doc(db, 'bets', code);
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('This bet is gone.');
-    const data = snap.data();
-    // The rules refuse closed and called-off bets too; this says so first.
-    if (!votingOpen(data)) throw new Error('This bet is closed.');
-    if (!vote.voterId) throw new Error('Still connecting. Try your pick again.');
-    const full = await hydrateBet(data, (legacyRef) => tx.get(legacyRef));
-    if (!full.options.some((option) => option.id === vote.optionId)) {
-      throw new Error('Pick one of this bet’s sides.');
-    }
+    const data = await readPickBet(tx, code, pick);
     const votes = Array.isArray(data.votes) ? data.votes : [];
-    const next = votes.filter((item) => item.voterId !== vote.voterId);
-    next.push({
-      voterId: vote.voterId,
-      name: (vote.name || '').trim(),
-      optionId: vote.optionId,
-      at: Date.now(),
-    });
+    const next = votes.filter((item) => item.voterId !== pick.voterId);
+    next.push({ ...pick, at: Date.now() });
     tx.update(ref, { votes: next });
   });
-  rememberBet(vote.voterId, code);
 }
 
 // Changes only the name on a voter's own pick: same side, same place in the
-// list, same time. Same rule as castVote (an update of `votes` on an open bet).
+// list, same time. A pick still only in the bet's `votes` array is copied to
+// the voter's own doc with the new name (taking the time of the copy). Rules
+// from before per-voter docs deny that, so a denied rename is made in the
+// array, the old way. Its promise can answer late; VoteScreen also takes the
+// live snapshot as the confirmation.
 export async function renameVote(code, voterId, name) {
+  const trimmed = cleanName(name);
+  try {
+    await runTransaction(db, async (tx) => {
+      const data = await readOpenBet(tx, code);
+      if (!voterId) throw new Error('Your pick isn’t in yet.');
+      const ref = voteRef(code, voterId);
+      const own = await tx.get(ref);
+      if (own.exists()) {
+        tx.update(ref, { name: trimmed });
+        return;
+      }
+      const votes = Array.isArray(data.votes) ? data.votes : [];
+      const legacy = votes.filter((item) => item.voterId === voterId).pop();
+      if (!legacy) throw new Error('Your pick isn’t in yet.');
+      tx.set(ref, { voterId, name: trimmed, optionId: legacy.optionId, at: serverTimestamp() });
+    });
+  } catch (err) {
+    if (!isDenied(err)) throw err;
+    await renameLegacyVote(code, voterId, trimmed);
+  }
+}
+
+async function renameLegacyVote(code, voterId, trimmed) {
   const ref = doc(db, 'bets', code);
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('This bet is gone.');
-    const data = snap.data();
-    if (!votingOpen(data)) throw new Error('This bet is closed.');
+    const data = await readOpenBet(tx, code);
     const votes = Array.isArray(data.votes) ? data.votes : [];
     if (!voterId || !votes.some((item) => item.voterId === voterId)) {
       throw new Error('Your pick isn’t in yet.');
     }
-    const trimmed = (name || '').trim();
     tx.update(ref, {
       votes: votes.map((item) => (item.voterId === voterId ? { ...item, name: trimmed } : item)),
     });
@@ -203,7 +353,10 @@ export async function settleBet(code, winnerId) {
       if (bet.winnerId === winnerId) return bet;
       throw new Error('This one’s already settled. The result is locked.');
     }
-    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    // Every pick, array and vote docs. The docs are read in each attempt; a
+    // pick doc landing between that read and the commit is not in the
+    // snapshot (docs/VOTE-SECURITY.md).
+    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
     const update = {
       status: 'closed',
       winnerId,
@@ -236,7 +389,7 @@ export async function undoSettle(code) {
     if (!isSettled(bet) || settledAt == null || Date.now() >= settledAt + UNDO_RULES_WINDOW_MS) {
       throw new Error('Too late to undo.');
     }
-    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
     tx.update(ref, {
       status: 'open',
       winnerId: null,
@@ -263,7 +416,7 @@ export async function callOffBet(code) {
     if (isCalledOff(bet)) return bet;
     if (isSettled(bet)) throw new Error('This one’s already settled. The result is locked.');
     if (isFinished(bet)) throw new Error('This bet is closed.');
-    const full = await hydrateBet(bet, (legacyRef) => tx.get(legacyRef));
+    const full = withVotes(await hydrateBet(bet, (legacyRef) => tx.get(legacyRef)), await readVoteDocs(code));
     tx.update(ref, { status: 'closed', calledOff: true, settledAt: serverTimestamp() });
     return { ...full, status: 'closed', calledOff: true, settledAt: null };
   });
@@ -271,11 +424,12 @@ export async function callOffBet(code) {
   return calledOff;
 }
 
-// The creator deletes their bet. The server route also deletes the voters'
-// saved result-text numbers, which no client can touch. Without Admin
-// credentials the route answers 503 and no numbers can have been saved
-// through it, so the bet doc alone is deleted here (the rules allow only the
-// creator). Any other failure throws and nothing is deleted client-side.
+// The creator deletes their bet. The server route also deletes the vote docs
+// and the voters' saved result-text numbers, which no client can touch.
+// Without Admin credentials the route answers 503 and no numbers can have
+// been saved through it, so the bet doc and its vote docs are deleted here in
+// one batch (the rules allow only the creator, and vote docs only along with
+// the bet). Any other failure throws and nothing is deleted client-side.
 // Errors from a dropped network (the fetch itself failed, or the browser
 // reports offline) carry code 'offline' so the screen can say so.
 function isOffline() {
@@ -312,7 +466,15 @@ export async function deleteBet(code) {
   const body = await res.json().catch(() => ({}));
   if (res.status === 503 && body?.error === 'not-configured') {
     try {
-      await deleteDoc(doc(db, 'bets', code));
+      const votes = await readVoteDocs(code);
+      if (votes.length) {
+        const batch = writeBatch(db);
+        votes.forEach((vote) => batch.delete(voteRef(code, vote.voterId)));
+        batch.delete(doc(db, 'bets', code));
+        await batch.commit();
+      } else {
+        await deleteDoc(doc(db, 'bets', code));
+      }
     } catch (cause) {
       if (isOffline()) throw offlineError(cause);
       throw cause;
