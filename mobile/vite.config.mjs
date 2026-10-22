@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
       // Always off in the native app until store IAP is wired (docs/PRO.md):
       // the store builds must not sell Pro outside In-App Purchase.
       'process.env.NEXT_PUBLIC_PRO_PAYWALL': JSON.stringify(''),
+      // Stripe web billing is web only (docs/STRIPE-WEB-PRO.md): always off in
+      // the native app, whatever the build env says.
+      'process.env.NEXT_PUBLIC_STRIPE_WEB_PRO': JSON.stringify(''),
       'process.env.NEXT_PUBLIC_PRO_EARLY_TYPES': JSON.stringify(env.NEXT_PUBLIC_PRO_EARLY_TYPES ?? ''),
       'process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE': JSON.stringify(env.NEXT_PUBLIC_PRO_MOCK_PURCHASE ?? ''),
       // The Pro sheet's Terms and Privacy links (each only when set).

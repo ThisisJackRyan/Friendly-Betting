@@ -1,14 +1,16 @@
 import {
   EARLY_ACCESS_TYPES,
   PRO_COPY,
+  STRIPE_COPY,
   proEarlyTypesEnabled,
   proMockPurchaseEnabled,
   proPaywallEnabled,
   proPrivacyUrl,
   proTermsUrl,
+  stripeWebProEnabled,
 } from './proConfig';
 
-const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE'];
+const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE', 'NEXT_PUBLIC_STRIPE_WEB_PRO'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
 
 afterEach(() => {
@@ -44,14 +46,28 @@ test('Terms and Privacy URLs: each its own, blank when unset', () => {
 });
 
 test('every flag is off by default and on only for "1"', () => {
+  const all = () => [proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled(), stripeWebProEnabled()];
   FLAGS.forEach((flag) => delete process.env[flag]);
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect(all()).toEqual([false, false, false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = 'true'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect(all()).toEqual([false, false, false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = '1'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([true, true, true]);
+  expect(all()).toEqual([true, true, true, true]);
 });
 
 test('no real early-access types ship yet', () => {
   expect(EARLY_ACCESS_TYPES).toEqual([]);
+});
+
+// Placeholder strings for Stripe web billing (docs/STRIPE-WEB-PRO.md): as few
+// as possible, plain ASCII (straight apostrophes only), no em dash, no TODO
+// in the text itself, and none of them already in PRO_COPY.
+test('Stripe copy: few, ASCII, no em dash or TODO, nothing PRO_COPY already has', () => {
+  const strings = Object.values(STRIPE_COPY);
+  expect(strings).toEqual(['Manage subscription']);
+  strings.forEach((text) => {
+    expect(text).toMatch(/^[\x20-\x7E]+$/);
+    expect(text).not.toMatch(/\u2014|TODO/);
+    expect(Object.values(PRO_COPY).flat()).not.toContain(text);
+  });
 });

@@ -27,6 +27,14 @@ export function proMockPurchaseEnabled() {
   return process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE === '1';
 }
 
+// Web Pro billing with Stripe Checkout (docs/STRIPE-WEB-PRO.md). Web only:
+// the mobile build always defines it off, and the sheet also checks
+// isNativeApp(). With it on, Get Pro starts Checkout and the mock purchase
+// is never called.
+export function stripeWebProEnabled() {
+  return process.env.NEXT_PUBLIC_STRIPE_WEB_PRO === '1';
+}
+
 // Terms and Privacy links on the Pro sheet. Each shows only when its URL is
 // set, so the sheet never links to a page that isn't there.
 export function proTermsUrl() {
@@ -73,4 +81,12 @@ export const PRO_COPY = {
   error: 'Couldn’t finish that. Try again.',
   link: 'Go Pro',
   pro: 'Pro',
+};
+
+// New on-screen strings for Stripe web billing, shown only with
+// NEXT_PUBLIC_STRIPE_WEB_PRO=1. Not approved copy: every entry is a
+// placeholder until UX signs it off. Everything else the Stripe flow shows
+// reuses PRO_COPY (Get Pro, Getting you set…, the error line).
+export const STRIPE_COPY = {
+  manage: 'Manage subscription', // PLACEHOLDER_COPY: success screen button that opens the Stripe customer portal.
 };

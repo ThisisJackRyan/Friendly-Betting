@@ -79,23 +79,40 @@ export async function fetchEntitlement(uid) {
 // Preview only: asks the mock purchase route to grant `plan` ('pro') to the
 // signed-in user. The new entitlement arrives through subscribeEntitlement.
 export function requestMockPurchase(plan) {
-  const controller = new AbortController();
-  return withTimeout(postMockPurchase(plan, controller.signal), controller);
+  return postWithToken('/api/pro/mock-purchase', { plan });
 }
 
-async function postMockPurchase(plan, signal) {
+// Web only, with NEXT_PUBLIC_STRIPE_WEB_PRO=1 (docs/STRIPE-WEB-PRO.md): a
+// Stripe Checkout URL for the signed-in member. The server takes the uid from
+// the ID token; nothing about the user is sent in the body.
+export function requestCheckout() {
+  return postWithToken('/api/pro/checkout', {});
+}
+
+// Web only: a Stripe customer portal URL for the signed-in member's own
+// subscription.
+export function requestBillingPortal() {
+  return postWithToken('/api/pro/portal', {});
+}
+
+function postWithToken(path, body) {
+  const controller = new AbortController();
+  return withTimeout(postPro(path, body, controller.signal), controller);
+}
+
+async function postPro(path, body, signal) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
   const token = await user.getIdToken();
-  const res = await fetch(apiUrl('/api/pro/mock-purchase'), {
+  const res = await fetch(apiUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify(body),
     signal,
   });
-  const body = await res.json().catch(() => ({}));
-  if (res.ok) return body;
+  const answer = await res.json().catch(() => ({}));
+  if (res.ok) return answer;
   const err = new Error('Could not finish that purchase.');
-  err.code = body?.error || 'purchase-failed';
+  err.code = answer?.error || 'purchase-failed';
   throw err;
 }
