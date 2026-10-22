@@ -88,6 +88,12 @@ export function stripeWebProConfig(env = process.env) {
   return config;
 }
 
+// The API version every request uses, pinned to the installed SDK's own
+// (stripe 23), so a Stripe account default can never change the response
+// shapes. The webhook endpoint must be created with the same version
+// (docs/STRIPE-WEB-PRO.md); a test checks this matches the SDK.
+export const STRIPE_API_VERSION = '2026-09-30.endive';
+
 let client = null;
 let clientKey = '';
 
@@ -98,7 +104,7 @@ export function stripeClient(config) {
   const mode = stripeKeyMode(config?.secretKey);
   if (mode !== 'test' && !(mode === 'live' && config.allowLive)) throw failure('stripe-key-refused');
   if (!client || clientKey !== config.secretKey) {
-    client = new Stripe(config.secretKey, { maxNetworkRetries: 2, timeout: 15000 });
+    client = new Stripe(config.secretKey, { apiVersion: STRIPE_API_VERSION, maxNetworkRetries: 2, timeout: 15000 });
     clientKey = config.secretKey;
   }
   return client;

@@ -198,10 +198,11 @@ describe('every route is a 404 with the feature off', () => {
     }
   });
 
-  test('all run on Node and are never cached', () => {
+  test('all run on Node, are never cached, and stop after 30 s', () => {
     for (const [, route] of routes) {
       expect(route.runtime).toBe('nodejs');
       expect(route.dynamic).toBe('force-dynamic');
+      expect(route.maxDuration).toBe(30);
     }
   });
 });

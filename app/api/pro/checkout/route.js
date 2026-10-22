@@ -5,6 +5,8 @@ import { stripeClient, stripeWebProConfig } from '../../../../src/server/stripeC
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Caps a stuck Stripe or Firestore call (docs/STRIPE-WEB-PRO.md).
+export const maxDuration = 30;
 
 const NOT_FOUND = () => json({ error: 'not-found' }, 404);
 const CONFLICTS = new Set(['already-pro', 'already-subscribed']);

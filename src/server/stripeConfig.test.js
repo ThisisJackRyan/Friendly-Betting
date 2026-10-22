@@ -1,6 +1,7 @@
 /** @jest-environment node */
 import Stripe from 'stripe';
 import {
+  STRIPE_API_VERSION,
   __resetStripeClientForTests,
   stripeBaseUrl,
   stripeClient,
@@ -134,6 +135,12 @@ describe('stripeClient', () => {
     expect(Stripe).toHaveBeenCalledWith('sk_test_placeholder', expect.any(Object));
     stripeClient({ ...config, secretKey: 'sk_test_other' });
     expect(Stripe).toHaveBeenCalledTimes(2);
+  });
+
+  test('pins the API version to the installed SDK’s own', () => {
+    expect(STRIPE_API_VERSION).toBe(jest.requireActual('stripe').API_VERSION);
+    stripeClient(stripeWebProConfig(ON));
+    expect(Stripe).toHaveBeenCalledWith('sk_test_placeholder', expect.objectContaining({ apiVersion: STRIPE_API_VERSION }));
   });
 
   test('refuses to start with a live key unless allowed, or with no key', () => {

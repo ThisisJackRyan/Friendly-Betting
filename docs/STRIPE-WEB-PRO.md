@@ -95,6 +95,15 @@ from `capacitor://localhost` / `https://localhost`) can never start a Checkout.
      [Test-mode allowlist](#test-mode-allowlist-stripe_test_uids).
 4. **500** when a write fails (Stripe retries with backoff for up to 3 days).
 
+**API version.** The client pins `apiVersion` to the installed SDK's own, `2026-09-30.endive`
+(`STRIPE_API_VERSION` in `stripeConfig.js`; a test fails if an SDK upgrade changes it), so the
+account's default version never changes what the API returns. Webhook payloads are shaped by the
+**endpoint's** API version, not the client's: create the endpoint with this same version, and
+update both together when the SDK is upgraded.
+
+**Time limit.** The three Stripe routes set `maxDuration = 30` (seconds), so a stuck Stripe or
+Firestore call can't hold a function open. A webhook that times out is retried by Stripe.
+
 **Where the period end lives.** The installed `stripe` SDK (v23, API version
 `2026-09-30.endive`) has no `current_period_end` on the Subscription; it is on each subscription
 item (`items.data[].current_period_end`). `periodEndMillis` takes the latest item's, and still
@@ -268,7 +277,8 @@ change; it needs the account owner.
      Protection on, Stripe can't reach it: append Vercel's protection bypass
      (`?x-vercel-protection-bypass=<secret>`, Project Settings > Deployment Protection >
      Protection Bypass for Automation).
-   - API version: the SDK's, `2026-09-30.endive` (older versions work too, see above).
+   - API version: **must** be the SDK's pinned one, `2026-09-30.endive` (`STRIPE_API_VERSION`).
+     Older versions still parse, but keep the two the same.
    - Events: `checkout.session.completed`, `customer.subscription.created`,
      `customer.subscription.updated`, `customer.subscription.deleted`.
    - Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
