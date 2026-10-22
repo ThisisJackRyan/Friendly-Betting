@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { NAME_EDIT_COPY, NAME_PLACEHOLDER } from './nameEditCopy';
+import { cleanName, NAME_MAX } from './votes';
 
 // A small add/edit name control under "You’re on ...". onSave(name) changes
 // only the name on the voter's pick; when it throws, the old name stays and
@@ -33,7 +34,7 @@ export default function NameEdit({ current = '', onSave }) {
     setError('');
   };
 
-  const trimmed = value.trim();
+  const trimmed = cleanName(value);
   const save = async (event) => {
     event.preventDefault();
     if (saving || trimmed === current) return;
@@ -75,6 +76,7 @@ export default function NameEdit({ current = '', onSave }) {
           value={value}
           placeholder={NAME_PLACEHOLDER}
           autoComplete="nickname"
+          maxLength={NAME_MAX}
           disabled={saving}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
