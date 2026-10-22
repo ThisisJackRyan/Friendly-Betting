@@ -36,7 +36,7 @@ export const stakeLine = (stake) => STAKE_LINES[stakeKind(stake)];
 export const REVEAL_COPY = {
   eyebrow: (side) => `${side} won`,
   won: (names) => `${names} won.`,
-  solo: (line) => `Called it solo. ${line}`,
+  solo: (line) => `The only one who called it. ${line}`,
   nobody: 'Nobody called it.',
   nobodySub: 'Not one of you saw that coming.',
   youWon: 'You called it.',
@@ -117,8 +117,8 @@ export function buildReveal({ bet, viewerId }) {
   const names = winnerPhrase(winners);
   const headline = names ? REVEAL_COPY.won(names) : REVEAL_COPY.friends(winners.length);
   if (recipient) return { ...base, kind: 'you-lost', headline, subline: REVEAL_COPY.youLost, startBet: true };
-  // "Called it solo" only follows a name; a lone unnamed winner gets the
-  // plain stake line.
+  // "The only one who called it" only follows a name; a lone unnamed winner
+  // gets the plain stake line.
   const subline = names && winners.length === 1 ? REVEAL_COPY.solo(line) : line;
   return { ...base, kind: 'winners', headline, subline };
 }

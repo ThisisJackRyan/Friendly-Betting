@@ -76,7 +76,7 @@ describe('the winners line follows the stake', () => {
     const bet = settled({ winners: [['maya', 'Maya']], losers: [['zed', 'Zed']], stake });
     const crew = settled({ winners: [['maya', 'Maya'], ['sam', 'Sam']], losers: [['zed', 'Zed']], stake });
     // The fixed starts stay; only the stake part changes.
-    expect(buildReveal({ bet, viewerId: 'outsider' }).subline).toBe(`Called it solo. ${line}`);
+    expect(buildReveal({ bet, viewerId: 'outsider' }).subline).toBe(`The only one who called it. ${line}`);
     expect(buildReveal({ bet, viewerId: 'maya' }).subline).toBe(`Solo win. ${line}`);
     expect(buildReveal({ bet: crew, viewerId: 'maya' }).subline).toBe(`You & Sam won. ${line}`);
     expect(buildReveal({ bet: crew, viewerId: 'outsider' }).subline).toBe(line);
@@ -103,23 +103,23 @@ describe('buildReveal copy', () => {
     ['2 winners', [['maya', 'Maya'], ['sam', 'Sam']], 'Maya & Sam won.', 'Time for everyone else to pay up.'],
     ['3 winners', [['jack', 'Jack'], ['maya', 'Maya'], ['sam', 'Sam']], 'Jack, Maya & Sam won.', 'Time for everyone else to pay up.'],
     ['4+ winners', [['jack', 'Jack'], ['maya', 'Maya'], ['sam', 'Sam'], ['kim', 'Kim'], ['lee', 'Lee']], 'Jack, Maya & 3 others won.', 'Time for everyone else to pay up.'],
-    ['1 winner', [['maya', 'Maya']], 'Maya won.', 'Called it solo. Time for everyone else to pay up.'],
+    ['1 winner', [['maya', 'Maya']], 'Maya won.', 'The only one who called it. Time for everyone else to pay up.'],
   ])('%s', (_label, winners, headline, subline) => {
     const reveal = buildReveal({ bet: settled({ winners, losers: [['zed', 'Zed']] }), viewerId: 'outsider' });
     expect(lines(reveal)).toEqual(['Chiefs -3 won', headline, subline, '$20']);
     expect(reveal.startBet).toBe(false);
   });
 
-  test('a single unnamed winner gets the plain stake line, not "Called it solo"', () => {
+  test('a single unnamed winner gets the plain stake line, not "The only one who called it"', () => {
     for (const name of ['', '   ']) {
       const reveal = buildReveal({ bet: settled({ winners: [['u1', name]], losers: [['zed', 'Zed']] }), viewerId: 'outsider' });
       expect(lines(reveal)).toEqual(['Chiefs -3 won', 'One friend called it.', 'Time for everyone else to pay up.', '$20']);
     }
   });
 
-  test('a single named winner keeps "Called it solo"', () => {
+  test('a single named winner keeps "The only one who called it"', () => {
     const reveal = buildReveal({ bet: settled({ winners: [['maya', 'Maya']] }), viewerId: 'outsider' });
-    expect([reveal.kind, reveal.headline, reveal.subline]).toEqual(['winners', 'Maya won.', 'Called it solo. Time for everyone else to pay up.']);
+    expect([reveal.kind, reveal.headline, reveal.subline]).toEqual(['winners', 'Maya won.', 'The only one who called it. Time for everyone else to pay up.']);
   });
 
   test.each([

@@ -1,7 +1,7 @@
 import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import * as entitlementApi from './entitlementApi';
 
-const { __resetDeniedForTests, fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
+const { fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
@@ -18,7 +18,6 @@ jest.mock('../Config/firebase-config', () => ({
 }));
 
 beforeEach(() => {
-  __resetDeniedForTests();
   getDocFromServer.mockReset();
   global.fetch = jest.fn();
   mockAuth.currentUser = { getIdToken: jest.fn(async () => 'id-token') };
@@ -31,7 +30,7 @@ afterEach(() => {
 
 test('only the entitlement reads and the mock purchase: no founder count', () => {
   expect(Object.keys(entitlementApi).sort()).toEqual([
-    '__resetDeniedForTests', 'fetchEntitlement', 'logsDeniedReads', 'requestMockPurchase', 'subscribeEntitlement',
+    'fetchEntitlement', 'logsDeniedReads', 'requestMockPurchase', 'subscribeEntitlement',
   ]);
 });
 

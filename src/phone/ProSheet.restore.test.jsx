@@ -5,7 +5,6 @@ import Paywall from './Paywall';
 import ProSheet, { RESTORE_MIN_BUSY_MS } from './ProSheet';
 import EntitlementSync from './EntitlementSync';
 import { __resetEntitlementForTests } from './useEntitlement';
-import { __resetDeniedForTests } from './entitlementApi';
 import { isPro as adServiceIsPro } from '../ads/pro';
 
 // Restore purchase end to end: the sheet, refreshEntitlement and the real
@@ -46,7 +45,6 @@ let listen;
 
 beforeEach(() => {
   __resetEntitlementForTests();
-  __resetDeniedForTests();
   listen = 'denied';
   onSnapshot.mockReset();
   onSnapshot.mockImplementation((_ref, next, error) => {

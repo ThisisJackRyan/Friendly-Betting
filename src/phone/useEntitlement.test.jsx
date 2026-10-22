@@ -6,7 +6,6 @@ import { isPro, whenProKnown } from '../ads/pro';
 import { __resetAdsForTests, canShowInterstitial, showInterstitial } from '../ads/adService';
 import { showHouseAd } from '../ads/HouseAd';
 import EntitlementSync from './EntitlementSync';
-import { __resetDeniedForTests } from './entitlementApi';
 
 // The real entitlementApi on a fake Firestore: only onSnapshot is stubbed.
 jest.unmock('./entitlementApi');
@@ -49,7 +48,6 @@ beforeEach(() => {
   useSignedInUser.mockReset();
   useSignedInUser.mockReturnValue(creator);
   __resetEntitlementForTests();
-  __resetDeniedForTests();
   getDocFromServer.mockReset();
   __resetAdsForTests();
   localStorage.clear();
