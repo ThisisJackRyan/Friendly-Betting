@@ -14,6 +14,9 @@ import { navigation } from 'next/navigation';
 // keeps its look plus a small outlined Pro chip, and a tap opens the Pro
 // sheet on that feature's row. Paywall off or a Pro member: as before.
 
+// The Pro sheet's name: its headline, with the no-break space before ads.
+const SHEET = 'All the bets. None of the\u00A0ads.';
+
 jest.mock('next/navigation');
 jest.mock('next/link');
 jest.mock('./api', () => ({
@@ -102,7 +105,7 @@ describe('Run it back', () => {
     expect(chip(button())).toHaveTextContent(/^Pro$/);
     expect(button()).toHaveTextContent(/^Run it backPro$/);
     await userEvent.click(button());
-    expect(screen.getByRole('dialog', { name: 'All the bets. None of the ads.' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: SHEET })).toBeInTheDocument();
     expect(highlighted()).toEqual([ROW_3]);
     expect(saveBet).not.toHaveBeenCalled();
     expect(navigation.push).not.toHaveBeenCalled();
@@ -141,7 +144,7 @@ describe('head-to-head stats (Friends on My bets)', () => {
     await show(<MyBetsList user={MAYA} />);
     expect(chip(friends())).toHaveTextContent(/^Pro$/);
     await userEvent.click(friends());
-    expect(screen.getByRole('dialog', { name: 'All the bets. None of the ads.' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: SHEET })).toBeInTheDocument();
     expect(highlighted()).toEqual([ROW_4]);
     expect(friends()).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByText('Head to head')).toBeNull();
@@ -183,7 +186,7 @@ describe('head-to-head stats (Friends on My bets)', () => {
       const root = await showInRoot(<MyBetsList user={MAYA} />);
       expect(root).not.toHaveAttribute('inert');
       await userEvent.click(friends());
-      const sheet = screen.getByRole('dialog', { name: 'All the bets. None of the ads.' });
+      const sheet = screen.getByRole('dialog', { name: SHEET });
       expect(root.contains(sheet)).toBe(false);
       expect(root).toHaveAttribute('inert');
       expect(sheet).toHaveFocus();

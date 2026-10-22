@@ -1,8 +1,8 @@
 import { act, render, renderHook } from '@testing-library/react';
-import { onSnapshot } from 'firebase/firestore';
+import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import { useSignedInUser } from './identity';
-import { __resetEntitlementForTests, useEntitlement, useEntitlementState, useProBadge } from './useEntitlement';
-import { isPro } from '../ads/pro';
+import { __resetEntitlementForTests, refreshEntitlement, useEntitlement, useEntitlementState, useProBadge } from './useEntitlement';
+import { isPro, whenProKnown } from '../ads/pro';
 import { __resetAdsForTests, canShowInterstitial, showInterstitial } from '../ads/adService';
 import { showHouseAd } from '../ads/HouseAd';
 import EntitlementSync from './EntitlementSync';
@@ -12,6 +12,7 @@ jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
   doc: jest.fn((_db, ...segments) => ({ path: segments.join('/') })),
   getDoc: jest.fn(),
+  getDocFromServer: jest.fn(),
   onSnapshot: jest.fn(),
 }));
 jest.mock('../Config/firebase-config', () => ({ auth: null, db: {} }));
@@ -129,6 +130,40 @@ test('a failed read keeps the plan already known', () => {
   emit('entitlements/jack', { plan: 'pro' });
   act(() => sinks['entitlements/jack'].error(new Error('offline')));
   expect(result.current.isPro).toBe(true);
+});
+
+// The live rules until the entitlements block is deployed: every read of
+// entitlements/{uid} is denied.
+const denied = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+const known = () => Promise.race([whenProKnown(1e9).then(() => true), new Promise((resolve) => { setTimeout(() => resolve(false), 0); })]);
+
+test('a denied listener is not Pro and done loading, and the ad service knows', async () => {
+  const { result } = renderHook(() => useEntitlement());
+  expect(await known()).toBe(false);
+  act(() => sinks['entitlements/jack'].error(denied()));
+  expect(result.current).toEqual({ entitlement: null, isPro: false, loading: false });
+  expect(isPro()).toBe(false);
+  expect(await known()).toBe(true);
+  await expect(showInterstitial({ placement: 'invite' })).resolves.toMatchObject({ shown: true, reason: 'shown' });
+});
+
+test('a denied read on Restore purchase is nothing to restore, not an error', async () => {
+  renderHook(() => useEntitlement());
+  act(() => sinks['entitlements/jack'].error(denied()));
+  const refresh = async () => {
+    let outcome;
+    await act(async () => {
+      outcome = await refreshEntitlement().then((found) => ({ found }), (err) => ({ err }));
+    });
+    return outcome;
+  };
+  getDocFromServer.mockRejectedValue(denied());
+  expect(await refresh()).toEqual({ found: false });
+  getDocFromServer.mockResolvedValue({ exists: () => false, data: () => undefined });
+  expect(await refresh()).toEqual({ found: false });
+  getDocFromServer.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+  expect((await refresh()).err).toMatchObject({ code: 'unavailable' });
+  expect(renderHook(() => useEntitlementState()).result.current).toMatchObject({ isPro: false, loading: false });
 });
 
 test('the badge is only for the signed-in user it was loaded for', () => {

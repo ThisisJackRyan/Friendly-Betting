@@ -55,8 +55,10 @@ auto-deployed (see the note at its top).
 
 - `src/phone/entitlementApi.js`: `subscribeEntitlement(uid, cb)` (onSnapshot of the user's own
   doc), `fetchEntitlement(uid)` (one server read of it, for Restore purchase),
-  `requestMockPurchase(plan)`. The only Pro reads. Jest mocks it for
-  every test in `src/setupTests.js`.
+  `requestMockPurchase(plan)`. The only Pro reads. Both treat `permission-denied` on the
+  user's own doc as no entitlement, like a missing doc, so rules without the `entitlements`
+  block (not yet deployed) read as not Pro rather than an error; any other error is still an
+  error. Jest mocks it for every test in `src/setupTests.js`.
 - `src/phone/useEntitlement.js`: one shared listener for the signed-in user.
   `useEntitlement()` returns `{ entitlement, isPro, loading }` and keeps `src/ads/pro.js`
   current through `setProEntitlement`, so the ad service's synchronous `isPro()` is right on
@@ -95,7 +97,8 @@ opened it, portaled to `document.body`. `src/phone/Paywall.jsx` is `/pro` (web
 `NEXT_PUBLIC_PRO_PAYWALL` off the web route is a real 404 and the app shows the not-found page.
 
 Top to bottom: the close X (the shared `.overlay-close`, a soft 36px circle in full ink with a
-44px tap area), a green hero with a white `Pro` badge, `All the bets. None of the ads.` and
+44px tap area), a green hero with a white `Pro` badge, `All the bets. None of the ads.` (a no-break space
+before `ads.`, and `text-wrap: balance`, so `ads.` never wraps alone) and
 `Friends always play free.`, five benefit rows, the price, the fine print and
 `Restore purchase · Terms · Privacy`; pinned above the safe area, the main button and
 `Maybe later`. Every string is in `PRO_COPY` (`proConfig.js`).

@@ -11,9 +11,10 @@ import { isPro as adServiceIsPro } from '../ads/pro';
 import { navigation } from 'next/navigation';
 
 // The Pro sheet and /pro (UX spec, Oct 20). Every string below is the spec's,
-// byte for byte (curly apostrophes, the … character).
+// byte for byte (curly apostrophes, the … character), but for the no-break
+// space that keeps "ads." on the line with "the".
 const SPEC = {
-  headline: 'All the bets. None of the ads.',
+  headline: 'All the bets. None of the\u00A0ads.',
   line: 'Friends always play free.',
   benefits: [
     'No ads, ever',
@@ -431,6 +432,16 @@ describe('layout rules (phone.css)', () => {
     expect(small).toMatch(/--pro-pad: 20px;/);
     expect(small).toMatch(/\.pro-sheet-hero \{ height: 180px; \}/);
     expect(small).toMatch(/font-size: 28px;/);
+  });
+
+  test('the headline wraps balanced, and "ads." never sits alone on a line', async () => {
+    expect(rule('.pro-sheet .pro-sheet-headline')).toMatch(/text-wrap: balance;/);
+    await openSheet();
+    const headline = screen.getByRole('heading', { level: 2 }).textContent;
+    expect(headline.match(/\u00A0/g)).toEqual(['\u00A0']);
+    expect(headline).toMatch(/the\u00A0ads\.$/);
+    // The same words the spec has.
+    expect(headline.replace('\u00A0', ' ')).toBe('All the bets. None of the ads.');
   });
 
   test('rows 44px with 24px icons, the price block, main button 56px, Maybe later 44px', () => {
