@@ -34,6 +34,16 @@ test('the creator deletes the bet, its numbers and the numbers parent, and nothi
   expect(db.data('MoneyLineBets/ml-1')).toBeTruthy();
 });
 
+test('the creator\'s delete takes the bet\'s vote docs with it, and only that bet\'s', async () => {
+  const db = seeded({
+    'bets/abc123/votes/anon-2': { voterId: 'anon-2', name: 'Lee', optionId: 'b', at: 1 },
+    'bets/other/votes/anon-9': { voterId: 'anon-9', name: '', optionId: 'a', at: 1 },
+  });
+  await deleteBet({ db, code: 'abc123', uid: 'creator-1', phoneNumber: PHONE });
+  expect(db.paths('bets/abc123')).toEqual([]);
+  expect(db.data('bets/other/votes/anon-9')).toBeTruthy();
+});
+
 test('running it twice succeeds and the second run writes nothing', async () => {
   const db = seeded();
   await deleteBet({ db, code: 'abc123', uid: 'creator-1', phoneNumber: PHONE });

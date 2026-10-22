@@ -17,8 +17,11 @@ const BETS = [
     votes: [pick('jack', 'Jack', 'a'), pick('uid-ana', 'Ana', 'b')] },
   { ...base, id: 'off123', code: 'off123', createdAt: 2, question: 'Rain delay?', status: 'called-off',
     votes: [pick('uid-ana', 'Ana', 'b')] },
+  // Ana switched sides here in her own vote doc, which wins over her older
+  // array entry: My bets reads them merged (docs/VOTE-SECURITY.md).
   { ...base, id: 'live123', code: 'live123', createdAt: 1, question: 'Who takes the win?', status: 'open',
-    votes: [pick('uid-ana', 'Ana', 'b')] },
+    votes: [pick('uid-ana', 'Ana', 'a')],
+    voteDocs: [{ ...pick('uid-ana', 'Ana', 'b'), at: 2 }] },
 ];
 
 async function mockBets(page, bets) {
@@ -33,7 +36,8 @@ async function mockBets(page, bets) {
   }));
   await page.route('**/src/phone/api.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
-    body: `const bets = ${JSON.stringify(bets)};
+    body: `import { withVotes } from ${JSON.stringify(new URL('./votes.js', route.request().url()).href)};
+      const bets = ${JSON.stringify(bets)}.map(({ voteDocs, ...bet }) => withVotes(bet, voteDocs || []));
       export const subscribeBet = (code, cb) => { cb(bets.find((bet) => bet.id === code) || null); return () => {}; };
       export const subscribeMyBets = (uid, cb) => { cb(bets); return () => {}; };
       export const hydrateBet = async b => b;
