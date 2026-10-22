@@ -1,7 +1,7 @@
-import { getDocFromServer } from 'firebase/firestore';
+import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import * as entitlementApi from './entitlementApi';
 
-const { fetchEntitlement, requestMockPurchase } = entitlementApi;
+const { fetchEntitlement, requestMockPurchase, subscribeEntitlement } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
@@ -84,4 +84,70 @@ test('an entitlement read in time clears its timer', async () => {
   getDocFromServer.mockResolvedValue({ exists: () => true, data: () => ({ plan: 'pro' }) });
   await expect(fetchEntitlement('jack')).resolves.toEqual({ plan: 'pro' });
   expect(jest.getTimerCount()).toBe(0);
+});
+
+const snapOf = (data) => ({ exists: () => data !== null, data: () => data });
+const failure = (code) => Object.assign(new Error(code), { code });
+
+describe('fetchEntitlement', () => {
+  test('reads the user’s own doc from the server', async () => {
+    getDocFromServer.mockResolvedValue(snapOf({ plan: 'pro', expiresAt: null }));
+    await expect(fetchEntitlement('jack')).resolves.toEqual({ plan: 'pro', expiresAt: null });
+    expect(getDocFromServer).toHaveBeenCalledWith({ path: 'entitlements/jack' });
+  });
+
+  test('a missing doc is no entitlement', async () => {
+    getDocFromServer.mockResolvedValue(snapOf(null));
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+  });
+
+  test('permission-denied (rules without the entitlements block) is no entitlement', async () => {
+    getDocFromServer.mockRejectedValue(failure('permission-denied'));
+    await expect(fetchEntitlement('jack')).resolves.toBeNull();
+  });
+
+  test.each(['unavailable', 'deadline-exceeded', 'unauthenticated', 'internal'])('%s still throws', async (code) => {
+    getDocFromServer.mockRejectedValue(failure(code));
+    await expect(fetchEntitlement('jack')).rejects.toMatchObject({ code });
+  });
+
+  test('an error with no code still throws', async () => {
+    getDocFromServer.mockRejectedValue(new Error('offline'));
+    await expect(fetchEntitlement('jack')).rejects.toThrow('offline');
+  });
+});
+
+describe('subscribeEntitlement', () => {
+  let sink;
+  beforeEach(() => {
+    onSnapshot.mockReset();
+    onSnapshot.mockImplementation((ref, next, error) => {
+      sink = { ref, next, error };
+      return () => {};
+    });
+  });
+
+  test('each snapshot is the plan, or null for a missing doc', () => {
+    const onChange = jest.fn();
+    subscribeEntitlement('jack', onChange);
+    expect(sink.ref).toEqual({ path: 'entitlements/jack' });
+    sink.next(snapOf({ plan: 'pro' }));
+    sink.next(snapOf(null));
+    expect(onChange.mock.calls).toEqual([[{ plan: 'pro' }], [null]]);
+  });
+
+  test('permission-denied is no entitlement, not an error', () => {
+    const onChange = jest.fn();
+    subscribeEntitlement('jack', onChange);
+    sink.error(failure('permission-denied'));
+    expect(onChange.mock.calls).toEqual([[null]]);
+  });
+
+  test('any other error is passed on', () => {
+    const onChange = jest.fn();
+    subscribeEntitlement('jack', onChange);
+    const err = failure('unavailable');
+    sink.error(err);
+    expect(onChange.mock.calls).toEqual([[undefined, err]]);
+  });
 });
