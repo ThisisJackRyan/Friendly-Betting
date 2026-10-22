@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import { optionVoteLabel, tallyCounts } from './model';
-import { VOTER_LIST_COPY, VOTER_PREVIEW, voterListLabel, votersByOption } from './voters';
+import { VOTER_LIST_COPY, VOTER_PREVIEW, viewerNameIndex, voterListLabel, votersByOption } from './voters';
+import ProBadge from './ProBadge';
 
-function VoterList({ names, unnamed }) {
+function VoterList({ names, unnamed, mine = -1, badge = null }) {
   const [expanded, setExpanded] = useState(false);
   const list = useRef(null);
   if (!names.length && !unnamed) return null;
@@ -18,6 +19,7 @@ function VoterList({ names, unnamed }) {
       {shown.map((name, index) => (
         <li key={`${index}-${name}`} className="voter-name" title={name}>
           {name}
+          {index === mine && <ProBadge badge={badge} />}
         </li>
       ))}
       {hidden > 0 && (
@@ -39,7 +41,8 @@ function VoterList({ names, unnamed }) {
   );
 }
 
-const Bars = ({ bet, highlightId, waiting = false, showVoters = false }) => {
+// `viewerBadge` (the viewer's own Pro badge) follows only `viewerId`'s name.
+const Bars = ({ bet, highlightId, waiting = false, showVoters = false, viewerId = '', viewerBadge = null }) => {
   const rows = tallyCounts(bet);
   const total = rows.reduce((sum, row) => sum + row.count, 0);
   const voters = showVoters ? votersByOption(bet) : {};
@@ -66,7 +69,14 @@ const Bars = ({ bet, highlightId, waiting = false, showVoters = false }) => {
             <div className="bar-track" aria-hidden="true">
               <div className="bar-fill" style={{ width: `${pct}%` }} />
             </div>
-            {side && <VoterList names={side.names} unnamed={side.unnamed} />}
+            {side && (
+              <VoterList
+                names={side.names}
+                unnamed={side.unnamed}
+                mine={viewerBadge ? viewerNameIndex(bet, row.id, viewerId) : -1}
+                badge={viewerBadge}
+              />
+            )}
           </div>
         );
       })}

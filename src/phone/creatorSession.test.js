@@ -90,7 +90,10 @@ test('mapped Firebase codes keep their friendly copy and hide the code', () => {
     'auth/too-many-requests': 'Too many tries. Wait a moment.',
     'auth/invalid-verification-code': 'That code doesn\u2019t match.',
     'auth/code-expired': 'That code expired. Resend it.',
+    'auth/session-expired': 'That code expired. Resend it.',
+    'auth/missing-verification-code': 'Enter the 6-digit code.',
     'auth/invalid-verification-id': 'Send a new code.',
+    'auth/missing-verification-id': 'Send a new code.',
     'auth/captcha-check-failed': 'Couldn\u2019t confirm you\u2019re a person. Try again.',
     'auth/quota-exceeded': 'Texting is paused. Try again later.',
     'auth/network-request-failed': 'You\u2019re offline. Try again.',
@@ -100,6 +103,33 @@ test('mapped Firebase codes keep their friendly copy and hide the code', () => {
       code,
       message: `Firebase: A longer server explanation. (${code}).`,
     }, SEND_CODE_ERROR)).toEqual({ message: copy, code: '' });
+  });
+});
+
+describe('raw codes on preview builds', () => {
+  const saved = process.env.NEXT_PUBLIC_VERCEL_ENV;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    else process.env.NEXT_PUBLIC_VERCEL_ENV = saved;
+  });
+
+  test.each(['preview', 'development'])('a %s build shows the raw code under the sentence', (env) => {
+    process.env.NEXT_PUBLIC_VERCEL_ENV = env;
+    expect(phoneError({ code: 'auth/code-expired' }, VERIFY_CODE_ERROR)).toEqual({
+      message: 'That code expired. Resend it.',
+      code: 'auth/code-expired',
+    });
+  });
+
+  test.each(['production', '', undefined])('a %p build hides the raw code', (env) => {
+    if (env === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+    else process.env.NEXT_PUBLIC_VERCEL_ENV = env;
+    expect(phoneError({ code: 'auth/session-expired' }, VERIFY_CODE_ERROR)).toEqual({
+      message: 'That code expired. Resend it.',
+      code: '',
+    });
+    expect(phoneError({ code: 'auth/billing-not-enabled' }, SEND_CODE_ERROR).code)
+      .toBe('auth/billing-not-enabled');
   });
 });
 

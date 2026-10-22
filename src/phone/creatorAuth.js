@@ -8,13 +8,17 @@ import {
 import { auth } from '../Config/firebase-config';
 import { isNativeApp } from '../platform/runtime';
 import { cancelNativePhoneCode, sendNativePhoneCode } from '../platform/nativePhone';
-import { PERSON_CHECK_CANCELLED } from './creatorSession';
+import { PERSON_CHECK_CANCELLED, showsRawCodes } from './creatorSession';
 
 const ALREADY_IN_USE = new Set([
   'auth/credential-already-in-use',
   'auth/email-already-in-use',
   'auth/account-exists-with-different-credential',
 ]);
+
+// The code a spent, unrecoverable phone code is reported with. Its existing
+// PHONE_ERRORS copy is "Send a new code."
+export const SPENT_CODE = 'auth/invalid-verification-id';
 
 let verifier = null;
 let verifierNode = null;
@@ -244,7 +248,17 @@ export async function verifyPhoneCode(verificationId, code) {
     return result.user;
   } catch (err) {
     if (ALREADY_IN_USE.has(err?.code)) {
-      return signInWithPhone(err.credential || credential);
+      // The failed link already used up this code, so sign in with the proof
+      // Firebase returned on the error. Retrying the code reads as expired.
+      const existing = PhoneAuthProvider.credentialFromError(err);
+      if (existing) return signInWithPhone(existing);
+      // No proof to sign in with, and the code is spent: ask for a new one
+      // (phoneError reads this code as "Send a new code.").
+      const spent = Object.assign(new Error('Phone code already used.'), { code: SPENT_CODE, cause: err });
+      // Preview and dev only: which link error came back without a proof.
+      // The code only. Never the number, the id, or the SMS code.
+      if (showsRawCodes()) console.warn('[phone-auth] no proof on link error', spent.cause?.code);
+      throw spent;
     }
     throw err;
   }

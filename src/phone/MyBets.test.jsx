@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MyBetsList } from './MyBets';
+import { DELETE_WAIT_MS, MyBetsList } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
 import { PHONE_OFFLINE_ERROR } from './creatorSession';
 
@@ -274,6 +274,65 @@ describe('delete a bet', () => {
     }
   });
 
+  describe('a delete whose answer never comes back', () => {
+    beforeEach(() => {
+      deleteBet.mockImplementation(() => new Promise(() => {}));
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test('finishes once the live list no longer has the bet', async () => {
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      // Another bet changing is not this delete landing.
+      await act(async () => publishBets(bets.map((bet) => ({ ...bet }))));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      await act(async () => publishBets(bets.filter((bet) => bet.id !== 'game')));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+    });
+
+    test('a failed list load is not taken for the delete landing', async () => {
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      await act(async () => publishBets(null, new Error('offline')));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      expect(screen.getByRole('status')).toHaveTextContent('');
+    });
+
+    test('gives up after DELETE_WAIT_MS with the delete line, and a late delete still closes the dialog', async () => {
+      jest.useFakeTimers();
+      const actor = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      render(<MyBetsList user={user} />);
+      await actor.click(screen.queryAllByRole('button', { name: 'Delete' })[1]);
+      await actor.click(screen.getByRole('button', { name: 'Delete bet' }));
+      await act(async () => jest.advanceTimersByTime(DELETE_WAIT_MS - 1));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      await act(async () => jest.advanceTimersByTime(1));
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('alert').textContent).toBe(GENERIC);
+      expect(within(dialog).getByRole('button', { name: 'Delete bet' })).toBeEnabled();
+      await act(async () => publishBets(bets.filter((bet) => bet.id !== 'game')));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+    });
+
+    test('leaving the screen mid-delete clears the wait', async () => {
+      jest.useFakeTimers();
+      const actor = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      const { unmount } = render(<MyBetsList user={user} />);
+      await actor.click(screen.queryAllByRole('button', { name: 'Delete' })[1]);
+      await actor.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(jest.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      expect(jest.getTimerCount()).toBe(0);
+    });
+  });
+
   test('a retry after a failed delete succeeds and closes the dialog', async () => {
     deleteBet.mockRejectedValueOnce(new Error('server')).mockResolvedValueOnce(undefined);
     render(<MyBetsList user={user} />);
@@ -285,5 +344,136 @@ describe('delete a bet', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+  });
+});
+
+describe('Friends', () => {
+  const pick = (voterId, name, optionId) => ({ voterId, name, optionId });
+  const crewBets = [
+    {
+      id: 'won', createdByID: 'creator', createdAt: 5, schemaVersion: 2, type: 'money-line', question: 'Bears win?',
+      status: 'closed', winnerId: 'a', options,
+      votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b'), pick('uid-ben', 'Ben', 'a')],
+    },
+    {
+      id: 'lost', createdByID: 'creator', createdAt: 4, schemaVersion: 2, type: 'money-line', question: 'Over 40?',
+      status: 'closed', winnerId: 'b', options, votes: [pick('creator', 'Me', 'a'), pick('uid-ana', 'Ana', 'b')],
+    },
+    {
+      id: 'off', createdByID: 'creator', createdAt: 3, schemaVersion: 2, type: 'money-line', question: 'Rain delay?',
+      status: 'called-off', options, votes: [pick('uid-ana', 'Ana', 'b')],
+    },
+    {
+      id: 'live', createdByID: 'creator', createdAt: 2, schemaVersion: 2, type: 'prop', question: 'Who wins game night?',
+      status: 'open', stake: 'Coffee', options, votes: [pick('uid-ana', 'Ana', 'b')],
+    },
+  ];
+  const showFriends = async () => {
+    const filters = screen.getByRole('group', { name: 'Filter bets by status' });
+    await userEvent.click(within(filters).getByRole('button', { name: /^Friends/ }));
+  };
+
+  test('lists each friend with their record and opens their shared bets', async () => {
+    subscribeMyBets.mockImplementation((_uid, publish) => { publish(crewBets); return () => {}; });
+    render(<MyBetsList user={user} />);
+    const filters = screen.getByRole('group', { name: 'Filter bets by status' });
+    expect(within(filters).getByRole('button', { name: 'Friends 2' })).toBeInTheDocument();
+    await showFriends();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bears win?')).not.toBeInTheDocument();
+    const section = screen.getByRole('region', { name: 'Head to head' });
+    const rows = within(section).getAllByRole('button');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'Ana1 W1 LBets together 4',
+      'Ben0 W0 LBets together 1',
+    ]);
+    expect(within(rows[0]).getByRole('img', { name: '1 win' })).toHaveTextContent('1 W');
+    expect(within(rows[0]).getByRole('img', { name: '1 loss' })).toHaveTextContent('1 L');
+    expect(within(rows[1]).getByRole('img', { name: '0 wins' })).toHaveTextContent('0 W');
+    expect(within(rows[1]).getByRole('img', { name: '0 losses' })).toHaveTextContent('0 L');
+    expect(section).not.toHaveTextContent('Me');
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(rows[0]);
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'true');
+    const history = document.getElementById(rows[0].getAttribute('aria-controls'));
+    const links = within(history).getAllByRole('link');
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/t/won', '/t/lost', '/t/off', '/t/live']);
+    expect(links[0]).toHaveTextContent('Settled');
+    expect(within(links[0]).getByRole('img', { name: 'Won' })).toHaveClass('friend-pill', 'win');
+    expect(within(links[0]).getByRole('img', { name: 'Won' })).toHaveTextContent('W');
+    expect(within(links[1]).getByRole('img', { name: 'Lost' })).toHaveClass('friend-pill', 'loss');
+    expect(within(links[1]).getByRole('img', { name: 'Lost' })).toHaveTextContent('L');
+    expect(links[2]).toHaveTextContent('This bet was called off.');
+    expect(links[2]).not.toHaveTextContent(/\bW\b|\bL\b/);
+    expect(within(links[3]).getByText('Open')).toHaveClass('status', 'open');
+    expect(links[3]).toHaveTextContent('Coffee');
+    expect(links[3].querySelector('.friend-pill')).toBeNull();
+
+    await userEvent.click(rows[1]);
+    expect(rows[0]).toHaveAttribute('aria-expanded', 'false');
+    const benLinks = within(document.getElementById(rows[1].getAttribute('aria-controls'))).getAllByRole('link');
+    // Same side as the creator: settled, but no W or L.
+    expect(benLinks).toHaveLength(1);
+    expect(benLinks[0]).toHaveTextContent('Settled');
+    expect(benLinks[0].querySelector('.friend-pill')).toBeNull();
+    await userEvent.click(rows[1]);
+    expect(screen.queryAllByRole('link', { name: /Bears win/ })).toHaveLength(0);
+  });
+
+  test('with no friends yet it shows a plain label', async () => {
+    render(<MyBetsList user={user} />);
+    // The only pick on the fixtures has no name, so nobody can be listed.
+    await showFriends();
+    expect(screen.getByRole('heading', { name: 'No friends yet' })).toHaveClass('friends-empty');
+    expect(screen.getByText('Bet with someone and they’ll show up here.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Head to head' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'All 3' }));
+    expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
+  });
+});
+
+describe('the settled card line, from the creator’s side', () => {
+  const settled = (id, votes, winnerId = 'a') => ({
+    id, createdByID: 'creator', schemaVersion: 2, type: 'money-line', question: `${id}?`,
+    status: 'closed', winnerId, options, votes,
+  });
+  const cardLine = (id) => screen.getByRole('link', { name: new RegExp(`${id}\\?`) }).querySelector('.bet-card-bottom');
+
+  test('the creator as the solo winner reads You called it., never A friend won', () => {
+    // QA h2h1: the creator picked Yes with no name saved, a friend picked No,
+    // settled Yes. The tally says "You called it."
+    subscribeMyBets.mockImplementation((_uid, publish) => {
+      publish([
+        settled('solo', [{ voterId: 'creator', name: '', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }]),
+        settled('named', [{ voterId: 'creator', name: 'Jack', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }]),
+      ]);
+      return () => {};
+    });
+    render(<MyBetsList user={user} />);
+    expect(cardLine('solo')).toHaveTextContent('You called it.');
+    expect(cardLine('solo')).not.toHaveTextContent(/friend won/i);
+    expect(cardLine('named')).toHaveTextContent('You called it.');
+    expect(cardLine('named')).not.toHaveTextContent('Jack won');
+  });
+
+  test('the creator among several winners reads You called it.; a creator who lost sees who won', () => {
+    subscribeMyBets.mockImplementation((_uid, publish) => {
+      publish([
+        settled('crew', [
+          { voterId: 'creator', name: '', optionId: 'a' },
+          { voterId: 'ben', name: 'Ben', optionId: 'a' },
+          { voterId: 'ava', name: 'Ava', optionId: 'b' },
+        ]),
+        settled('lost', [{ voterId: 'creator', name: '', optionId: 'a' }, { voterId: 'ava', name: 'Ava', optionId: 'b' }], 'b'),
+        settled('sideline', [{ voterId: 'ava', name: '', optionId: 'a' }]),
+      ]);
+      return () => {};
+    });
+    render(<MyBetsList user={user} />);
+    expect(cardLine('crew')).toHaveTextContent('You called it.');
+    expect(cardLine('lost')).toHaveTextContent('Ava won');
+    // The creator didn't pick: the friend's win reads as before.
+    expect(cardLine('sideline')).toHaveTextContent('A friend won');
   });
 });

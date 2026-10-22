@@ -250,7 +250,7 @@ describe('votes', () => {
   });
 
   test('voters can still vote on legacy bets', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/legacy1').update({ votes: nextVotes }));
+    await assertSucceeds(anon('anon-2').doc('bets/legacy1').update({ votes: [nextVotes[1]] }));
   });
 
   test('a voter cannot change status or winnerId', async () => {
@@ -264,6 +264,23 @@ describe('votes', () => {
   test('signed-out users and settled bets take no votes', async () => {
     await assertFails(guest().doc('bets/abc123').update({ votes: nextVotes }));
     await assertFails(anon('anon-2').doc('bets/settled').update({ votes: nextVotes }));
+  });
+
+  // renameVote from an older build rewrote the voter's entry in place. The
+  // phase-1 rule (docs/VOTE-SECURITY.md) only lets the list grow, so that is
+  // refused now; rules/votes.rules.test.js covers renames on vote docs.
+  const renamed = [{ ...openBet.votes[0], name: 'Sammy' }];
+
+  test('an in-place rename of the legacy list is refused, even of one\'s own pick', async () => {
+    await assertFails(anon('anon-1').doc('bets/abc123').update({ votes: renamed }));
+  });
+
+  test('no renames on a settled or called-off bet, or signed out', async () => {
+    await assertFails(anon('anon-1').doc('bets/settled').update({ votes: renamed }));
+    await assertFails(anon('anon-1').doc('bets/settledoff').update({ votes: renamed }));
+    await seed({ 'bets/off': { ...openBet, code: 'off', status: 'closed', calledOff: true } });
+    await assertFails(anon('anon-1').doc('bets/off').update({ votes: renamed }));
+    await assertFails(guest().doc('bets/abc123').update({ votes: renamed }));
   });
 });
 
@@ -353,12 +370,9 @@ describe('calledOff (settle-only)', () => {
   });
 });
 
-// DOCUMENTS CURRENT BEHAVIOR, not the wanted one. isOpen() only rejects
-// status 'closed', so a bet called off by status 'called-off' (with or
-// without the calledOff flag) or by the flag on a bet that is not 'closed'
-// still takes votes at the rules layer. The app refuses these votes client-
-// side (castVote, betStatus.votingOpen); a rules fix is separate work.
-describe('votes on called-off bets (current rules behavior)', () => {
+// isOpen() refuses both called-off markers, so no vote lands on a called-off
+// bet whichever form it takes.
+describe('votes on called-off bets', () => {
   const nextVotes = [...openBet.votes, { voterId: 'anon-2', name: 'Lee', optionId: 'b', at: 3 }];
 
   beforeEach(async () => {
@@ -369,24 +383,33 @@ describe('votes on called-off bets (current rules behavior)', () => {
     });
   });
 
-  test('CURRENTLY ALLOWED: a vote on status called-off without the flag', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-status').update({ votes: nextVotes }));
+  test('denied: a vote on status called-off without the flag', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-status').update({ votes: nextVotes }));
   });
 
-  test('CURRENTLY ALLOWED: a vote on status called-off with calledOff: true', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-both').update({ votes: nextVotes }));
+  test('denied: a vote on status called-off with calledOff: true', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-both').update({ votes: nextVotes }));
   });
 
-  test('CURRENTLY ALLOWED: a vote on an open-status bet with calledOff: true', async () => {
-    await assertSucceeds(anon('anon-2').doc('bets/off-flag-open').update({ votes: nextVotes }));
+  test('denied: a vote on an open-status bet with calledOff: true', async () => {
+    await assertFails(anon('anon-2').doc('bets/off-flag-open').update({ votes: nextVotes }));
   });
 
-  test('denied: a vote on a closed bet with calledOff: true (status closed is what blocks it)', async () => {
+  test('denied: a vote on a closed bet with calledOff: true', async () => {
     await assertFails(anon('anon-2').doc('bets/settledoff').update({ votes: nextVotes }));
   });
 
   test('denied: signed-out users still cannot vote on a called-off bet', async () => {
     await assertFails(guest().doc('bets/off-status').update({ votes: nextVotes }));
+  });
+
+  test('denied: the creator cannot edit a called-off bet', async () => {
+    await assertFails(creator().doc('bets/off-flag-open').update({ question: 'Changed' }));
+    await assertFails(creator().doc('bets/off-status').update({ question: 'Changed' }));
+  });
+
+  test('a calledOff: false flag is still an open bet', async () => {
+    await assertSucceeds(anon('anon-2').doc('bets/calledoff').update({ votes: nextVotes }));
   });
 });
 
@@ -421,5 +444,97 @@ describe('private result texts', () => {
     await assertSucceeds(creator().doc('bets/abc123').delete());
     await assertFails(creator().doc(numberPath).get());
     await assertFails(creator().doc(numberPath).delete());
+  });
+});
+
+describe('pro entitlements', () => {
+  const own = 'entitlements/creator-1';
+  const pro = { plan: 'pro', source: 'mock', since: 1, expiresAt: 4102444800000 };
+
+  beforeEach(async () => {
+    await seed({ [own]: pro, 'entitlements/creator-9': { plan: 'founder', source: 'admin', since: 1, founderNumber: 7, expiresAt: null } });
+  });
+
+  test('a member reads their own entitlement, and a missing one reads as missing', async () => {
+    await assertSucceeds(creator().doc(own).get());
+    await assertSucceeds(anon('anon-5').doc('entitlements/anon-5').get());
+  });
+
+  test('a legacy founder doc (lifetime, with a founder number) still reads for its member', async () => {
+    const legacy = { plan: 'founder', source: 'mock', since: 1, founderNumber: 7, expiresAt: null };
+    await seed({ [own]: legacy });
+    const snap = await assertSucceeds(creator().doc(own).get());
+    expect(snap.data()).toEqual(legacy);
+    await assertFails(otherPhone().doc(own).get());
+  });
+
+  test('another user cannot read it', async () => {
+    await assertFails(otherPhone().doc(own).get());
+    await assertFails(anon().doc(own).get());
+  });
+
+  test('a signed-out user cannot read it', async () => {
+    await assertFails(guest().doc(own).get());
+  });
+
+  test('nobody can list entitlements, even signed in', async () => {
+    await assertFails(creator().collection('entitlements').get());
+    await assertFails(otherPhone().collection('entitlements').get());
+    await assertFails(anon('anon-5').collection('entitlements').get());
+    await assertFails(guest().collection('entitlements').get());
+  });
+
+  test('a query for only their own entitlement is still a list, and denied', async () => {
+    await assertFails(creator().collection('entitlements').where('plan', '==', 'pro').get());
+    await assertFails(creator().collection('entitlements').limit(1).get());
+  });
+
+  test('a member cannot grant themselves Pro or a founder spot', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(own).set({ plan: 'pro', source: 'mock', since: 1, expiresAt: null }));
+    await assertFails(creator().doc(own).set({ plan: 'founder', source: 'mock', since: 1, founderNumber: 1, expiresAt: null }));
+    await assertFails(anon().doc('entitlements/anon-1').set({ plan: 'pro', source: 'admin', since: 1 }));
+  });
+
+  test('a member cannot change or remove their own entitlement', async () => {
+    await assertFails(creator().doc(own).update({ expiresAt: null }));
+    await assertFails(creator().doc(own).update({ expiresAt: 4102444800001 }));
+    await assertFails(creator().doc(own).update({ plan: 'founder', founderNumber: 1 }));
+    await assertFails(creator().doc(own).set({ ...pro, plan: 'founder' }));
+    await assertFails(creator().doc(own).delete());
+  });
+
+  test('other users cannot write anyone else’s entitlement', async () => {
+    for (const db of [otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc(own).set(pro));
+      await assertFails(db.doc(own).update({ expiresAt: null }));
+      await assertFails(db.doc(own).delete());
+      await assertFails(db.doc('entitlements/someone-new').set(pro));
+    }
+  });
+});
+
+describe('meta', () => {
+  const founders = 'meta/founders';
+
+  beforeEach(async () => {
+    await seed({ [founders]: { count: 42 }, 'meta/other': { secret: true } });
+  });
+
+  test('the old founder count is closed now: no client reads or writes it', async () => {
+    for (const db of [guest(), anon(), creator(), otherPhone()]) {
+      await assertFails(db.doc(founders).get());
+      await assertFails(db.doc(founders).update({ count: 0 }));
+      await assertFails(db.doc(founders).set({ count: 600 }));
+      await assertFails(db.doc(founders).delete());
+    }
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(founders).set({ count: 0 }));
+  });
+
+  test('the rest of meta stays closed', async () => {
+    await assertFails(guest().collection('meta').get());
+    await assertFails(creator().doc('meta/other').get());
+    await assertFails(creator().doc('meta/other').set({ secret: false }));
   });
 });

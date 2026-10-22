@@ -15,6 +15,7 @@ import { REVEAL_COPY, buildReveal, winnerPhrase } from './reveal';
 import * as voters from './voters';
 import * as inviteCopy from './inviteCopy';
 import * as resultTextCopy from './resultTextCopy';
+import * as nameEditCopy from './nameEditCopy';
 import { AUTH_COPY } from './creatorSession';
 
 // No placeholder copy ("TODO_UX: ...") may reach a screen, a copy table, or
@@ -147,14 +148,14 @@ describe('rendered screens never show TODO_UX', () => {
     await renderAt('/b/abc123', <VoteScreen />);
     const card = screen.getByRole('region', { name: 'Settled result' });
     expect([...card.children].map((node) => node.textContent)).toEqual([
-      'Chiefs -3 won', '1 friend won.', 'Called it solo. Bragging rights, secured.', 'Stakes: $20',
+      'Chiefs -3 won', 'One friend called it.', 'Time for everyone else to pay up.', 'Stakes: $20',
     ]);
     cleanup();
     feed(BETS['several unnamed winners']);
     as('jack', true);
     await renderAt('/t/abc123', <TallyScreen />);
-    expect(screen.getByRole('heading', { name: '4 friends won.' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Bragging rights, secured.');
+    expect(screen.getByRole('heading', { name: '4 friends called it.' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('Time for everyone else to pay up.');
   });
 
   test('MyBets in every filter', async () => {
@@ -218,6 +219,7 @@ describe('copy modules never hold TODO_UX', () => {
     ['voters', voters],
     ['inviteCopy', inviteCopy],
     ['resultTextCopy', resultTextCopy],
+    ['nameEditCopy', nameEditCopy],
     ['AUTH_COPY', AUTH_COPY],
   ])('%s', (_label, copy) => {
     const all = strings(copy);
@@ -225,10 +227,14 @@ describe('copy modules never hold TODO_UX', () => {
     all.forEach((text) => expect(text).not.toContain(MARKER));
   });
 
+  test('the name edit copy has no em dashes', () => {
+    strings(nameEditCopy).forEach((text) => expect(text).not.toContain('\u2014'));
+  });
+
   test('reveal helpers for unnamed winners', () => {
     expect(winnerPhrase([{ name: '' }, { name: ' ' }])).toBe('');
-    expect(REVEAL_COPY.friends(1)).toBe('1 friend');
-    expect(REVEAL_COPY.friends(2)).toBe('2 friends');
+    expect(REVEAL_COPY.friends(1)).toBe('One friend called it.');
+    expect(REVEAL_COPY.friends(2)).toBe('2 friends called it.');
     expect(voters.voterListLabel(['Jake'], 2, 1)).not.toContain(MARKER);
   });
 });

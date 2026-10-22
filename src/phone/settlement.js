@@ -1,5 +1,6 @@
 import { isSettled } from './betStatus';
 import { optionVoteLabel, questionOf } from './model';
+import { settledAtMs } from './undoSettle';
 
 // Snapshot the result in the same transaction that closes the bet. A later
 // profile or copy change must not change who won or what was at stake.
@@ -70,14 +71,16 @@ export function formatResultMessage(bet, url) {
 
 export function notificationFor(bet, voterId) {
   // Only new settlements have a durable notify event and timestamp.
-  if (!bet?.settlement || !bet.settledAt) return null;
+  // settledAt is a server Timestamp now, a number on older settles.
+  const at = settledAtMs(bet);
+  if (!bet?.settlement || !at) return null;
   const result = settlementOf(bet);
   const recipient = result?.recipients.find((item) => item.voterId === voterId);
   if (!recipient) return null;
   return {
-    id: `${bet.code || bet.id}:${bet.settledAt}`,
+    id: `${bet.code || bet.id}:${at}`,
     code: bet.code || bet.id,
-    at: bet.settledAt,
+    at,
     won: recipient.won,
     title: recipient.won ? 'You called it.' : 'This one’s settled.',
     question: result.question,

@@ -14,6 +14,7 @@ import {
   FiTrendingUp,
 } from 'react-icons/fi';
 import { ExampleBet } from './ProductUI';
+import GoProLink from './GoProLink';
 import { useCreateChrome } from './createChrome';
 import { clearHomeArrival, homeArrivalPending } from './createMotion';
 
@@ -72,6 +73,7 @@ const Landing = ({ quiet = false }) => {
             <FiCheckCircle aria-hidden="true" />
             Friends pick in one tap. No app needed.
           </p>
+          <GoProLink className="landing-pro" />
         </div>
         <ExampleBet />
       </section>
