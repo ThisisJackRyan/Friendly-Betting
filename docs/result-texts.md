@@ -16,6 +16,9 @@ number to get one SMS when the bet is settled. Off by default.
 - The side is read from the voter's recorded vote on the server, never from the request.
 - At settle, each doc is claimed by deleting it in a transaction, then texted. A number is
   texted at most once and deleted before the text goes out.
+- A settle can be undone for 30s (docs/UNDO-CALL-OFF.md), so the send route waits until
+  35s after the server `settledAt`, re-reads the bet and only then texts. An undone bet
+  texts nobody and keeps its numbers. Call-offs send right away.
 - Deleting a bet (`DELETE /api/bets/{code}`, creator only, `src/server/deleteBet.js`)
   deletes its numbers, the `privateResultTexts/{code}` doc and `bets/{code}` in one
   transaction. Without `FIREBASE_SERVICE_ACCOUNT` that route returns 503 and the app

@@ -1,0 +1,129 @@
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import GoProLink from '../phone/GoProLink';
+
+export const AD_THANKS_LINE = 'Thanks for watching. That keeps Friendly free.';
+
+// The thank-you after an interstitial. A fixed full-screen layer on
+// document.body, so nothing under it moves. A tap anywhere continues; with
+// autoContinueMs it also continues by itself. onContinue runs inside the tap's
+// click handler, so a caller can open navigator.share from it. With no label
+// there is no visible button: a transparent control covers the layer, named
+// by the thank-you line, so it still takes focus and Enter or Space.
+export const thanksLayerStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 2147483000,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 24,
+  padding: 'calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 24px) calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + 24px)',
+  boxSizing: 'border-box',
+  background: 'var(--page, #f6f7f2)',
+  color: 'var(--ink, #203b2e)',
+  fontFamily: 'inherit',
+  textAlign: 'center',
+  cursor: 'pointer',
+};
+
+const line = {
+  margin: 0,
+  maxWidth: 320,
+  fontSize: 22,
+  fontWeight: 700,
+  lineHeight: 1.3,
+  letterSpacing: '-0.01em',
+};
+
+export const continueButtonStyle = {
+  minHeight: 44,
+  minWidth: 44,
+  width: 'min(320px, 100%)',
+  gap: 8,
+};
+
+export const coverButtonStyle = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  margin: 0,
+  padding: 0,
+  border: 0,
+  background: 'transparent',
+  cursor: 'pointer',
+};
+
+// Whether focus may go back to the page once a thank-you closes: only when
+// nothing else has taken it since. Focus is on the body or nowhere (where it
+// lands as the layer goes), on a node already removed, or still in the layer.
+export function focusIsFree(doc = document) {
+  const active = doc.activeElement;
+  return !active || active === doc.body || !active.isConnected || Boolean(active.closest?.('[data-ad-thanks]'));
+}
+
+export default function AdThanks({ onContinue, autoContinueMs = 0, label }) {
+  const button = useRef(null);
+  const layer = useRef(null);
+  const done = useRef(false);
+  const finish = useRef(onContinue);
+  finish.current = () => {
+    if (done.current) return;
+    done.current = true;
+    onContinue?.();
+  };
+
+  useEffect(() => {
+    button.current?.focus();
+    const timer = autoContinueMs > 0 ? setTimeout(() => finish.current(), autoContinueMs) : null;
+    // While it is up, focus stays on its one button: Tab, a click on the
+    // page under it, or a script can't move focus behind the layer.
+    const keep = (event) => {
+      if (layer.current && !layer.current.contains(event.target)) button.current?.focus();
+    };
+    document.addEventListener('focusin', keep);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('focusin', keep);
+    };
+  }, [autoContinueMs]);
+
+  const view = (
+    <div
+      ref={layer}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ad-thanks-line"
+      style={thanksLayerStyle}
+      data-testid="ad-thanks"
+      data-ad-thanks=""
+      onClick={() => finish.current()}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        event.preventDefault();
+        // Tab only moves between the layer's own controls: its button and,
+        // when it's there, the Go Pro link.
+        const controls = [...layer.current.querySelectorAll('button, a[href]')];
+        const at = controls.indexOf(document.activeElement);
+        const step = event.shiftKey ? -1 : 1;
+        const next = at < 0 ? button.current : controls[(at + step + controls.length) % controls.length];
+        next?.focus();
+      }}
+    >
+      <p id="ad-thanks-line" style={line}>{AD_THANKS_LINE}</p>
+      {/* Above the cover button, and its tap goes to /pro without continuing. */}
+      <GoProLink className="ad-thanks-pro" onClick={(event) => event.stopPropagation()} />
+      {/* The button's click bubbles to the layer, which continues once. */}
+      {label ? (
+        <button ref={button} type="button" className="cta press" style={continueButtonStyle}>
+          {label}
+        </button>
+      ) : (
+        <button ref={button} type="button" aria-label={AD_THANKS_LINE} style={coverButtonStyle} />
+      )}
+    </div>
+  );
+  return typeof document === 'undefined' ? view : createPortal(view, document.body);
+}

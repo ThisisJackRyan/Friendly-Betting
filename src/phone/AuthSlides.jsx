@@ -25,9 +25,12 @@ export function useCreatorPhone() {
   const verifying = useRef(false);
   const sending = useRef(false);
   const attempted = useRef('');
+  // Verify reads these, not state, so a stale render never confirms an old
+  // code or confirms twice. Only a successful send replaces the id.
+  const verificationIdRef = useRef('');
+  const verifiedRef = useRef(null);
   const [digitsRaw, setDigitsRaw] = useState('');
   const [e164, setE164] = useState('');
-  const [verificationId, setVerificationId] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [busy, setBusy] = useState(null);
   const [error, setErrorState] = useState('');
@@ -63,14 +66,18 @@ export function useCreatorPhone() {
     setError('');
     try {
       const id = await sendPhoneCode(next, container);
-      setVerificationId(id);
+      verificationIdRef.current = id;
       setE164(next);
       setOtp(['', '', '', '', '', '']);
       attempted.current = '';
       return true;
     } catch (err) {
       // A closed check just puts the button back.
-      if (err?.code !== PERSON_CHECK_CANCELLED) showPhoneError(err, SEND_CODE_ERROR);
+      if (err?.code !== PERSON_CHECK_CANCELLED) {
+        // Code and message only. Never the number, the id, or the SMS code.
+        console.warn('[phone-auth] send failed', err?.code, err?.message);
+        showPhoneError(err, SEND_CODE_ERROR);
+      }
       return false;
     } finally {
       sending.current = false;
@@ -79,25 +86,35 @@ export function useCreatorPhone() {
   };
 
   const verify = async (code) => {
-    if (verifiedUser) return verifiedUser;
+    if (verifiedRef.current) return verifiedRef.current;
     const token = (code || otp.join('')).replace(/\D/g, '');
     if (token.length !== 6) {
       setError('Enter the 6-digit code.');
       return null;
     }
-    if (!verificationId) {
+    const id = verificationIdRef.current;
+    if (!id) {
       setError('Send a new code.');
       return null;
     }
+    // One confirm at a time. A second confirm of the same code reads as expired.
     if (verifying.current) return null;
     verifying.current = true;
     setBusy('verify');
     setError('');
     try {
-      const nextUser = await verifyPhoneCode(verificationId, token);
+      const nextUser = await verifyPhoneCode(id, token);
+      if (verifiedRef.current) return verifiedRef.current;
+      // A success is a real sign-in, so it stands even if Resend ran meanwhile.
+      verifiedRef.current = nextUser;
       setVerifiedUser(nextUser);
       return nextUser;
     } catch (err) {
+      // Already in, or this code belongs to a send that Resend replaced.
+      if (verifiedRef.current) return verifiedRef.current;
+      if (id !== verificationIdRef.current) return null;
+      // Code and message only. Never the number, the id, or the SMS code.
+      console.warn('[phone-auth] verify failed', err?.code, err?.message);
       attempted.current = '';
       showPhoneError(err, VERIFY_CODE_ERROR);
       return null;
@@ -244,31 +261,154 @@ export function PhoneBody({ formatted, onNational, busy, check }) {
   );
 }
 
-export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, check }) {
-  const refs = useRef([]);
+// A whole code that landed next to the old digit (an autofill that appends
+// instead of replacing): the old digit plus 6 more. The code is the 6 without
+// it; read as the old digit first when it could be either end.
+function withoutOldDigit(value, prev) {
+  const digits = value.replace(/\D/g, '');
+  if (!prev || digits.length !== prev.length + 6) return value;
+  if (digits.startsWith(prev)) return digits.slice(prev.length);
+  if (digits.endsWith(prev)) return digits.slice(0, 6);
+  return value;
+}
 
-  const write = (index, raw) => {
-    const chars = String(raw || '').replace(/\D/g, '');
-    if (!chars) {
-      const cleared = otp.slice();
-      cleared[index] = '';
-      onOtp(cleared, '');
-      return;
-    }
-    const next = otp.slice();
-    chars
-      .slice(0, 6 - index)
-      .split('')
-      .forEach((char, offset) => {
-        next[index + offset] = char;
-      });
+// The text a change put into a cell that held `prev`. A filled cell normally
+// has its digit selected, so the value is just the new text; when it was not
+// (iOS can leave the caret before the digit), the value is the old digit plus
+// the new text in either order, and the caret marks where the new text ends.
+function insertedText(target, nativeEvent, prev) {
+  const value = String(target.value || '');
+  const type = nativeEvent?.inputType || '';
+  if (!prev || value.length <= prev.length) return value;
+  if (type === 'insertReplacementText' || type === 'insertFromPaste') return withoutOldDigit(value, prev);
+  const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : value.length;
+  const begin = end - (value.length - prev.length);
+  if (begin >= 0 && value.slice(0, begin) + value.slice(end) === prev) return value.slice(begin, end);
+  if (value.replace(/\D/g, '').length >= 6) return withoutOldDigit(value, prev);
+  if (value.startsWith(prev)) return value.slice(prev.length);
+  if (value.endsWith(prev)) return value.slice(0, value.length - prev.length);
+  return value;
+}
+
+function selectCell(node) {
+  if (!node) return;
+  try {
+    node.select();
+  } catch {
+    // Selection is a convenience; typing still replaces the digit.
+  }
+}
+
+export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, error = '', check }) {
+  const refs = useRef([]);
+  // The latest code, so events that land before a re-render build on each
+  // other instead of on the code from the last render.
+  const otpRef = useRef(otp);
+  const shown = useRef(otp);
+  if (shown.current !== otp) {
+    shown.current = otp;
+    otpRef.current = otp;
+  }
+  const lastBusy = useRef(busy);
+
+  const focusCell = (index) => {
+    const node = refs.current[index];
+    if (!node) return;
+    node.focus();
+    selectCell(node);
+  };
+
+  const commit = (next, focusAt) => {
+    otpRef.current = next;
     const completed = next.every(Boolean) ? next.join('') : '';
     onOtp(next, completed);
-    if (!completed) {
-      const focusAt = Math.min(index + chars.length, 5);
-      refs.current[focusAt]?.focus();
+    if (!completed && focusAt != null) focusCell(Math.max(0, Math.min(focusAt, 5)));
+  };
+
+  // Digits from `raw` go in from `index`. A whole code (6 or more digits, as
+  // autofill or a paste gives) always fills from the first box.
+  const fill = (index, raw) => {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return false;
+    if (digits.length >= 6) {
+      commit(digits.slice(0, 6).split(''), 5);
+      return true;
+    }
+    const next = otpRef.current.slice();
+    const placed = digits.slice(0, 6 - index).split('');
+    placed.forEach((char, offset) => {
+      next[index + offset] = char;
+    });
+    commit(next, index + placed.length);
+    return true;
+  };
+
+  const clear = (index, focusAt) => {
+    const next = otpRef.current.slice();
+    next[index] = '';
+    commit(next, focusAt);
+  };
+
+  const onChange = (index, event) => {
+    const prev = otpRef.current[index] || '';
+    const value = String(event.target.value || '');
+    if (!value) {
+      if (prev) clear(index, null);
+      return;
+    }
+    // Anything without a digit leaves the cell as it was.
+    fill(index, insertedText(event.target, event.nativeEvent, prev));
+  };
+
+  // Backspace takes off the last digit in the code, wherever focus is, so
+  // repeated presses clear right to left and never leave a digit behind.
+  // Focus follows the box it cleared.
+  const backspace = () => {
+    const last = otpRef.current.map(Boolean).lastIndexOf(true);
+    if (last < 0) focusCell(0);
+    else clear(last, last);
+  };
+
+  const onKeyDown = (event) => {
+    if (event.key !== 'Backspace') return;
+    event.preventDefault();
+    backspace();
+  };
+
+  // Some Android keyboards send Backspace as key 'Unidentified' (keyCode
+  // 229), which onKeyDown can't tell apart. Their beforeinput still says
+  // deleteContentBackward, even in an empty box where no change follows. A
+  // real Backspace key already stopped it in onKeyDown. If the keyboard won't
+  // let it be stopped, a filled box empties itself through onChange.
+  const onBeforeInput = (index, event) => {
+    if (event.inputType !== 'deleteContentBackward') return;
+    if (event.cancelable) {
+      event.preventDefault();
+      backspace();
+    } else if (!otpRef.current[index]) {
+      backspace();
     }
   };
+  const beforeInput = useRef(onBeforeInput);
+  beforeInput.current = onBeforeInput;
+  // React's onBeforeInput only reports typed text, so this is a native listener.
+  useEffect(() => {
+    const nodes = refs.current.slice();
+    const handlers = nodes.map((node, index) => {
+      const handler = (event) => beforeInput.current(index, event);
+      node?.addEventListener('beforeinput', handler);
+      return handler;
+    });
+    return () => nodes.forEach((node, index) => node?.removeEventListener('beforeinput', handlers[index]));
+  }, []);
+
+  // A failed verify had the boxes disabled; put focus back in the last one so
+  // the code can be fixed right away.
+  useEffect(() => {
+    const was = lastBusy.current;
+    lastBusy.current = busy;
+    if (was === 'verify' && !busy && error) focusCell(5);
+  }, [busy, error]);
 
   return (
     <>
@@ -285,21 +425,15 @@ export function CodeBody({ e164, otp, onOtp, onResend, onChangeNumber, busy, che
             aria-label={`Digit ${index + 1}`}
             value={digit}
             disabled={Boolean(busy)}
-            onChange={(event) => write(index, event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Backspace' && !otp[index] && index > 0) {
-                event.preventDefault();
-                const next = otp.slice();
-                next[index - 1] = '';
-                onOtp(next, '');
-                refs.current[index - 1]?.focus();
-              }
-            }}
+            onFocus={(event) => selectCell(event.currentTarget)}
+            onClick={(event) => selectCell(event.currentTarget)}
+            onChange={(event) => onChange(index, event)}
+            onKeyDown={onKeyDown}
             onPaste={(event) => {
               const text = event.clipboardData?.getData('text') || '';
               if (!text) return;
               event.preventDefault();
-              write(index, text);
+              fill(index, text);
             }}
           />
         ))}
@@ -396,7 +530,8 @@ function AuthChrome({ title, onBack, children, cta }) {
   );
 }
 
-export default function CreatorAuthFlow({ onCancel, renderDone }) {
+// phoneFooter, if given, sits under the Send code button on the phone step.
+export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = null }) {
   const phone = useCreatorPhone();
   const [step, setStep] = useState(1);
   const [leaving, setLeaving] = useState(null);
@@ -484,6 +619,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
             onResend={onResend}
             onChangeNumber={() => go(1)}
             busy={phone.busy}
+            error={phone.error}
           />
           <PhoneAlert error={phone.error} code={phone.errorCode} />
         </AuthChrome>
@@ -493,7 +629,12 @@ export default function CreatorAuthFlow({ onCancel, renderDone }) {
       <AuthChrome
         title={AUTH_COPY.phoneTitle}
         onBack={() => onBack(1)}
-        cta={<SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />}
+        cta={(
+          <>
+            <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSend} />
+            {phoneFooter}
+          </>
+        )}
       >
         <PhoneBody
           formatted={phone.formatted}

@@ -3,7 +3,9 @@ import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
 import { normalizeE164 } from '../phone/resultTexts';
 import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
+import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
 import { PROD_ORIGIN } from '../platform/runtime';
+import { readBetWithVotes } from './betVotes';
 
 // Numbers live outside the public bet doc, so they can never reach the tally,
 // share card, OG image, or any client read. Admin SDK only; rules deny all.
@@ -115,11 +117,12 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
   await db.runTransaction(async (tx) => {
     // Read the bet in the transaction so a concurrent settle forces a retry
     // that fails with 'closed' rather than leaving a number behind after delivery.
-    const snap = await tx.get(db.doc(`bets/${code}`));
-    if (!snap.exists) throw failure('not-found');
-    const bet = snap.data();
+    // Its vote docs are read in it too, so a changed pick retries as well.
+    const bet = await readBetWithVotes(db, code, tx);
+    if (!bet) throw failure('not-found');
     if (isFinished(bet)) throw failure('closed');
-    // The side comes from the voter's recorded pick, never from the request.
+    // The side comes from the voter's recorded pick (array or vote doc),
+    // never from the request.
     const vote = (bet.votes || []).find((item) => item.voterId === uid);
     if (!uid || !vote) throw failure('no-vote');
     const listed = await tx.get(numbers);
@@ -136,10 +139,47 @@ export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }
   });
 }
 
-// The single hook the settle path calls. Safe to run any number of times.
-export async function deliverResultTexts({ db, code, sendSms, origin = DEFAULT_ORIGIN }) {
-  const snap = await db.doc(`bets/${code}`).get();
-  const bet = snap.exists ? snap.data() : null;
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+// The bet with its votes merged (array and vote docs), or null.
+function readBet(db, code) {
+  return readBetWithVotes(db, code);
+}
+
+// Runs in flight on this server instance, by bet code and settledAt.
+const inFlight = new Set();
+
+// The single hook the settle and call-off paths call. Safe to run any number
+// of times. A settle can be undone for a short while (src/phone/undoSettle.js),
+// so this waits that out and re-reads the bet: an undone bet is open again and
+// texts nobody. If it was settled again meanwhile, that settle's own call
+// sends. Call-offs have no undo and send right away. While one run for a
+// settle is waiting or sending, another for the same settle returns at once;
+// across instances the claim-by-delete below still sends each number once.
+export async function deliverResultTexts({
+  db, code, sendSms, origin = DEFAULT_ORIGIN, now = Date.now, wait = sleep,
+}) {
+  const bet = await readBet(db, code);
+  const key = `${code}:${settledAtMs(bet) ?? ''}`;
+  if (inFlight.has(key)) return { sent: 0, skipped: 'in-flight' };
+  inFlight.add(key);
+  try {
+    return await deliver({ db, code, sendSms, origin, now, wait, bet });
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
+async function deliver({
+  db, code, sendSms, origin, now, wait, bet: firstRead,
+}) {
+  let bet = firstRead;
+  const hold = undoHoldMs(bet, now());
+  if (hold > 0) {
+    await wait(hold);
+    bet = await readBet(db, code);
+    if (undoHoldMs(bet, now()) > 0) return { sent: 0, skipped: 'undo-window' };
+  }
   const calledOff = isCalledOff(bet);
   if (!bet || (!isSettled(bet) && !calledOff)) return { sent: 0, skipped: 'not-settled' };
   const listed = await db.collection(numbersPath(code)).get();

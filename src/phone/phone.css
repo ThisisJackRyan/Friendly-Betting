@@ -868,6 +868,10 @@ body {
   text-underline-offset: 3px;
 }
 
+.text-link.tally-vote-link[aria-disabled='true'] {
+  pointer-events: none;
+}
+
 .cta.cta-nudge {
   height: 60px;
   min-height: 60px;
@@ -1023,6 +1027,10 @@ body {
 }
 
 .create-flow.is-exiting .create-pane {
+  pointer-events: none;
+}
+
+.create-pane.is-sliding {
   pointer-events: none;
 }
 
@@ -1872,6 +1880,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .page-intro .intro-copy {
   margin-top: 10px;
   max-width: 52ch;
+  text-wrap: balance;
 }
 .intro-icon {
   display: flex;
@@ -2338,6 +2347,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
   align-items: center;
   gap: 10px;
   margin: 30px 0 20px;
+}
+.vote-screen .bet-card-top + .question-xl {
+  /* No invite line (a called-off bet): keep its top spacing. */
+  margin-top: 30px;
 }
 .invite-avatar {
   display: flex;
@@ -3177,8 +3190,22 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .bet-stats span {
     font-size: 7px;
   }
+  /* Five filters: tighter here, and scroll sideways rather than push the
+     page wider if the labels still can't fit. */
+  .bet-filters {
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .bet-filters::-webkit-scrollbar {
+    display: none;
+  }
   .bet-filters button {
+    padding-left: 4px;
+    padding-right: 4px;
     font-size: 10px;
+    white-space: nowrap;
   }
   .vote-header > span {
     display: none;
@@ -3516,3 +3543,392 @@ html[data-arrive='home'] .landing-body.screen-fade {
 @media (min-width: 768px) {
   .toast-region { bottom: 24px; }
 }
+
+/* The close X on a full-screen layer (the house ad). 12px in from the corner,
+   inside the safe area: the plain values first for browsers without env().
+   44px square, so its focus ring (2px at a 4px offset) still clears the edge. */
+.overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.overlay-close:hover { background: var(--wash); }
+
+/* Vote page: add or edit your name after picking, under "You’re on ...". */
+.name-edit { margin: -16px 0 16px; }
+.name-edit-open { display: flex; flex-direction: column; gap: 10px; margin-top: -12px; }
+.name-edit-toggle {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.name-edit-toggle:disabled { opacity: 0.55; }
+.name-edit-actions { display: flex; align-items: center; gap: 12px; }
+.name-edit-actions .secondary { margin-top: 0; min-height: 44px; flex: 1; }
+.name-edit .form-error { margin: 0; }
+
+/* Pro: the badge after a member's own name. */
+.pro-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.screen-title .pro-badge,
+.reveal-headline .pro-badge { font-size: 12px; }
+/* Go Pro entry points (GoProLink): a muted text link, never accent green and
+   never a button, so it stays quieter than the screen's main action. 44px tall
+   to tap. Off the bettor pages (vote, tally). */
+.go-pro-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  color: var(--muted, #5e6b60);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.go-pro-link:hover { color: var(--ink, #203b2e); }
+.go-pro-link:focus-visible { outline: 2px solid var(--muted, #5e6b60); outline-offset: 2px; border-radius: 6px; }
+/* My bets: the outlined Go Pro chip right of the heading. 32px to see, 44px
+   to tap (the ::after reaches 6px above and below). */
+.bets-heading > div { flex: 1; min-width: 0; }
+.bets-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.go-pro-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.go-pro-chip::after { content: ''; position: absolute; top: -7.5px; bottom: -7.5px; left: -1.5px; right: -1.5px; }
+.go-pro-chip:hover { background: var(--wash); }
+.go-pro-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* A locked Pro feature's small outlined chip (ProLock). */
+.bet-filters button .pro-lock-chip { margin-left: 0; font-size: 9px; font-weight: 800; opacity: 1; }
+.pro-lock-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.cta-bar .go-pro-link { display: flex; width: fit-content; margin: 6px auto -10px; }
+/* On the dark hero: the hero's own muted light tone, neutral, not green. */
+.landing-pro { margin-top: 4px; color: rgba(255, 255, 255, 0.75); }
+.landing-pro:hover { color: #fff; }
+.landing-pro:focus-visible { outline-color: rgba(255, 255, 255, 0.75); }
+/* On the ad thank-you: above its full-layer cover button. */
+.ad-thanks-pro { position: relative; z-index: 1; margin-top: -12px; font-size: 14px; }
+/* The Pro sheet (ProSheet): slides up over the page that opened it, and is
+   all of /pro. Side padding 24px, 20px at 360; only the hero and headline
+   change size at 360. The main button is pinned above the safe area. */
+.pro-sheet-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  font-family: inherit;
+  color: var(--ink);
+}
+.pro-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 31, 22, 0.45);
+  animation: pro-scrim-in 200ms ease-out;
+}
+.pro-sheet {
+  --pro-pad: 24px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  /* Never under the status bar: the X stays below it. */
+  max-height: calc(100dvh - 8px);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8px);
+  overflow: hidden;
+  border-radius: 24px 24px 0 0;
+  background: var(--raised);
+  box-shadow: 0 -12px 40px rgba(15, 31, 22, 0.18);
+  animation: pro-sheet-up 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  outline: none;
+}
+@keyframes pro-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes pro-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pro-sheet, .pro-sheet-scrim { animation: none; }
+}
+/* The shared .overlay-close, inside the sheet: 44px to tap, a soft 36px
+   circle, full-contrast ink, never muted. The sheet already sits below the
+   status bar, so only the side inset applies. */
+.overlay-close.pro-sheet-close {
+  top: 8px;
+  right: 8px;
+  right: calc(env(safe-area-inset-right, 0px) + 8px);
+  z-index: 1;
+  color: var(--ink);
+  opacity: 1;
+}
+.overlay-close.pro-sheet-close::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  z-index: -1;
+}
+.pro-sheet.is-success .pro-sheet-close::before { background: var(--wash); }
+.overlay-close.pro-sheet-close:hover { background: transparent; }
+.overlay-close.pro-sheet-close:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.overlay-close.pro-sheet-close svg { position: relative; }
+.pro-sheet-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pro-sheet-hero {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+  height: 200px;
+  padding: 0 var(--pro-pad) 22px;
+  background: #007a45;
+  color: #fff;
+}
+.pro-sheet-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: #007a45;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.pro-sheet .pro-sheet-headline {
+  margin: 0;
+  color: #fff;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.pro-sheet-line { margin: 0; color: #fff; font-size: 15px; font-weight: 600; }
+.pro-sheet-body { display: flex; flex-direction: column; gap: 16px; padding: 12px var(--pro-pad) 8px; }
+.pro-benefits { display: flex; flex-direction: column; margin: 0 calc(var(--pro-pad) * -1 + 12px); padding: 0; list-style: none; }
+.pro-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.pro-benefits li svg { flex: none; color: var(--accent); }
+.pro-benefits li.is-highlighted { background: #e3f1e8; font-weight: 800; }
+.pro-price { display: flex; flex-direction: column; gap: 2px; }
+.pro-price p { margin: 0; }
+.pro-price-amount { font-size: 22px; font-weight: 800; line-height: 1.2; }
+.pro-price-note { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.pro-fine-print { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.pro-sheet-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin: -8px 0 0; color: var(--muted); font-size: 13px; }
+.pro-sheet-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.pro-sheet-link:disabled { color: var(--muted); cursor: default; }
+.pro-sheet-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px var(--pro-pad) 8px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  background: var(--raised);
+  border-top: 1px solid var(--line);
+}
+.pro-sheet .pro-sheet-error { margin: 0 0 6px; }
+.pro-sheet-note { margin: 0 0 6px; color: var(--muted); font-size: 14px; text-align: center; }
+.pro-sheet .pro-sheet-main {
+  justify-content: center;
+  height: 56px;
+  min-height: 56px;
+  text-align: center;
+  font-weight: 800;
+}
+.pro-sheet .pro-sheet-main:disabled { opacity: 0.55; cursor: default; }
+.pro-sheet-later {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pro-sheet-later:disabled { color: var(--muted); cursor: default; }
+.pro-sheet-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 72px 0 0;
+  text-align: center;
+}
+.pro-sheet-success-badge .pro-badge { margin: 0; padding: 6px 18px; font-size: 22px; }
+.pro-sheet .pro-sheet-success-line { margin: 0; padding: 0 var(--pro-pad); font-size: 24px; font-weight: 800; line-height: 1.2; }
+.pro-sheet-success .pro-sheet-footer { align-self: stretch; margin-top: 12px; border-top: 0; }
+@media (max-width: 374px) {
+  .pro-sheet { --pro-pad: 20px; }
+  .pro-sheet-hero { height: 180px; }
+  .pro-sheet .pro-sheet-headline { font-size: 28px; }
+}
+
+/* My bets, Friends: head to head records and each friend's shared bets. */
+.friends { display: flex; flex-direction: column; gap: 12px; }
+.friends .eyebrow { margin: 0; }
+.friends-empty { margin: 8px 0; color: var(--muted); font-size: 14px; }
+.friend-list,
+.friend-bets { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.friend {
+  border-radius: var(--radius-card);
+  background: var(--raised);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.friend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'name record chevron' 'together together together';
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 16px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.friend-name { grid-area: name; font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.friend-record { grid-area: record; display: flex; gap: 6px; }
+.friend-together { grid-area: together; color: var(--muted); font-size: 12px; }
+.friend-together strong { color: var(--ink); }
+.friend-chevron { grid-area: chevron; color: var(--muted); transition: transform 150ms ease-out; }
+.friend-row[aria-expanded='true'] .friend-chevron { transform: rotate(180deg); }
+.friend-row:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: var(--radius-card); }
+.friend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  background: #eeeff3;
+  color: #5d6372;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.friend-pill.win { background: #edf3e8; color: var(--accent); }
+.friend-pill.loss { background: #f5f0e4; color: #796038; }
+.friend-pill.called-off { white-space: normal; }
+.friend-bets { padding: 0 12px 14px; }
+.friend-bet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 40px 14px 14px;
+  border-radius: 12px;
+  background: #f6f8f2;
+  color: var(--ink);
+  text-decoration: none;
+}
+.friend-bet .bet-card-top { justify-content: flex-start; flex-wrap: wrap; }
+.friend-bet-question { font-size: 15px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.friend-bet-arrow { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #637853; }
+.friend-bet:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* F8: the creator's Undo under a fresh reveal, and Call off on an open bet. */
+.undo-settle { margin: 4px 0 16px; }
+.undo-settle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.undo-settle-row .text-link { width: auto; margin-top: 0; padding: 0 12px; color: var(--ink); font-size: 15px; }
+.undo-settle-count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.text-link.tally-call-off { color: var(--muted); }
+.text-link.tally-call-off:disabled { opacity: 0.5; }

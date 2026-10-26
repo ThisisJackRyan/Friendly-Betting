@@ -120,6 +120,18 @@ describe('saveVoterNumber', () => {
     expect(db.writes).toEqual([]);
   });
 
+  test('a pick in a vote doc counts, and wins over the voter\'s array entry', async () => {
+    const db = fakeDb({
+      'bets/abc123': openBet(),
+      'bets/abc123/votes/maya': { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } },
+      'bets/abc123/votes/sam': { voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 6, nanoseconds: 0 } },
+    });
+    await saveVoterNumber({ db, code: 'abc123', uid: 'maya', phone: '2025550143' });
+    await saveVoterNumber({ db, code: 'abc123', uid: 'sam', phone: '2025550188' });
+    expect(db.data(`${NUMBERS}/${sha('+12025550143')}`)).toMatchObject({ voterId: 'maya', optionId: 'a' });
+    expect(db.data(`${NUMBERS}/${sha('+12025550188')}`)).toMatchObject({ voterId: 'sam', optionId: 'a' });
+  });
+
   test('a bet settled during the save retries and rejects closed, writing nothing', async () => {
     const db = fakeDb({ 'bets/abc123': openBet() });
     const runTransaction = db.runTransaction;
@@ -188,6 +200,15 @@ describe('deliverResultTexts', () => {
     expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText.replace('Yes won', 'No won'));
   });
 
+  test('without a settlement snapshot a vote doc decides the outcome over the array', async () => {
+    const bet = openBet({ status: 'closed', winnerId: 'a' });
+    const db = await seeded(bet, { sam: '2025550188' });
+    await db.doc('bets/abc123/votes/sam').set({ voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 6, nanoseconds: 0 } });
+    const sendSms = jest.fn(async () => {});
+    await deliverResultTexts({ db, code: 'abc123', sendSms });
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText);
+  });
+
   test('running again, or concurrently, never sends a duplicate', async () => {
     const db = await seeded(settle(openBet(), 'a'));
     const sendSms = jest.fn(async () => {});
@@ -225,6 +246,100 @@ describe('deliverResultTexts', () => {
     const sendSms = jest.fn(async () => {});
     expect(await deliverResultTexts({ db, code: 'abc123', sendSms })).toEqual({ sent: 2, failed: 0 });
     expect(sendSms.mock.calls.map(([, body]) => body)).toEqual([calledOffText, calledOffText]);
+  });
+
+  describe('the undo window', () => {
+    const NOW = 1_800_000_000_000;
+    const at = (ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000) * 1e6 });
+    const fresh = () => ({ ...settle(openBet(), 'a'), settledAt: at(NOW - 2000) });
+
+    test('a fresh settle waits out the 35s undo window, then texts', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => { clock += ms; });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 2, failed: 0 });
+      expect(wait).toHaveBeenCalledWith(33000);
+      expect(sendSms).toHaveBeenCalledTimes(2);
+    });
+
+    test('a settle undone during the wait texts nobody and keeps the numbers', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn();
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => {
+        clock += ms;
+        await db.doc('bets/abc123').set(openBet());
+      });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 0, skipped: 'not-settled' });
+      expect(sendSms).not.toHaveBeenCalled();
+      expect(db.paths('privateResultTexts/')).toHaveLength(2);
+    });
+
+    test('undone and settled again during the wait: this run stands down for the new one', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let clock = NOW;
+      const wait = jest.fn(async (ms) => {
+        clock += ms;
+        await db.doc('bets/abc123').set({ ...settle(openBet(), 'b'), settledAt: at(clock - 1000) });
+      });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 0, skipped: 'undo-window' });
+      expect(sendSms).not.toHaveBeenCalled();
+      expect(db.paths('privateResultTexts/')).toHaveLength(2);
+      // The second settle's own call, past its window, sends the new result.
+      const later = await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock + 40000, wait: jest.fn() });
+      expect(later).toEqual({ sent: 2, failed: 0 });
+      expect(sendSms.mock.calls.map(([, body]) => body)).toContain(lostText.replace('Yes won', 'No won'));
+    });
+
+    test('repeat calls for the same settle return at once while one run waits; only that run sends', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let clock = NOW;
+      let release;
+      const wait = jest.fn((ms) => new Promise((resolve) => { release = () => { clock += ms; resolve(); }; }));
+      const first = deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait });
+      await new Promise((resolve) => { setImmediate(resolve); });
+      expect(wait).toHaveBeenCalledTimes(1);
+      const repeats = await Promise.all([1, 2, 3].map(() => deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })));
+      expect(repeats).toEqual([1, 2, 3].map(() => ({ sent: 0, skipped: 'in-flight' })));
+      expect(wait).toHaveBeenCalledTimes(1);
+      expect(sendSms).not.toHaveBeenCalled();
+      release();
+      expect(await first).toEqual({ sent: 2, failed: 0 });
+      expect(sendSms).toHaveBeenCalledTimes(2);
+      // Done, so the next call runs again, and the numbers are already gone.
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock, wait })).toEqual({ sent: 0, failed: 0 });
+      expect(sendSms).toHaveBeenCalledTimes(2);
+    });
+
+    test('a new settle (undone and settled again) is not held up by the run still waiting on the old one', async () => {
+      const db = await seeded(fresh());
+      const sendSms = jest.fn(async () => {});
+      let release;
+      const wait = jest.fn(() => new Promise((resolve) => { release = resolve; }));
+      const first = deliverResultTexts({ db, code: 'abc123', sendSms, now: () => NOW, wait });
+      await new Promise((resolve) => { setImmediate(resolve); });
+      await db.doc('bets/abc123').set({ ...settle(openBet(), 'b'), settledAt: at(NOW - 40000) });
+      expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => NOW, wait: jest.fn() })).toEqual({ sent: 2, failed: 0 });
+      release();
+      expect(await first).toEqual({ sent: 0, failed: 0 });
+      expect(sendSms).toHaveBeenCalledTimes(2);
+    });
+
+    test('a call-off and an older number settledAt send right away', async () => {
+      for (const bet of [
+        openBet({ status: 'closed', calledOff: true, settledAt: at(NOW - 1000) }),
+        { ...settle(openBet(), 'a'), settledAt: NOW - 1000 },
+      ]) {
+        const db = await seeded(bet);
+        const wait = jest.fn();
+        const sendSms = jest.fn(async () => {});
+        expect(await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => NOW, wait })).toEqual({ sent: 2, failed: 0 });
+        expect(wait).not.toHaveBeenCalled();
+      }
+    });
   });
 
   test('a missing bet is a no-op', async () => {

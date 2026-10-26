@@ -23,6 +23,15 @@ export function votersByOption(bet) {
   return sides;
 }
 
+// Where `viewerId`'s own name sits in votersByOption(bet)[optionId].names,
+// or -1: the one name a Pro badge may follow.
+export function viewerNameIndex(bet, optionId, viewerId) {
+  if (!viewerId) return -1;
+  const named = (Array.isArray(bet?.votes) ? bet.votes : [])
+    .filter((vote) => vote?.optionId === optionId && typeof vote.name === 'string' && vote.name.trim());
+  return named.findIndex((vote) => vote.voterId === viewerId);
+}
+
 function joinList(parts) {
   try {
     return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(parts);

@@ -11,9 +11,23 @@
 // and the creator's Wanna vote? link under the invite, creator-vote-link.png,
 // and a bet called off by status alone on /t/ and /b/, tally-called-off.png
 // and vote-called-off.png, and a settled bet whose winners all skipped their
-// name, reveal-unnamed-winners.png)
-// only go to --copy-to.
+// name, reveal-unnamed-winners.png, and with ads on, the web house ad over the
+// tally, house-ad.png, and the thank-you after it, thank-you.png, and the
+// same after a Settle & notify with no Undo, settle-house-ad.png, settle-thank-you.png, and
+// the reveal once the thank-you continues, settle-reveal-after-ad.png, and Pro:
+// the paywall at /pro, paywall.png, a Pro member's own badge on the tally,
+// pro-badge.png, and a Pro creator's Text the crew with ads on and no ad,
+// tally-pro-no-ad.png, and Friends on My bets, friends.png, with Maya opened,
+// friends-open.png, and the settled reveal with Share as image under Share
+// the result, winner-card-reveal.png, and the winner card PNG that button
+// makes, winner-card.png, and the same for long text and many winners,
+// winner-card-long.png, and F8: Call off on an open tally,
+// f8-call-off-button.png, its confirm, f8-call-off-confirm.png, the reveal
+// with its Undo countdown, f8-undo-countdown.png, and the tally once called
+// off, f8-called-off.png) only go to --copy-to.
 //
+// SCREENSHOTS_BASE points at an app preview already running elsewhere, for
+// when another checkout holds port 5173.
 // Drives the Vite app preview (npm run mobile:dev) in Playwright's Chromium at
 // iPhone size. Every Google/Firebase request is aborted and the two data
 // modules (src/phone/identity.js, src/phone/api.js) are swapped for fixtures
@@ -29,7 +43,7 @@ import sharp from 'sharp';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = fileURLToPath(new URL('../docs/screenshots/', import.meta.url));
-const BASE = 'http://127.0.0.1:5173';
+const BASE = process.env.SCREENSHOTS_BASE || 'http://127.0.0.1:5173';
 const CODE = 'k7q2xm';
 
 const JACK = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
@@ -92,6 +106,46 @@ const CROWD_BET = {
     ...['Kim', 'Lee', 'Ana', 'Ravi', 'Zoe', 'Omar'].map((name) => ({ voterId: name.toLowerCase(), name, optionId: 'a' })),
   ],
 };
+// The winner card at its limits: a question past three lines, long names
+// and more winners than the reveal names.
+const LONG_CARD_BET = {
+  ...OPEN_BET,
+  question: 'Will the whole crew make it to the cabin before midnight on Friday, with the snacks, '
+    + 'the playlist sorted, and nobody taking the scenic route again this year?',
+  stake: 'Loser buys the whole table brunch and does the dishes all weekend long',
+  options: [{ id: 'a', label: 'Everyone there before midnight' }, { id: 'b', label: 'Somebody gets lost' }],
+  votes: [
+    { voterId: 'bart', name: 'Bartholomew Maximilian Fitzgerald-Worthington', optionId: 'a' },
+    { voterId: 'anastasia', name: 'Anastasia Konstantinopoulou', optionId: 'a' },
+    ...['Kim', 'Lee', 'Ana', 'Ravi'].map((name) => ({ voterId: name.toLowerCase(), name, optionId: 'a' })),
+    { voterId: 'jake', name: 'Jake', optionId: 'b' },
+  ],
+};
+
+// Taps Share as image with no share sheet (Chromium on Linux has none) and
+// returns the PNG it downloads.
+async function winnerCardPng(page) {
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Share as image', exact: true }).click();
+  const stream = await (await download).createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+// Jack's bets for Friends on My bets. Jack picks on every settled one, so
+// Maya (opened in friends-open.png) has a W, an L, a same-side bet with no
+// pill, one called off and one still open.
+const FRIEND_BETS = [
+  { ...OPEN_BET, id: 'f1', code: 'f1', createdAt: 6, question: 'Chiefs cover -3?', status: 'closed', winnerId: 'a', settledAt: 6,
+    votes: [...OPEN_BET.votes, { voterId: 'maya', name: 'Maya', optionId: 'b' }] },
+  { ...OPEN_BET, id: 'f5', code: 'f5', createdAt: 5, question: 'First score a field goal?', stake: 'Coffee', status: 'closed', winnerId: 'b', settledAt: 5,
+    votes: [{ voterId: 'jack', name: 'Jack', optionId: 'a' }, { voterId: 'maya', name: 'Maya', optionId: 'b' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }] },
+  { ...FULL_BET, id: 'f2', code: 'f2', createdAt: 4, question: 'Over 47.5 points?', stake: 'Loser buys wings', status: 'closed', winnerId: 'b', settledAt: 4 },
+  { ...OPEN_BET, id: 'f3', code: 'f3', createdAt: 3, question: 'Game goes to overtime?', status: 'called-off',
+    votes: [{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'jake', name: 'Jake', optionId: 'b' }] },
+  { ...FULL_BET, id: 'f4', code: 'f4', createdAt: 2, question: 'Mahomes throws 3 TDs?', stake: 'Coffee', status: 'open', closesAt: null },
+];
 
 async function serverUp() {
   try {
@@ -117,7 +171,13 @@ async function startServer() {
 // settles on side a, or pass the winning option id. `shareSheet` gives the
 // page a navigator.share (Chromium on Linux has none): 'open' never closes,
 // like a sheet still on screen, and 'dismiss' is closed without sending.
-async function fixtures(page, { user, name, bet, settled = false, shareSheet = null }) {
+// `ads` swaps in src/ads/config.js with the ads flag on, as the e2e does.
+// `plan` is the signed-in user's entitlement (src/phone/entitlementApi.js is
+// swapped too), and `paywall` turns the paywall flag on in proConfig.js.
+// `bets` is My bets' whole list, when it should hold more than `bet`.
+// `noUndo` makes Settle & notify come back with a number settledAt, as an
+// older build wrote: no Undo, the one settle the ad still shows on.
+async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false, noUndo = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -125,6 +185,7 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
     body: `const user = ${JSON.stringify(user)};
       export const watchIdentity = (cb) => { cb(user); return () => {}; };
       export const useIdentity = () => user;
+      export const useSignedInUser = () => user;
       export const savedName = () => ${JSON.stringify(name)};
       export const rememberName = () => {};
       export const creatorName = () => 'Jack';`,
@@ -132,22 +193,57 @@ async function fixtures(page, { user, name, bet, settled = false, shareSheet = n
   await page.route('**/src/phone/api.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `import { buildSettlement } from ${JSON.stringify(new URL('./settlement.js', route.request().url()).href)};
-      let bet = ${JSON.stringify(bet)};
+      import { withVotes } from ${JSON.stringify(new URL('./votes.js', route.request().url()).href)};
+      // Fixture picks are in the legacy votes array; a fixture's voteDocs are
+      // per-voter docs. Reads get both merged, as the real api does.
+      const merge = ({ voteDocs, ...item }) => withVotes(item, voteDocs || []);
+      let bet = merge(${JSON.stringify(bet)});
       const winnerId = ${JSON.stringify(winnerId || null)};
       if (winnerId) bet = { ...bet, status: 'closed', winnerId, settledAt: Date.now(), settlement: buildSettlement(bet, winnerId) };
       export const subscribeBet = (code, cb) => { cb(bet); return () => {}; };
-      export const subscribeMyBets = (uid, cb) => { cb([bet]); return () => {}; };
+      const bets = ${JSON.stringify(bets)}?.map(merge) ?? null;
+      export const subscribeMyBets = (uid, cb) => { cb(bets || [bet]); return () => {}; };
       export const hydrateBet = async (b) => b;
       export const createBet = async () => ${JSON.stringify(CODE)};
       export const saveBet = async () => ${JSON.stringify(CODE)};
       export const castVote = async () => {};
-      export const settleBet = async () => bet;
+      export const renameVote = async () => {};
+      // settledAt null, as the real settleBet returns before the server time.
+      export const settleBet = async (code, id) => ({ ...bet, status: 'closed', winnerId: id, settledAt: ${noUndo ? 'Date.now()' : 'null'}, settlement: buildSettlement(bet, id) });
+      export const undoSettle = async () => ({ ...bet, status: 'open', winnerId: null });
+      export const callOffBet = async () => ({ ...bet, status: 'closed', calledOff: true, settledAt: null });
       export const deleteBet = async () => {};`,
   }));
   await page.route('**/src/phone/routes.js*', (route) => route.fulfill({
     contentType: 'application/javascript',
     body: `export function voteUrl(code) { return 'https://www.friendly-bets.com/b/' + encodeURIComponent(code); }`,
   }));
+  await page.route('**/src/phone/entitlementApi.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `const plan = ${JSON.stringify(plan)};
+      export const subscribeEntitlement = (uid, cb) => { cb(plan); return () => {}; };
+      export const requestMockPurchase = async () => ({ ok: true });`,
+  }));
+  if (paywall) {
+    await page.route('**/src/phone/proConfig.js*', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(
+        /export function proPaywallEnabled\(\) \{[\s\S]*?\n\}/,
+        'export function proPaywallEnabled() { return true; }',
+      );
+      await route.fulfill({ response, body });
+    });
+  }
+  if (ads) {
+    await page.route('**/src/ads/config.js*', async (route) => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace(
+        /export function adsEnabled\(\) \{[\s\S]*?\n\}/,
+        'export function adsEnabled() { return true; }',
+      );
+      await route.fulfill({ response, body });
+    });
+  }
   if (shareSheet) {
     await page.addInitScript((mode) => {
       Object.defineProperty(navigator, 'share', {
@@ -194,7 +290,89 @@ async function makeBet(page) {
   await page.locator('.tally-share.is-nudge').waitFor();
 }
 
+// The tally's Text the crew with ads on: the web house ad comes up first.
+async function inviteAd(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
+}
+
+// Close & settle on the tally with ads on, Chiefs -3 wins: the house ad comes up.
+async function settleAd(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+  await page.getByRole('button', { name: 'Chiefs -3', exact: true }).click();
+  await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Ad', exact: true }).waitFor();
+}
+
+// Bring a control into view near the bottom of the tally.
+async function showControl(page, locator) {
+  await locator.evaluate((node) => {
+    const scroller = node.closest('.scroll');
+    scroller.scrollTop += node.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 24;
+  });
+}
+
+async function openCallOff(page) {
+  await page.goto(`/t/${CODE}`);
+  await page.getByText('Updated live').waitFor();
+  const button = page.getByRole('button', { name: 'Call off', exact: true });
+  await button.waitFor();
+  await showControl(page, button);
+  return button;
+}
+
 const SHOTS = [
+  {
+    file: 'f8-call-off-button.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    run: openCallOff,
+  },
+  {
+    file: 'f8-call-off-confirm.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('dialog', { name: 'Call off this bet?' }).waitFor();
+    },
+  },
+  {
+    file: 'f8-called-off.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await (await openCallOff(page)).click();
+      await page.getByRole('button', { name: 'Call off bet', exact: true }).click();
+      await page.getByText('This bet was called off.').waitFor();
+    },
+  },
+  {
+    file: 'f8-undo-countdown.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await page.getByRole('button', { name: 'Close & settle', exact: true }).click();
+      await page.getByRole('button', { name: 'Chiefs -3', exact: true }).click();
+      await page.getByRole('button', { name: 'Settle & notify', exact: true }).click();
+      const undo = page.getByRole('button', { name: 'Undo', exact: true });
+      await undo.waitFor();
+      await page.locator('.reveal-wrap').evaluate((node) => {
+        const scroller = node.closest('.scroll');
+        scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+      });
+    },
+  },
   {
     file: 'create-bet.png',
     user: JACK,
@@ -343,7 +521,7 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/t/${CODE}`);
-      await page.getByText('Bragging rights, secured.').waitFor();
+      await page.getByText('Time for everyone else to pay up.').waitFor();
       await showBars(page, '.reveal');
     },
   },
@@ -369,8 +547,69 @@ const SHOTS = [
     settled: true,
     async run(page) {
       await page.goto(`/b/${CODE}`);
-      await page.getByText('3 friends won.').waitFor();
+      await page.getByText('3 friends called it.').waitFor();
       await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'house-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'open',
+    ads: true,
+    run: inviteAd,
+  },
+  {
+    file: 'thank-you.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'open',
+    ads: true,
+    async run(page) {
+      await inviteAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor();
+    },
+  },
+  {
+    file: 'settle-house-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    noUndo: true,
+    run: settleAd,
+  },
+  {
+    file: 'settle-thank-you.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    noUndo: true,
+    async run(page) {
+      // Held on the thank-you, which would otherwise continue after 1.5 s.
+      await page.clock.install();
+      await settleAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor();
+      await page.clock.pauseAt(Date.now() + 200);
+    },
+  },
+  {
+    file: 'settle-reveal-after-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    ads: true,
+    noUndo: true,
+    async run(page) {
+      await settleAd(page);
+      await page.getByRole('button', { name: 'Close ad' }).click();
+      await page.getByRole('dialog', { name: 'Thanks for watching. That keeps Friendly free.' }).waitFor({ state: 'detached' });
+      await page.getByRole('region', { name: 'Settled result' }).waitFor();
     },
   },
   {
@@ -385,6 +624,110 @@ const SHOTS = [
       await page.getByRole('button', { name: /^Results/ }).click();
       await page.getByRole('dialog', { name: 'The final word' }).waitFor();
     },
+  },
+  {
+    file: 'paywall.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    paywall: true,
+    async run(page) {
+      await page.goto('/pro');
+      await page.locator('.pro-price').waitFor();
+    },
+  },
+  {
+    file: 'pro-badge.png',
+    docs: false,
+    user: JACK,
+    bet: FULL_BET,
+    plan: { plan: 'pro', source: 'mock', expiresAt: null },
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.locator('.voter-name .pro-badge').waitFor();
+      await showBars(page);
+    },
+  },
+  {
+    file: 'tally-pro-no-ad.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    shareSheet: 'dismiss',
+    ads: true,
+    plan: { plan: 'pro', source: 'mock', expiresAt: null },
+    async run(page) {
+      await page.goto(`/t/${CODE}`);
+      await page.getByText('Updated live').waitFor();
+      await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
+      await page.getByText('Saved. Text when you’re ready.').waitFor();
+      if (await page.getByRole('dialog').count()) throw new Error('an ad showed for a Pro member');
+    },
+  },
+  {
+    file: 'friends.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await page.goto('/bets');
+      await page.getByRole('button', { name: /^Friends/ }).click();
+      await page.getByRole('region', { name: 'Head to head' }).waitFor();
+      await showBars(page, '.bets-toolbar');
+    },
+  },
+  {
+    file: 'friends-open.png',
+    docs: false,
+    user: JACK,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await page.goto('/bets');
+      await page.getByRole('button', { name: /^Friends/ }).click();
+      await page.getByRole('button', { name: /^Maya/ }).click();
+      await showBars(page, '.friend-row[aria-expanded="true"]');
+    },
+  },
+  {
+    file: 'winner-card-reveal.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: SAT_OUT_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+      await showBars(page, '.reveal');
+    },
+  },
+  {
+    file: 'winner-card.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: SAT_OUT_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+    },
+    capture: winnerCardPng,
+  },
+  {
+    file: 'winner-card-long.png',
+    docs: false,
+    user: JAKE,
+    name: 'Jake',
+    bet: LONG_CARD_BET,
+    settled: true,
+    async run(page) {
+      await page.goto(`/b/${CODE}`);
+      await page.getByRole('button', { name: 'Share as image', exact: true }).waitFor();
+    },
+    capture: winnerCardPng,
   },
 ];
 
@@ -411,12 +754,13 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, settled: shot.settled, shareSheet: shot.shareSheet });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall, noUndo: shot.noUndo });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);
-    const png = await page.screenshot({ animations: 'disabled' });
-    const optimized = await sharp(png).png({ palette: true, quality: 90, effort: 10, compressionLevel: 9 }).toBuffer();
+    // A shot with `capture` saves the image the app made, as it made it.
+    const png = shot.capture ? await shot.capture(page) : await page.screenshot({ animations: 'disabled' });
+    const optimized = shot.capture ? png : await sharp(png).png({ palette: true, quality: 90, effort: 10, compressionLevel: 9 }).toBuffer();
     if (shot.docs !== false) await writeFile(`${OUT}${shot.file}`, optimized);
     if (copyTo) await writeFile(join(copyTo, shot.file), optimized);
     console.log(`${shot.file}  ${(optimized.length / 1024).toFixed(0)} KB`);

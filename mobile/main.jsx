@@ -10,6 +10,9 @@ import '../src/App.css';
 import '../src/phone/phone.css';
 import './mobile.css';
 import App from './App';
+import { startAdsWhenProKnown } from '../src/ads/startAds';
+
+startAdsWhenProKnown();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode><BrowserRouter><App /></BrowserRouter></React.StrictMode>,

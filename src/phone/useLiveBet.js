@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { hydrateBet, subscribeBet } from './api';
 
-// Live bets/{code} for the tally and vote screens. Keeps exactly one snapshot
-// listener open, and swaps it for a fresh one when the page becomes visible
+// Live bets/{code} for the tally and vote screens, its votes merged from the
+// legacy array and the per-voter vote docs (subscribeBet). Keeps exactly one
+// subscription open, and swaps it for a fresh one when the page becomes visible
 // again or comes back online (iOS Safari can freeze listeners in background
 // tabs). Once a bet has loaded, a later snapshot error keeps the last good bet
 // on screen; `failed` is only set when nothing loaded. A missing bet the server

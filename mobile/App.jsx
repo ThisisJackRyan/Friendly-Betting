@@ -9,6 +9,8 @@ import VoteScreen from '../src/phone/VoteScreen';
 import TallyScreen from '../src/phone/TallyScreen';
 import NotFound from '../src/phone/NotFound';
 import NativeLifecycle from './NativeLifecycle';
+import EntitlementSync from '../src/phone/EntitlementSync';
+import Paywall from '../src/phone/Paywall';
 
 function Chrome() {
   return <CreateChromeProvider><AppShell><Outlet /></AppShell></CreateChromeProvider>;
@@ -17,6 +19,7 @@ function Chrome() {
 export default function App() {
   return <>
     <NativeLifecycle />
+    <EntitlementSync />
     <div className="app-frame">
       <Routes>
         <Route element={<Chrome />}>
@@ -28,6 +31,7 @@ export default function App() {
           <Route path="new/:type" element={<CreateForm />} />
           <Route path="t/:code" element={<TallyScreen />} />
           <Route path="Bet/:collection/:id" element={<TallyScreen />} />
+          <Route path="pro" element={<Paywall />} />
         </Route>
         <Route path="b/:code" element={<VoteScreen />} />
         <Route path="*" element={<NotFound />} />

@@ -4,11 +4,13 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
-import { castVote, settleBet, subscribeBet } from './api';
-import { useIdentity } from './identity';
+import { castVote, renameVote, settleBet, subscribeBet } from './api';
+import { NAME_EDIT_COPY } from './nameEditCopy';
+import { rememberName, useIdentity } from './identity';
 import { shareMessage } from './share';
 import { navigation } from 'next/navigation';
 import { buildSettlement } from './settlement';
+import { renderWinnerCard } from './winnerCardImage';
 import { saveResultText } from './resultTexts';
 import { RESULT_TEXT_COPY } from './resultTextCopy';
 import { PHONE_INVALID_ERROR, PHONE_OFFLINE_ERROR, phoneError } from './creatorSession';
@@ -41,6 +43,7 @@ jest.mock('./api', () => ({
   }),
   hydrateBet: async (bet) => bet,
   castVote: jest.fn(async () => {}),
+  renameVote: jest.fn(async () => {}),
   settleBet: jest.fn(async () => {}),
 }));
 
@@ -90,6 +93,7 @@ beforeEach(() => {
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
   castVote.mockClear();
+  renderWinnerCard.mockClear();
   settleBet.mockReset();
   settleBet.mockResolvedValue(undefined);
 });
@@ -105,6 +109,7 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
   expect(await screen.findByText('Maya')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Who is late' })).toBeInTheDocument();
   expect(screen.queryByText(/place bet/i)).not.toBeInTheDocument();
+  expect(screen.getByLabelText(/your name/i)).toHaveAttribute('placeholder', 'ex: John');
 
   await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
   expect(castVote).toHaveBeenCalledWith('abc123', {
@@ -112,7 +117,7 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
     name: 'Sam',
     optionId: 'a',
   });
-  expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+  expect(await screen.findByText(/you’re on/i)).toHaveTextContent('Yes');
   expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send code' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
@@ -156,7 +161,7 @@ test('anyone can share the text-friends message from the tally', async () => {
   expect(screen.queryByText(/we’ll text a code/i)).not.toBeInTheDocument();
   await userEvent.click(share);
   expect(shareMessage).toHaveBeenCalledWith(textFriendsMessage);
-  expect(await screen.findByText('Copied — paste into a text.')).toBeInTheDocument();
+  expect(await screen.findByText('Copied. Paste it into a text.')).toBeInTheDocument();
 });
 
 test('a manual share shows the message under the tally', async () => {
@@ -290,6 +295,24 @@ test('the creator previews, confirms, and gets the committed result immediately'
   expect(shareMessage).toHaveBeenCalledWith(expect.not.stringContaining('Make your call'));
 });
 
+test('the preview reads the creator\'s own unnamed solo win as the reveal will, with the stake line', async () => {
+  subscribeBet.mockImplementation((_code, onChange) => {
+    onChange({ ...openBet, stake: 'Lunch', votes: [{ voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'b' }] });
+    return () => {};
+  });
+  renderAt('/t/abc123', <TallyScreen />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Close & settle' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+  const preview = screen.getByRole('region', { name: 'Result preview' });
+  expect(within(preview).getByRole('heading', { level: 2 })).toHaveTextContent('You called it.');
+  expect(preview).toHaveTextContent('Solo win. Lunch is on everyone else.');
+  expect(preview).not.toHaveTextContent('A friend won');
+  expect(preview).not.toHaveTextContent('Bragging rights, secured.');
+  await userEvent.click(screen.getByRole('button', { name: 'No' }));
+  expect(within(preview).getByRole('heading', { level: 2 })).toHaveTextContent('Sam won');
+  expect(preview).toHaveTextContent('Lunch is on everyone else.');
+});
+
 test('failed settlement keeps the preview available and does not claim a result', async () => {
   settleBet.mockRejectedValue(new Error('Could not settle. Try again.'));
   renderAt('/t/abc123', <TallyScreen />);
@@ -308,7 +331,7 @@ test.each([
   subscribeBet.mockImplementation((_code, onChange) => { onChange(finishedBet(winnerId)); return () => {}; });
   renderAt('/b/abc123', <VoteScreen />);
   expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent(copy);
-  expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Share the result' })).toBeInTheDocument();
 });
@@ -375,7 +398,7 @@ describe('text me who won', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
     expect(castVote).toHaveBeenCalledTimes(1);
     expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'Sam', optionId: 'a' });
-    expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(await screen.findByText(/you’re on/i)).toHaveTextContent('Yes');
     // A pending click is not a recorded vote.
     expect(card()).not.toBeInTheDocument();
     expect(saveResultText).not.toHaveBeenCalled();
@@ -398,7 +421,7 @@ describe('text me who won', () => {
     await renderVoted();
     await userEvent.click(screen.getByRole('button', { name: 'No thanks' }));
     expect(card()).not.toBeInTheDocument();
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
     expect(localStorage.getItem('fb.resultText.abc123')).toBe('skipped');
     expect(saveResultText).not.toHaveBeenCalled();
@@ -408,7 +431,7 @@ describe('text me who won', () => {
     localStorage.setItem('fb.resultText.abc123', 'skipped');
     subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
   });
 
@@ -529,7 +552,7 @@ describe('text me who won', () => {
 
     expect(castVote).toHaveBeenCalledTimes(1);
     expect(settleBet).not.toHaveBeenCalled();
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(screen.getByRole('link', { name: 'See the picks' })).toBeInTheDocument();
     expect(localStorage.getItem('fb.resultText.abc123')).toBeNull();
   });
@@ -542,7 +565,7 @@ describe('text me who won', () => {
     expect(card()).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(localStorage.getItem('fb.resultText.abc123')).toBe('skipped');
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(castVote).not.toHaveBeenCalled();
   });
 
@@ -553,7 +576,7 @@ describe('text me who won', () => {
     setup();
     subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
   });
 
@@ -563,6 +586,11 @@ describe('text me who won', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toBeInTheDocument();
     expect(card()).not.toBeInTheDocument();
+    // A settled bet that wasn't called off keeps the creator's avatar and caption.
+    const header = document.querySelector('.invite-line');
+    expect(header.querySelector('.invite-avatar')).toHaveTextContent('M');
+    expect(header.querySelector('.inviter')).toHaveTextContent('Maya');
+    expect(header.querySelector('.invite-caption')).toHaveTextContent('settled this friendly wager');
   });
 
   test.each([
@@ -573,6 +601,16 @@ describe('text me who won', () => {
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
     expect(card()).not.toBeInTheDocument();
+  });
+
+  test('an open bet keeps the creator avatar and caption', async () => {
+    subscribeBet.mockImplementation((_code, onChange) => { onChange(votedBet); return () => {}; });
+    renderAt('/b/abc123', <VoteScreen />);
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
+    const header = document.querySelector('.invite-line');
+    expect(header.querySelector('.invite-avatar')).toHaveTextContent('M');
+    expect(header.querySelector('.inviter')).toHaveTextContent('Maya');
+    expect(header.querySelector('.invite-caption')).toHaveTextContent('has a friendly wager for you');
   });
 
   test('the tally never renders a saved number', async () => {
@@ -621,7 +659,7 @@ describe('live results after voting', () => {
     const removed = jest.spyOn(document, 'removeEventListener');
     try {
       const { unmount } = renderAt('/b/abc123', <VoteScreen />);
-      expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+      expect(await screen.findByText(/you’re on/i)).toHaveTextContent('Yes');
       expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
 
       await push({ ...votedBet, votes: [...votes, { voterId: 'kim', name: 'Kim', optionId: 'b' }, { voterId: 'lee', name: 'Lee', optionId: 'b' }] });
@@ -639,10 +677,10 @@ describe('live results after voting', () => {
 
   test('a snapshot error keeps the last results with no new error', async () => {
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
     await push(undefined, new Error('offline'));
     await push(null, undefined, { fromCache: true });
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
@@ -650,18 +688,18 @@ describe('live results after voting', () => {
 
   test('a delete the server confirms shows the not-found screen live', async () => {
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
     await push(null);
     expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
     expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('coming back to the tab resubscribes and the settled result lands live', async () => {
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you’re on/i)).toBeInTheDocument();
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
@@ -672,13 +710,13 @@ describe('live results after voting', () => {
     await push({ ...votedBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(votedBet, 'a') });
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('You called it.');
     expect(screen.queryByText('Final tally')).not.toBeInTheDocument();
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
     expect(document.querySelector('.bars, .voter-list')).toBeNull();
   });
 
   test('the You’re on view keeps counts only, without voter names', async () => {
     renderAt('/b/abc123', <VoteScreen />);
-    expect(await screen.findByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(await screen.findByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(document.querySelector('.voter-list')).toBeNull();
   });
 });
@@ -725,7 +763,7 @@ describe('your own pick counts right away', () => {
 
   test('the results view shows your pick before any snapshot has it', async () => {
     await vote();
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     expect(widths()).toEqual(['100%', '0%']);
     expect(screen.queryByText('0 · 0%', { selector: '.mine .bar-count' })).not.toBeInTheDocument();
@@ -757,7 +795,7 @@ describe('your own pick counts right away', () => {
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     await act(async () => settle.reject(new Error('This bet is closed.')));
     expect(screen.getByRole('alert')).toHaveTextContent('This bet is closed.');
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
     expect(counts()).toEqual([]);
     expect(screen.getByRole('button', { name: 'Yes' })).toBeEnabled();
 
@@ -770,7 +808,7 @@ describe('your own pick counts right away', () => {
     await vote();
     await act(async () => settle.reject({}));
     expect(screen.getByRole('alert')).toHaveTextContent('Your pick didn’t stick. Give it another go.');
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
   });
 
   test('a snapshot error or offline miss keeps your pick and the last tally', async () => {
@@ -778,7 +816,7 @@ describe('your own pick counts right away', () => {
     await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }] });
     await push(undefined, new Error('offline'));
     await push(null, undefined, { fromCache: true });
-    expect(screen.getByText(/you're on/i)).toHaveTextContent('Yes');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await act(async () => settle.resolve());
@@ -789,7 +827,7 @@ describe('your own pick counts right away', () => {
     await vote();
     await push(null);
     expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
   });
 });
 
@@ -810,6 +848,8 @@ test('a mistyped code shows the not-found screen with a way to start a bet', asy
 describe.each([
   ['status called-off', { status: 'called-off' }],
   ['calledOff flag', { calledOff: true }],
+  // What Call off writes.
+  ['closed + calledOff', { status: 'closed', calledOff: true, settledAt: 1 }],
 ])('a called-off bet (%s) on the vote page', (_label, patch) => {
   const anon = { uid: 'anon-1', isAnonymous: true, providerData: [] };
 
@@ -824,6 +864,13 @@ describe.each([
     const region = await screen.findByRole('region', { name: 'Settled result' });
     expect(region).toHaveTextContent('This bet was called off.');
     expect(region).toHaveTextContent('Nobody won this one.');
+    // No invite header at all: the result card alone carries the message.
+    expect(document.querySelector('.invite-line')).toBeNull();
+    expect(document.querySelector('.invite-avatar')).toBeNull();
+    expect(screen.getAllByText('This bet was called off.')).toHaveLength(1);
+    expect(screen.getAllByText('Nobody won this one.')).toHaveLength(1);
+    expect(screen.queryByText('settled this friendly wager')).not.toBeInTheDocument();
+    expect(screen.queryByText('Maya')).not.toBeInTheDocument();
     expect(screen.getByText('Closed')).toBeInTheDocument();
     // No options, no name field, nothing to submit.
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
@@ -832,6 +879,11 @@ describe.each([
     expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Picks close/)).not.toBeInTheDocument();
     expect(screen.queryByText('Picks are closed. The final call is coming.')).not.toBeInTheDocument();
+    // Nothing to share: no text, no image, and no winner card drawn.
+    expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(renderWinnerCard).not.toHaveBeenCalled();
     expect(castVote).not.toHaveBeenCalled();
   });
 
@@ -840,7 +892,7 @@ describe.each([
     subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
     renderAt('/b/abc123', <VoteScreen />);
     expect(await screen.findByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
-    expect(screen.queryByText(/you're on/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
   });
 
@@ -856,5 +908,373 @@ describe.each([
     publish({ ...openBet, ...patch });
     expect(screen.queryByRole('button', { name: 'Yes' })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Settled result' })).toHaveTextContent('This bet was called off.');
+  });
+});
+
+test('a settle undone live takes Share as image away and the options come back', async () => {
+  useIdentity.mockReturnValue({ uid: 'anon-1', isAnonymous: true, providerData: [] });
+  const settled = { ...openBet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(openBet, 'a') };
+  let publish;
+  subscribeBet.mockImplementation((_code, onChange) => {
+    publish = (bet) => act(() => onChange(bet));
+    onChange(settled);
+    return () => {};
+  });
+  renderAt('/b/abc123', <VoteScreen />);
+  expect(await screen.findByRole('button', { name: 'Share as image' })).toBeInTheDocument();
+  publish(openBet);
+  expect(screen.queryByRole('region', { name: 'Settled result' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share the result' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+});
+
+// The Share as image card is drawn for whoever is looking: only the creator's
+// own card may speak as the creator ("I").
+describe('the winner card follows the viewer', () => {
+  const { winnerCardText } = jest.requireActual('./winnerCard');
+  const settle = (votes) => {
+    const bet = { ...openBet, votes };
+    return { ...bet, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(bet, 'a') };
+  };
+  // openBet's creator is user-1, here a winner who skipped their name.
+  const BETS = [
+    ['solo', settle([{ voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'anon-2', name: 'Zed', optionId: 'b' }]), 'I called it.'],
+    ['with Maya', settle([{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'user-1', name: '', optionId: 'a' }, { voterId: 'anon-2', name: 'Zed', optionId: 'b' }]), 'Maya & I won.'],
+  ];
+  const CREATOR_LINES = ['I called it.', '& I won.', '& I won.'];
+  const VIEWERS = [
+    ['a voter who lost', { uid: 'anon-2', isAnonymous: true, providerData: [] }],
+    ['a voter who won', { uid: 'maya', isAnonymous: true, providerData: [] }],
+    ['a logged-out visitor', null],
+  ];
+  const SCREENS = [['/b/', VoteScreen], ['/t/', TallyScreen]];
+
+  async function drawnCard() {
+    expect(await screen.findByRole('button', { name: 'Share as image' })).toBeInTheDocument();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 300)); });
+    expect(renderWinnerCard).toHaveBeenCalledTimes(1);
+    const [[drawnBet, viewerId]] = renderWinnerCard.mock.calls;
+    return { viewerId, text: winnerCardText(drawnBet, viewerId) };
+  }
+
+  describe.each(SCREENS)('on %s', (prefix, Screen) => {
+    describe.each(BETS)('an unnamed creator %s', (_bet, bet) => {
+      test.each(VIEWERS)('%s never gets the creator\'s I', async (_viewer, user) => {
+        useIdentity.mockReturnValue(user);
+        subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+        renderAt(`${prefix}abc123`, <Screen />);
+        const { viewerId, text } = await drawnCard();
+        expect(viewerId).toBe(user ? user.uid : null);
+        expect(text.headline).toBe(winnerCardText(bet).headline);
+        const all = Object.values(text).join('\n');
+        CREATOR_LINES.forEach((line) => expect(all).not.toContain(line));
+      });
+    });
+
+    test.each(BETS)('the creator\'s own card, %s, still says I', async (_bet, bet, headline) => {
+      useIdentity.mockReturnValue(phoneCreator);
+      subscribeBet.mockImplementation((_code, onChange) => { onChange(bet); return () => {}; });
+      renderAt(`${prefix}abc123`, <Screen />);
+      const { viewerId, text } = await drawnCard();
+      expect(viewerId).toBe('user-1');
+      expect(text.headline).toBe(headline);
+    });
+  });
+});
+
+describe('adding or editing a name after picking', () => {
+  const voter = { uid: 'anon-1', isAnonymous: true, providerData: [{ providerId: 'anonymous' }] };
+  let publish;
+  let current;
+
+  beforeEach(() => {
+    useIdentity.mockReturnValue(voter);
+    renameVote.mockReset();
+    current = openBet;
+    subscribeBet.mockImplementation((_code, onChange) => {
+      publish = (bet) => { current = bet; act(() => onChange(bet)); };
+      onChange(current);
+      return () => {};
+    });
+    // The snapshot follows each write, like Firestore does.
+    castVote.mockImplementation(async (_code, vote) => {
+      publish({ ...current, votes: [...current.votes.filter((v) => v.voterId !== vote.voterId), vote] });
+    });
+    renameVote.mockImplementation(async (_code, voterId, name) => {
+      publish({ ...current, votes: current.votes.map((v) => (v.voterId === voterId ? { ...v, name } : v)) });
+    });
+  });
+
+  afterEach(() => {
+    castVote.mockImplementation(async () => {});
+  });
+
+  const pickedAs = (name) => ({ ...openBet, votes: [{ voterId: 'anon-1', name, optionId: 'a' }] });
+
+  test('shows after a nameless pick, and saving changes the name but not the side', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.clear(await screen.findByLabelText(/your name/i));
+    expect(screen.queryByRole('button', { name: NAME_EDIT_COPY.add })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: '', optionId: 'a' });
+    expect(screen.queryByLabelText(/your name/i)).not.toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.add }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('placeholder', 'ex: John');
+    expect(input).toHaveFocus();
+    await userEvent.type(input, '  John ');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+
+    expect(renameVote).toHaveBeenCalledWith('abc123', 'anon-1', 'John');
+    expect(castVote).toHaveBeenCalledTimes(1);
+    expect(current.votes).toEqual([{ voterId: 'anon-1', name: 'John', optionId: 'a' }]);
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
+    const edit = screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('John') });
+    expect(edit).toHaveAccessibleName('Edit your name, currently John');
+    expect(edit).toHaveTextContent(NAME_EDIT_COPY.edit);
+    expect(edit).toHaveFocus();
+  });
+
+  test('both name inputs stop at 30 characters', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const first = await screen.findByLabelText(/your name/i);
+    expect(first).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(first);
+    await userEvent.type(first, 'x'.repeat(40));
+    expect(first).toHaveValue('x'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'x'.repeat(30), optionId: 'a' });
+
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('x'.repeat(30)) }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveAttribute('maxLength', '30');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'y'.repeat(40));
+    expect(input).toHaveValue('y'.repeat(30));
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+    expect(renameVote).toHaveBeenCalledWith('abc123', 'anon-1', 'y'.repeat(30));
+  });
+
+  test('prefills the current name, and cancel leaves it alone', async () => {
+    current = pickedAs('Sam');
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    expect(input).toHaveValue('Sam');
+    // Nothing to save until it changes.
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeDisabled();
+    await userEvent.type(input, 'my');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.cancel }));
+    expect(renameVote).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') })).toBeInTheDocument();
+  });
+
+  test('a refused save shows an error and keeps the old name', async () => {
+    current = pickedAs('Sam');
+    renameVote.mockImplementation(async () => {
+      throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+    await userEvent.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+    const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'John');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+    expect(current.votes[0]).toEqual({ voterId: 'anon-1', name: 'Sam', optionId: 'a' });
+    expect(input).toHaveValue('John');
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
+    await userEvent.click(screen.getByRole('button', { name: NAME_EDIT_COPY.cancel }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') })).toBeInTheDocument();
+  });
+
+  describe('a slow save', () => {
+    let user;
+    const renamedTo = (bet, name) => ({ ...bet, votes: bet.votes.map((v) => (v.voterId === 'anon-1' ? { ...v, name } : v)) });
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      rememberName.mockClear();
+      current = pickedAs('Sam');
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    async function saveAs(name) {
+      renderAt('/b/abc123', <VoteScreen />);
+      act(() => jest.advanceTimersByTime(500));
+      await user.click(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Sam') }));
+      const input = screen.getByRole('textbox', { name: NAME_EDIT_COPY.label });
+      await user.clear(input);
+      await user.type(input, name);
+      await user.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.saving })).toBeDisabled();
+      return input;
+    }
+
+    test('the snapshot showing the new name ends Saving… even if the write never answers', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+
+      publish(renamedTo(current, 'John'));
+      const edit = await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') });
+      expect(edit).toHaveFocus();
+      expect(screen.queryByRole('button', { name: NAME_EDIT_COPY.saving })).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledWith('John');
+
+      act(() => jest.advanceTimersByTime(20000));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('with no answer and no snapshot, Saving… ends with the save error', async () => {
+      let land = () => {};
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        land = resolve;
+      }));
+      const input = await saveAs('John');
+
+      act(() => jest.advanceTimersByTime(9000));
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.saving })).toBeDisabled();
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeEnabled();
+      expect(input).toBeEnabled();
+      expect(input).toHaveValue('John');
+      expect(rememberName).not.toHaveBeenCalled();
+
+      // A success after that still lands, and the form closes on it.
+      await act(async () => {
+        land();
+      });
+      expect(rememberName).toHaveBeenCalledWith('John');
+      publish(renamedTo(current, 'John'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    test('a refused save ends Saving… with the save error', async () => {
+      let refuse = () => {};
+      renameVote.mockImplementation(() => new Promise((_resolve, reject) => {
+        refuse = reject;
+      }));
+      await saveAs('John');
+      await act(async () => {
+        refuse(new Error('This bet is closed.'));
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.save })).toBeEnabled();
+      expect(rememberName).not.toHaveBeenCalled();
+    });
+
+    test('a write that answers before any snapshot closes the form', async () => {
+      let land = () => {};
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        land = resolve;
+      }));
+      await saveAs('John');
+      await act(async () => {
+        land();
+      });
+      expect(screen.getByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toHaveFocus();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledWith('John');
+    });
+
+    test('a snapshot that only lands after the time out still remembers the name', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+      expect(rememberName).not.toHaveBeenCalled();
+
+      publish(renamedTo(current, 'John'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('John') })).toBeInTheDocument();
+      expect(rememberName).toHaveBeenCalledTimes(1);
+      expect(rememberName).toHaveBeenCalledWith('John');
+      // The pick field for the next bet starts from it too.
+      publish(renamedTo(current, 'John'));
+      expect(rememberName).toHaveBeenCalledTimes(1);
+    });
+
+    test('a late snapshot or answer for an older name never replaces a newer saved one', async () => {
+      const lands = [];
+      renameVote.mockImplementation(() => new Promise((resolve) => {
+        lands.push(resolve);
+      }));
+      const input = await saveAs('John');
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent(NAME_EDIT_COPY.saveError);
+
+      await user.clear(input);
+      await user.type(input, 'Jo');
+      await user.click(screen.getByRole('button', { name: NAME_EDIT_COPY.save }));
+      await act(async () => {
+        lands[1]();
+      });
+      expect(rememberName).toHaveBeenLastCalledWith('Jo');
+      publish(renamedTo(current, 'Jo'));
+      expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Jo') })).toBeInTheDocument();
+
+      // The first save's snapshot and answer arrive last.
+      publish(renamedTo(current, 'John'));
+      await act(async () => {
+        lands[0]();
+      });
+      expect(rememberName.mock.calls).toEqual([['Jo']]);
+    });
+
+    test('leaving the page mid-save clears the save timer', async () => {
+      renameVote.mockImplementation(() => new Promise(() => {}));
+      await saveAs('John');
+      const before = jest.getTimerCount();
+      cleanup();
+      expect(jest.getTimerCount()).toBeLessThan(before);
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+      expect(rememberName).not.toHaveBeenCalled();
+    });
+
+    test('leaving the page mid-save updates nothing after unmount', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        let land = () => {};
+        renameVote.mockImplementation(() => new Promise((resolve) => {
+          land = resolve;
+        }));
+        await saveAs('John');
+        cleanup();
+        await act(async () => {
+          land();
+          jest.advanceTimersByTime(20000);
+        });
+        expect(error).not.toHaveBeenCalled();
+      } finally {
+        error.mockRestore();
+      }
+    });
+  });
+
+  test('not offered once picks are closed or the bet is settled', async () => {
+    current = { ...pickedAs('Sam'), status: 'closed', winnerId: 'a' };
+    current = { ...current, settlement: buildSettlement(current, 'a') };
+    renderAt('/b/abc123', <VoteScreen />);
+    await screen.findByRole('heading', { name: 'Who is late' });
+    expect(screen.queryByRole('button', { name: /name/i })).not.toBeInTheDocument();
   });
 });
