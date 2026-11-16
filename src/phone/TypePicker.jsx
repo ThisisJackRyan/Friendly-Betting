@@ -40,12 +40,7 @@ const TypePicker = ({ onPick, earlyTypes = EARLY_ACCESS_TYPES }) => {
 
   return (
     <div className="stack">
-      {!onPick && (
-        <>
-          <p className="wordmark">Friendly</p>
-          <h1 className="screen-title">New bet</h1>
-        </>
-      )}
+      {!onPick && <h1 className="screen-title">New bet</h1>}
       <div className="type-list">
         {TYPE_ORDER.map((id) => {
           const meta = TYPE_META[id];
