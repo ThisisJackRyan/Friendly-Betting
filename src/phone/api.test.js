@@ -6,6 +6,7 @@ import {
 } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
+import { saveRematch } from './rematch';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
@@ -878,5 +879,159 @@ describe('a session that learns the rules deny vote docs', () => {
     expect(voteDocs.maya).toMatchObject({ voterId: 'maya', name: 'May', optionId: 'b' });
     expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam']);
     expect(voteReads()).toHaveLength(1);
+  });
+});
+
+// Server-side Pro checks (docs/PRO.md): with the paywall on, new bets go
+// through POST /api/bets; with it off, the client writes them as before.
+describe('creating a bet', () => {
+  const fields = {
+    schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line', question: 'Who wins?', stake: 'Pizza',
+    options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Lions' }], createdByID: 'creator', createdByName: 'Jack',
+  };
+  const settled = {
+    code: 'old123', schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line', question: 'Who wins?', stake: 'Pizza',
+    status: 'closed', winnerId: 'a', options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Lions' }], createdByID: 'creator',
+  };
+  const savedFlag = process.env.NEXT_PUBLIC_PRO_PAYWALL;
+  const respond = (status, body) => {
+    global.fetch = jest.fn(async () => ({
+      ok: status < 300,
+      status,
+      json: async () => {
+        if (body === undefined) throw new SyntaxError('no json');
+        return body;
+      },
+    }));
+  };
+  const getIdToken = jest.fn(async () => 'id-token');
+
+  beforeEach(() => {
+    stored = null;
+    auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }], getIdToken };
+    getIdToken.mockClear();
+    global.fetch = jest.fn(async () => {
+      throw new Error('fetch must not be called');
+    });
+  });
+
+  afterEach(() => {
+    delete global.fetch;
+    if (savedFlag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+    else process.env.NEXT_PUBLIC_PRO_PAYWALL = savedFlag;
+  });
+
+  describe.each([undefined, '0', 'true'])('paywall off (NEXT_PUBLIC_PRO_PAYWALL=%p)', (flag) => {
+    beforeEach(() => {
+      if (flag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+      else process.env.NEXT_PUBLIC_PRO_PAYWALL = flag;
+    });
+
+    test('Create writes bets/{code} from the client, as today, and never calls the route', async () => {
+      const code = await saveBet(null, fields);
+      expect(code).toMatch(/^[a-z2-9]{6}$/);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(tx.set).toHaveBeenCalledWith({ collection: 'bets', id: code }, {
+        ...fields, schemaVersion: 2, code, status: 'open', winnerId: null, votes: [], createdAt: expect.any(Number),
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(getIdToken).not.toHaveBeenCalled();
+    });
+
+    test('Run it back works for everyone through the client write, link and all', async () => {
+      const code = await saveRematch(saveBet, settled, auth.currentUser, 'old123');
+      expect(tx.set.mock.calls[0][1]).toMatchObject({ code, rematchOf: { code: 'old123' }, status: 'open' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('rules without rematchOf: the client retry still drops the link', async () => {
+      runTransaction.mockRejectedValueOnce(denied());
+      await saveRematch(saveBet, settled, auth.currentUser, 'old123');
+      expect(runTransaction).toHaveBeenCalledTimes(2);
+      expect(tx.set.mock.calls[0][1]).not.toHaveProperty('rematchOf');
+    });
+  });
+
+  describe('paywall on', () => {
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+    });
+
+    test('Create posts the fields to /api/bets with the ID token and never writes the bet itself', async () => {
+      respond(200, { code: 'srv123' });
+      await expect(saveBet(null, fields)).resolves.toBe('srv123');
+      expect(global.fetch).toHaveBeenCalledWith('https://www.friendly-bets.com/api/bets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
+        body: JSON.stringify({ fields }),
+      });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('Run it back goes through the route with its rematch link', async () => {
+      respond(200, { code: 'srv456' });
+      await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123')).resolves.toBe('srv456');
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body).fields.rematchOf).toEqual({ code: 'old123' });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      [403, 'pro-required'],
+      [403, 'forbidden'],
+      [400, 'invalid-bet'],
+      [401, 'unauthorized'],
+      [500, 'server'],
+    ])('a %i %s is an error with that code and the generic save message', async (status, error) => {
+      respond(status, { error });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: error, message: 'Couldn’t save this bet. Try again.' });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('a rematch refused for Pro is not retried without its link', async () => {
+      respond(403, { error: 'pro-required' });
+      await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123')).rejects.toMatchObject({ code: 'pro-required' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('fails closed without server credentials: a 503 never falls back to the client write', async () => {
+      respond(503, { error: 'not-configured' });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'not-configured' });
+      expect(runTransaction).not.toHaveBeenCalled();
+      expect(tx.set).not.toHaveBeenCalled();
+    });
+
+    test('an ok answer without a code is an error, not a bet', async () => {
+      respond(200, undefined);
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'create-failed' });
+    });
+
+    test('a request that never reaches the server is tagged offline', async () => {
+      global.fetch = jest.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline' });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('a token that can\'t refresh offline is tagged offline; nothing is sent', async () => {
+      getIdToken.mockRejectedValueOnce(Object.assign(new Error('net'), { code: 'auth/network-request-failed' }));
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('nobody signed in: nothing is sent', async () => {
+      auth.currentUser = null;
+      await expect(saveBet(null, fields)).rejects.toThrow();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('editing an existing bet is unchanged: a client update, no route', async () => {
+      stored = { ...fields, status: 'open' };
+      await expect(saveBet('abc123', { stake: 'Tacos' })).resolves.toBe('abc123');
+      expect(stored.stake).toBe('Tacos');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 });

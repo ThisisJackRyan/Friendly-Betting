@@ -133,6 +133,42 @@ describe('Run it back', () => {
     expect(saveBet).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  // The lock said Pro, but the server says it ended (the lock had not caught
+  // up): the save is refused with pro-required.
+  test('the server refuses a lapsed Pro: the line, then Go Pro opens the sheet on row 3', async () => {
+    setup({ pro: true });
+    // A fresh read finds the plan ended, as the server did.
+    fetchEntitlement.mockResolvedValue({ plan: 'pro', source: 'mock', expiresAt: Date.now() - 1000 });
+    saveBet.mockRejectedValueOnce(Object.assign(new Error('Couldn’t save this bet. Try again.'), { code: 'pro-required' }));
+    await show(<RunItBack bet={SETTLED} code="old123" user={MAYA} />);
+    await userEvent.click(button());
+    expect(fetchEntitlement).toHaveBeenCalledWith('creator-1');
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Your Pro ended, so Run it back is locked\.$/);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go Pro' }));
+    expect(screen.getByRole('dialog', { name: SHEET })).toBeInTheDocument();
+    expect(highlighted()).toEqual([ROW_3]);
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('the server can\'t check Pro: the line, then Try again saves again', async () => {
+    setup({ pro: true });
+    saveBet.mockRejectedValueOnce(Object.assign(new Error('Couldn’t save this bet. Try again.'), { code: 'not-configured' }));
+    await show(<RunItBack bet={SETTLED} code="old123" user={MAYA} />);
+    await userEvent.click(button());
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t check Pro right now\. Try again in a bit\.$/);
+    expect(screen.queryByRole('button', { name: 'Go Pro' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(saveBet).toHaveBeenCalledTimes(2);
+    expect(navigation.push).toHaveBeenCalledWith('/t/new123');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });
 
 describe('head-to-head stats (Friends on My bets)', () => {

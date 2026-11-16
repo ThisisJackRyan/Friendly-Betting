@@ -1,7 +1,5 @@
 // Pro pricing, flags and copy (docs/PRO.md). Nothing here loads Firebase.
 
-// Creators make this many bets free, then Pro. Bettors (voters) never pay.
-export const FREE_BETS = 3;
 export const PRO_MONTHLY_USD = 3;
 
 // Early-access bet types for Pro members. Empty: no real new types yet. Each

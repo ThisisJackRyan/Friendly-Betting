@@ -3797,3 +3797,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .undo-settle-count { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .text-link.tally-call-off { color: var(--muted); }
 .text-link.tally-call-off:disabled { opacity: 0.5; }
+
+/* The button under a failed create's error (CreateSaveError): Go Pro or Try again. */
+.create-error-action { margin-top: 8px; }
