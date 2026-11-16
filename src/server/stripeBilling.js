@@ -1,4 +1,4 @@
-import { isProEntitlement, toMillis } from '../phone/entitlement';
+import { STRIPE_GRACE_MS, isProEntitlement, toMillis } from '../phone/entitlement';
 import { stripeUidAllowed } from './stripeConfig';
 
 // Web Pro billing with Stripe (docs/STRIPE-WEB-PRO.md): Checkout, the
@@ -47,9 +47,10 @@ export function bearerToken(request) {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
-// Subscription statuses that grant Pro. Anything else (past_due, unpaid,
-// incomplete, paused, canceled, ...) ends it. Trials are not offered, but a
-// trial would be Pro.
+// Subscription statuses that grant Pro. past_due keeps it only for the
+// grace period (STRIPE_GRACE_DAYS, see nextEntitlement). Anything else
+// (unpaid, incomplete, paused, canceled, ...) ends it. Trials are not
+// offered, but a trial would be Pro.
 export const LIVE_STATUSES = new Set(['active', 'trialing']);
 // A subscription in one of these never comes back, so no later event about
 // it may grant Pro again.
@@ -168,6 +169,9 @@ export function subscriptionState(subscription, now) {
     // Live: the end of the paid period, so Pro lapses on its own if webhooks
     // stop. Otherwise: now, or when it ended if that was earlier.
     expiresAt: live ? periodEnd : Math.min(now, endedAt),
+    // When a past_due grace would start (server time); handleStripeEvent
+    // moves it back to the event's time when the event itself says past_due.
+    pastDueAt: now,
   };
 }
 
@@ -194,7 +198,16 @@ const stripeFields = (state, eventCreated) => ({
 // - Otherwise the plan is the Stripe one: { plan: 'pro', source: 'stripe',
 //   since, expiresAt }. A subscription that is not live sets expiresAt to
 //   now (or when it ended), so the doc stays and reads as not Pro.
-export function nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp = (ms) => ms }) {
+// - past_due grace (with `grace`, i.e. not a uid off the test-mode
+//   allowlist): a Stripe plan whose subscription goes from live to past_due
+//   keeps Pro until stripePastDueAt + STRIPE_GRACE_DAYS. stripePastDueAt is
+//   stored once, at the first failure, and kept by every later past_due
+//   event (retries), so the grace never moves. Recovery (live again) clears
+//   it. Any other ending status (unpaid, canceled, ...) ends Pro now and
+//   drops a running grace, so it can never bring Pro back; a grace that
+//   already ran out is kept only so My bets can say Pro ended
+//   (stripeGraceNotice).
+export function nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp = (ms) => ms, grace = true }) {
   if (existing?.plan === 'founder') return null;
   const sameSubscription = existing?.stripeSubscriptionId && existing.stripeSubscriptionId === state.subscriptionId;
   if (sameSubscription) {
@@ -204,7 +217,8 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
     return null;
   }
 
-  const base = { ...(existing || {}), ...stripeFields(state, eventCreated) };
+  const { stripePastDueAt: priorPastDueAt, ...rest } = existing || {};
+  const base = { ...rest, ...stripeFields(state, eventCreated) };
   const fromStripe = existing?.source === 'stripe';
   const otherLivePlan = existing && !fromStripe && isProEntitlement(existing, now);
 
@@ -226,9 +240,19 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
 
   // Not live: end a Stripe plan; leave any other plan (or no plan) alone.
   if (!fromStripe) return base;
+  const priorSince = sameSubscription ? toMillis(priorPastDueAt) : null;
+  const hadGrace = Number.isFinite(priorSince);
+  if (state.status === 'past_due' && grace) {
+    // The first failure starts the grace; a retry keeps the stored time.
+    if (hadGrace) return { ...base, stripePastDueAt: priorPastDueAt, expiresAt: toTimestamp(priorSince + STRIPE_GRACE_MS) };
+    if (LIVE_STATUSES.has(existing.stripeStatus)) {
+      return { ...base, stripePastDueAt: toTimestamp(state.pastDueAt), expiresAt: toTimestamp(state.pastDueAt + STRIPE_GRACE_MS) };
+    }
+  }
   const current = toMillis(existing.expiresAt);
   const expiresAt = Number.isFinite(current) && current < state.expiresAt ? current : state.expiresAt;
-  return { ...base, expiresAt: toTimestamp(expiresAt) };
+  const graceRanOut = hadGrace && priorSince + STRIPE_GRACE_MS <= now;
+  return { ...base, ...(graceRanOut ? { stripePastDueAt: priorPastDueAt } : {}), expiresAt: toTimestamp(expiresAt) };
 }
 
 // Applies one subscription state for `uid` in one transaction, with the
@@ -237,7 +261,8 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
 // its uid for events without one.
 //
 // With `allowed` false (a test key and a uid not on STRIPE_TEST_UIDS) a live
-// state never grants: nothing is written. A state that is not live still
+// state never grants: nothing is written, and past_due gets no grace (it
+// only ends Pro, as before the grace existed). A state that is not live still
 // applies to the subscription already on the doc, so a member taken off the
 // list can still cancel and lose Pro; about any other subscription nothing
 // is written. "Nothing" includes stripeEvents: every preview's endpoint gets
@@ -253,7 +278,7 @@ export async function applySubscriptionEvent({ db, event, uid, state, eventCreat
     const snap = await tx.get(entitlementRef);
     const existing = snap.exists ? snap.data() : null;
     if (!allowed && existing?.stripeSubscriptionId !== state.subscriptionId) return { applied: false, reason: 'not-allowlisted' };
-    const next = nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp });
+    const next = nextEntitlement({ existing, state, eventCreated, now, since, toTimestamp, grace: allowed });
     tx.set(eventRef, { type: event.type, created: event.created, processedAt: since, expireAt: toTimestamp(now + EVENT_RECORD_DAYS * DAY) });
     if (validCustomer(state.customerId)) tx.set(db.doc(`stripeCustomers/${state.customerId}`), { uid });
     if (next) tx.set(entitlementRef, next);
@@ -323,6 +348,9 @@ export async function handleStripeEvent({ db, stripe, config, event, now = Date.
   const eventCreated = fresh ? Math.max(event.created, Math.floor(now / SECOND)) : event.created;
   const state = subscriptionState(subscription, now);
   if (!state.customerId) state.customerId = idOf(object?.customer);
+  // The event's own copy already past_due: the failure was no later than
+  // the event, so a late delivery doesn't push the grace back.
+  if (object?.status === 'past_due') state.pastDueAt = Math.min(now, event.created * SECOND);
   const metadataUid = [subscription?.metadata?.uid, object?.metadata?.uid].find(validUid);
   const uid = metadataUid || (await uidForCustomer(db, state.customerId));
   if (!uid) return { handled: false, reason: 'no-uid' };

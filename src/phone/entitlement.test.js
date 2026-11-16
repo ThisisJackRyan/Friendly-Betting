@@ -1,4 +1,4 @@
-import { badgeFor, isProEntitlement, toMillis } from './entitlement';
+import { STRIPE_GRACE_DAYS, STRIPE_GRACE_ENDED_NOTICE_DAYS, badgeFor, isProEntitlement, stripeGraceEndsAt, stripeGraceNotice, toMillis } from './entitlement';
 
 const NOW = 1_000_000;
 
@@ -63,4 +63,45 @@ test('Stripe ids alone, with no plan, are not Pro', () => {
 test('a doc with only a Stripe customer (made before the first Checkout) is not Pro and has no badge', () => {
   expect(isProEntitlement({ stripeCustomerId: 'cus_1' }, NOW)).toBe(false);
   expect(badgeFor({ stripeCustomerId: 'cus_1' }, NOW)).toBeNull();
+});
+
+describe('Stripe past_due grace (read time)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const GRACE = STRIPE_GRACE_DAYS * DAY;
+  const START = 10 * DAY;
+  // What the webhook writes for a first failed payment at START.
+  const inGrace = { plan: 'pro', source: 'stripe', since: 1, stripeStatus: 'past_due', stripePastDueAt: { seconds: START / 1000, nanoseconds: 0 }, expiresAt: START + GRACE };
+
+  test('3 days from the stored first failure', () => {
+    expect(STRIPE_GRACE_DAYS).toBe(3);
+    expect(stripeGraceEndsAt(inGrace)).toBe(START + GRACE);
+    expect(stripeGraceEndsAt({ plan: 'pro' })).toBeNull();
+  });
+
+  test('Pro and the grace notice during the grace, not Pro and the ended notice after it', () => {
+    expect(isProEntitlement(inGrace, START + GRACE - 1)).toBe(true);
+    expect(stripeGraceNotice(inGrace, START + 1)).toBe('grace');
+    expect(isProEntitlement(inGrace, START + GRACE)).toBe(false);
+    expect(stripeGraceNotice(inGrace, START + GRACE)).toBe('ended');
+    expect(stripeGraceNotice(inGrace, START + GRACE + STRIPE_GRACE_ENDED_NOTICE_DAYS * DAY - 1)).toBe('ended');
+    expect(stripeGraceNotice(inGrace, START + GRACE + STRIPE_GRACE_ENDED_NOTICE_DAYS * DAY)).toBeNull();
+  });
+
+  test('an unpaid or canceled subscription after the grace ran out still reads as ended', () => {
+    expect(stripeGraceNotice({ ...inGrace, stripeStatus: 'unpaid' }, START + GRACE + DAY)).toBe('ended');
+    expect(stripeGraceNotice({ ...inGrace, stripeStatus: 'canceled' }, START + GRACE + DAY)).toBe('ended');
+  });
+
+  test('no notice for free members, founders, other plans, or a Stripe plan without a grace', () => {
+    expect(stripeGraceNotice(null, START)).toBeNull();
+    expect(stripeGraceNotice({ stripeCustomerId: 'cus_1' }, START)).toBeNull();
+    expect(stripeGraceNotice({ plan: 'founder', expiresAt: null, stripePastDueAt: START }, START + GRACE + 1)).toBeNull();
+    expect(stripeGraceNotice({ ...inGrace, source: 'mock', expiresAt: START + GRACE + DAY }, START + GRACE + 1)).toBeNull();
+    expect(stripeGraceNotice({ plan: 'pro', source: 'stripe', stripeStatus: 'canceled', expiresAt: START }, START + 1)).toBeNull();
+    expect(stripeGraceNotice({ plan: 'pro', source: 'stripe', stripeStatus: 'active', expiresAt: START + 30 * DAY }, START)).toBeNull();
+  });
+
+  test('Pro again (a later period with the field left over) shows nothing', () => {
+    expect(stripeGraceNotice({ ...inGrace, stripeStatus: 'active', expiresAt: START + 30 * DAY }, START + GRACE + 1)).toBeNull();
+  });
 });
