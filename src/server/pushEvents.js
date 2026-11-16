@@ -4,6 +4,7 @@ import { PUSH_NOTIFICATION_COPY } from '../phone/pushCopy';
 import { PUSH_CHANNEL_ID, pushEnabled } from '../phone/pushConfig';
 import { settlementOf } from '../phone/settlement';
 import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
+import { cleanName, voteAtMs } from '../phone/votes';
 import { readBetWithVotes } from './betVotes';
 import { sendToUser } from './pushSend';
 
@@ -171,6 +172,100 @@ async function deliver({ db, code, now, wait, send, bet: firstRead }) {
       await claimRef.delete();
     } catch (err) {
       console.warn(`push claim not released for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
+    }
+  }
+  return { sent, failed };
+}
+
+// First-pick push (docs/PUSH.md). After a friend's first pick commits, their
+// client fire-and-forgets POST /api/bets/{code}/push/pick; the route checks
+// the ID token and calls deliverPickPush with the verified uid. The server
+// reads the vote itself: the side and the name come from the live votes,
+// never from the request. Only the bet's creator is sent to.
+
+// pick:{code}:{voterUid}. One per voter per bet, ever, so only the first pick
+// sends; a side change or a re-pick finds the claim and sends nothing.
+export function pickEventId(code, voterUid) {
+  return `pick:${code}:${voterUid}`;
+}
+
+// The actor's recorded pick (a truthy optionId) in the merged live votes, or
+// null. readBetWithVotes keeps one entry per voter; the last one wins anyway.
+export function recordedPick(bet, uid) {
+  if (!uid) return null;
+  const mine = (bet?.votes || []).filter((vote) => vote?.voterId === uid && vote.optionId);
+  return mine.length ? mine[mine.length - 1] : null;
+}
+
+function pickedSide(bet, vote) {
+  const option = (bet?.options || []).find((item) => item?.id === vote?.optionId);
+  return option ? String(optionVoteLabel(bet, option) || '') : '';
+}
+
+// Title is the bet question; data opens /b/{code}. The voter's cleaned name
+// goes in the body only (that is the copy); never a phone, token or uid, and
+// never the name in data.
+export function buildPickPush(bet, code, vote) {
+  const side = pickedSide(bet, vote);
+  const name = cleanName(vote?.name);
+  return {
+    title: String(questionOf(bet)),
+    body: name ? PUSH_NOTIFICATION_COPY.firstPickNamed(name, side) : PUSH_NOTIFICATION_COPY.firstPickUnnamed(side),
+    data: { code: String(code), route: `/b/${code}`, event: 'pick' },
+  };
+}
+
+// The one hook the pick route calls. Safe to run any number of times: the
+// claim makes each voter's first pick send at most once. The route already
+// read the bet (with its votes) to check the actor; pass it as `bet` to skip
+// a second read.
+export async function deliverPickPush({ db, code, actorUid, bet: given, now = Date.now, send = sendToUser }) {
+  if (!pushEnabled()) return { sent: 0, failed: 0, skipped: 'disabled' };
+  const bet = given || await readBetWithVotes(db, code);
+  if (!bet) return { sent: 0, failed: 0, skipped: 'not-found' };
+  const creator = bet.createdByID;
+  if (typeof creator !== 'string' || !creator) return { sent: 0, failed: 0, skipped: 'no-recipients' };
+  // Never about the creator's own pick.
+  if (actorUid === creator) return { sent: 0, failed: 0, skipped: 'self' };
+  const vote = recordedPick(bet, actorUid);
+  if (!vote) return { sent: 0, failed: 0, skipped: 'no-pick' };
+  // A pick with no side label would read "A friend picked ."
+  if (!pickedSide(bet, vote)) return { sent: 0, failed: 0, skipped: 'no-side' };
+  // A pick recorded long ago is not news. A vote with no time yet (just
+  // written) still sends; the claim is the main guard.
+  const at = voteAtMs(vote.at);
+  if (at != null && now() - at > MAX_EVENT_AGE_MS) return { sent: 0, failed: 0, skipped: 'stale' };
+
+  // Claim before the send; another run that already claimed it wins.
+  const claimRef = db.doc(sendsPath(pickEventId(code, actorUid)));
+  const claimed = await db.runTransaction(async (tx) => {
+    const current = await tx.get(claimRef);
+    if (current.exists) return false;
+    tx.set(claimRef, { code, at: now() });
+    return true;
+  });
+  if (!claimed) return { sent: 0, failed: 0, skipped: 'already-sent' };
+
+  let sent = 0;
+  let failed = 0;
+  let retryable = false;
+  try {
+    const result = await send(creator, buildPickPush(bet, code, vote), betPushOptions(code));
+    sent = result?.sent || 0;
+    failed = result?.failed || 0;
+    retryable = RETRYABLE_SKIPS.has(result?.skipped);
+  } catch (err) {
+    failed = 1;
+    console.warn(`pick push failed for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
+  }
+  // Nothing reached a device and something failed: drop the claim so a retry
+  // can send. A creator with no registered device (push off in the app) is
+  // not a failure, so the claim stays.
+  if (!sent && (failed || retryable)) {
+    try {
+      await claimRef.delete();
+    } catch (err) {
+      console.warn(`pick push claim not released for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
     }
   }
   return { sent, failed };

@@ -4,7 +4,8 @@ import { buildSettlement } from '../phone/settlement';
 import { PUSH_CHANNEL_COPY, PUSH_NOTIFICATION_COPY } from '../phone/pushCopy';
 import { PUSH_CHANNEL_ID } from '../phone/pushConfig';
 import {
-  betPushOptions, buildBetPush, deliverBetPush, MAX_EVENT_AGE_MS, pushEventId, pushRecipients,
+  betPushOptions, buildBetPush, buildPickPush, deliverBetPush, deliverPickPush, MAX_EVENT_AGE_MS, pickEventId,
+  pushEventId, pushRecipients, recordedPick,
 } from './pushEvents';
 import { sendToUser } from './pushSend';
 import { fakeDb } from './testing/fakeDb';
@@ -431,6 +432,203 @@ describe('deliverBetPush', () => {
       expect(await deliverBetPush({ db, code: CODE, send: sendToUser, now: () => NOW })).toEqual({ sent: 0, failed: 0 });
       expect(messaging.sendEach).not.toHaveBeenCalled();
       expect(claims(db)).toEqual([]);
+    });
+  });
+});
+
+describe('first-pick push', () => {
+  const VOTES = (uid) => `bets/${CODE}/votes/${uid}`;
+  const pickBet = (overrides = {}) => openBet({ votes: [{ voterId: 'creator', name: 'Casey', optionId: 'a' }], ...overrides });
+  const voteDoc = (uid, name, optionId, ms = NOW - 1000) => ({ voterId: uid, name, optionId, at: at(ms) });
+  const pickClaim = (uid = 'maya') => `privatePushSends/pick:${CODE}:${uid}`;
+  const deliver = (db, actorUid = 'maya', extra = {}) => deliverPickPush({ db, code: CODE, actorUid, now: () => NOW, ...extra });
+
+  describe('copy and payload', () => {
+    test('first-pick bodies are the UX-final strings, verbatim', () => {
+      expect(PUSH_NOTIFICATION_COPY.firstPickNamed('Maya', 'Over')).toBe('Maya picked Over.');
+      expect(PUSH_NOTIFICATION_COPY.firstPickNamed('D’Andre', 'Under')).toBe('D’Andre picked Under.');
+      expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Over')).toBe('A friend picked Over.');
+    });
+
+    test('named: question title, "{name} picked {side}.", /b/{code}, event pick, strings only', () => {
+      const push = buildPickPush(pickBet(), CODE, { voterId: 'maya', name: '  Maya  ', optionId: 'b' });
+      expect(push).toEqual({
+        title: 'Who is late',
+        body: 'Maya picked Under.',
+        data: { code: CODE, route: `/b/${CODE}`, event: 'pick' },
+      });
+      Object.values(push.data).forEach((value) => expect(typeof value).toBe('string'));
+    });
+
+    test('unnamed when the cleaned name is empty', () => {
+      for (const name of ['', '   ', undefined, null]) {
+        expect(buildPickPush(pickBet(), CODE, { voterId: 'maya', name, optionId: 'a' }).body).toBe('A friend picked Over.');
+      }
+    });
+
+    test('the side is the vote label (an over-under line), and the name is capped like cleanName', () => {
+      const bet = pickBet({ type: 'over-under', line: 7.5 });
+      expect(buildPickPush(bet, CODE, { voterId: 'maya', name: 'M'.repeat(40), optionId: 'a' }).body)
+        .toBe(`${'M'.repeat(30)} picked Over 7.5.`);
+    });
+
+    test('data has no phone, name, token or uid', () => {
+      const push = buildPickPush(pickBet(), CODE, { voterId: 'maya', name: 'Maya', optionId: 'a', phone: PHONE });
+      const data = JSON.stringify(push.data);
+      ['Maya', 'maya', 'creator', '555', 'tok-'].forEach((secret) => expect(data).not.toContain(secret));
+      expect(JSON.stringify(push)).not.toContain('555');
+    });
+
+    test('claim id and recorded pick', () => {
+      expect(pickEventId(CODE, 'maya')).toBe(`pick:${CODE}:maya`);
+      const bet = pickBet({ votes: [{ voterId: 'maya', optionId: 'a' }, { voterId: 'lurker', name: 'L' }] });
+      expect(recordedPick(bet, 'maya')).toMatchObject({ optionId: 'a' });
+      expect(recordedPick(bet, 'lurker')).toBeNull();
+      expect(recordedPick(bet, '')).toBeNull();
+      expect(recordedPick(bet, 'stranger')).toBeNull();
+    });
+  });
+
+  test('flag off: no read, no send', async () => {
+    for (const value of [undefined, '', '0', 'true']) {
+      if (value === undefined) delete process.env.NEXT_PUBLIC_PUSH_ENABLED;
+      else process.env.NEXT_PUBLIC_PUSH_ENABLED = value;
+      const db = { doc: jest.fn(), collection: jest.fn(), runTransaction: jest.fn() };
+      const send = jest.fn();
+      expect(await deliver(db, 'maya', { send })).toEqual({ sent: 0, failed: 0, skipped: 'disabled' });
+      expect(db.doc).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    }
+    expect(adminMessaging).not.toHaveBeenCalled();
+  });
+
+  test('a first pick (vote doc) sends once, to the creator only, with the named body and bet options', async () => {
+    const db = seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'b') });
+    const send = ok();
+    expect(await deliver(db, 'maya', { send })).toEqual({ sent: 1, failed: 0 });
+    expect(send).toHaveBeenCalledTimes(1);
+    const [uid, payload, options] = send.mock.calls[0];
+    expect(uid).toBe('creator');
+    expect(payload).toEqual({ title: 'Who is late', body: 'Maya picked Under.', data: { code: CODE, route: `/b/${CODE}`, event: 'pick' } });
+    expect(options).toEqual(betPushOptions(CODE));
+    expect(claims(db)).toEqual([pickClaim()]);
+    expect(db.data(pickClaim())).toEqual({ code: CODE, at: NOW });
+  });
+
+  test('a first pick from the legacy array with no name sends the unnamed body', async () => {
+    const db = seeded(pickBet({ votes: [...pickBet().votes, { voterId: 'maya', name: '', optionId: 'a', at: NOW - 500 }] }));
+    const send = ok();
+    expect(await deliver(db, 'maya', { send })).toEqual({ sent: 1, failed: 0 });
+    expect(send.mock.calls[0][1].body).toBe('A friend picked Over.');
+  });
+
+  test('a second call for the same voter sends nothing, even after a side or name change', async () => {
+    const db = seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a') });
+    const send = ok();
+    await deliver(db, 'maya', { send });
+    await db.doc(VOTES('maya')).set(voteDoc('maya', 'May', 'b', NOW - 10));
+    expect(await deliver(db, 'maya', { send })).toEqual({ sent: 0, failed: 0, skipped: 'already-sent' });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(claims(db)).toEqual([pickClaim()]);
+  });
+
+  test('concurrent calls for one voter send once; another voter has their own claim', async () => {
+    const db = seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a'), [VOTES('lee')]: voteDoc('lee', 'Lee', 'b') });
+    const send = ok();
+    const runs = await Promise.all([1, 2, 3].map(() => deliver(db, 'maya', { send })));
+    expect(runs.reduce((sum, run) => sum + run.sent, 0)).toBe(1);
+    expect(await deliver(db, 'lee', { send })).toEqual({ sent: 1, failed: 0 });
+    expect(send.mock.calls.map(([, payload]) => payload.body)).toEqual(['Maya picked Over.', 'Lee picked Under.']);
+    expect(claims(db).sort()).toEqual([pickClaim('lee'), pickClaim('maya')]);
+  });
+
+  test('the creator’s own pick sends nothing and claims nothing', async () => {
+    const db = seeded(pickBet());
+    const send = ok();
+    expect(await deliver(db, 'creator', { send })).toEqual({ sent: 0, failed: 0, skipped: 'self' });
+    expect(send).not.toHaveBeenCalled();
+    expect(claims(db)).toEqual([]);
+  });
+
+  test('no recorded pick, a stale pick, or no side label: nothing sent, nothing claimed', async () => {
+    const send = ok();
+    const cases = [
+      [seeded(pickBet()), 'no-pick'],
+      [seeded(pickBet({ votes: [{ voterId: 'maya', name: 'Maya' }] })), 'no-pick'],
+      [seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a', NOW - MAX_EVENT_AGE_MS - 1) }), 'stale'],
+      [seeded(pickBet({ votes: [{ voterId: 'maya', optionId: 'a', at: NOW - MAX_EVENT_AGE_MS - 1 }] })), 'stale'],
+      [seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'gone') }), 'no-side'],
+      [seeded(pickBet({ createdByID: undefined }), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a') }), 'no-recipients'],
+    ];
+    for (const [db, skipped] of cases) {
+      expect(await deliver(db, 'maya', { send })).toEqual({ sent: 0, failed: 0, skipped });
+      expect(claims(db)).toEqual([]);
+    }
+    expect(await deliver(fakeDb(), 'maya', { send })).toEqual({ sent: 0, failed: 0, skipped: 'not-found' });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('a pick with no time yet still sends', async () => {
+    const db = seeded(pickBet({ votes: [{ voterId: 'maya', name: 'Maya', optionId: 'a' }] }));
+    const send = ok();
+    expect(await deliver(db, 'maya', { send })).toEqual({ sent: 1, failed: 0 });
+  });
+
+  test('a failed or unconfigured send drops the claim so a retry can send', async () => {
+    const db = seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a') });
+    const failing = jest.fn(async () => ({ sent: 0, failed: 1, removed: 0 }));
+    expect(await deliver(db, 'maya', { send: failing })).toEqual({ sent: 0, failed: 1 });
+    expect(claims(db)).toEqual([]);
+    for (const skipped of ['admin-not-configured', 'read-failed']) {
+      const skip = jest.fn(async () => ({ sent: 0, failed: 0, removed: 0, skipped }));
+      expect(await deliver(db, 'maya', { send: skip })).toEqual({ sent: 0, failed: 0 });
+      expect(claims(db)).toEqual([]);
+    }
+    const thrower = jest.fn(async () => { throw Object.assign(new Error(`maya ${PHONE} tok-x`), { code: 'messaging/internal-error' }); });
+    expect(await deliver(db, 'maya', { send: thrower })).toEqual({ sent: 0, failed: 1 });
+    expect(claims(db)).toEqual([]);
+    expect(logged()).toContain(CODE);
+    expect(logged()).toContain('messaging/internal-error');
+    ['maya', 'Maya', 'creator', PHONE, 'tok-'].forEach((secret) => expect(logged()).not.toContain(secret));
+    const send = ok();
+    expect(await deliver(db, 'maya', { send })).toEqual({ sent: 1, failed: 0 });
+    expect(claims(db)).toEqual([pickClaim()]);
+  });
+
+  describe('with the real sendToUser and a mocked Messaging', () => {
+    const DEVICES = (uid) => `privatePushTokens/${uid}/devices`;
+    let messaging;
+    beforeEach(() => {
+      messaging = { sendEach: jest.fn(async (messages) => ({ responses: messages.map(() => ({ success: true })) })) };
+      adminMessaging.mockReturnValue(messaging);
+    });
+
+    test('Android and iOS messages to the creator’s devices carry the copy, route, collapse, thread and channel', async () => {
+      const db = seeded(pickBet(), {
+        [VOTES('maya')]: voteDoc('maya', 'Maya', 'a'),
+        [`${DEVICES('creator')}/d0`]: { token: 'tok-creator-ios', platform: 'ios' },
+        [`${DEVICES('creator')}/d1`]: { token: 'tok-creator-android', platform: 'android' },
+        [`${DEVICES('maya')}/d2`]: { token: 'tok-maya', platform: 'android' },
+      });
+      adminDb.mockReturnValue(db);
+      expect(await deliver(db, 'maya', { send: sendToUser })).toEqual({ sent: 2, failed: 0 });
+      const messages = messaging.sendEach.mock.calls.flatMap(([batch]) => batch);
+      expect(messages.map((m) => m.token).sort()).toEqual(['tok-creator-android', 'tok-creator-ios']);
+      messages.forEach((m) => {
+        expect(m.notification).toEqual({ title: 'Who is late', body: 'Maya picked Over.' });
+        expect(m.data).toEqual({ code: CODE, route: `/b/${CODE}`, event: 'pick' });
+        expect(m.android).toEqual({ collapseKey: CODE, notification: { tag: CODE, channelId: 'bet_updates' } });
+        expect(m.apns).toEqual({ headers: { 'apns-collapse-id': CODE }, payload: { aps: { threadId: CODE } } });
+      });
+      ['tok-', 'maya', 'Maya', 'creator', PHONE].forEach((secret) => expect(logged()).not.toContain(secret));
+    });
+
+    test('a creator with no registered device (push off in the app): no send, no throw, the claim stays', async () => {
+      const db = seeded(pickBet(), { [VOTES('maya')]: voteDoc('maya', 'Maya', 'a') });
+      adminDb.mockReturnValue(db);
+      expect(await deliver(db, 'maya', { send: sendToUser })).toEqual({ sent: 0, failed: 0 });
+      expect(messaging.sendEach).not.toHaveBeenCalled();
+      expect(claims(db)).toEqual([pickClaim()]);
     });
   });
 });
