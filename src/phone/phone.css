@@ -3354,6 +3354,25 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .dialog-keep:hover:not(:disabled) { background: var(--hover-wash); }
 .dialog-keep:disabled { opacity: 0.55; }
 .dialog-keep:focus-visible { outline: none; box-shadow: var(--focus); }
+.dialog-primary {
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.dialog-primary:disabled { opacity: 0.55; }
+.dialog-primary:focus-visible { outline: none; box-shadow: var(--focus); }
+/* Delete account: the confirm body and the quiet row above Log out. */
+.delete-account-lead { margin: 0 0 6px; color: var(--ink); font-weight: 700; }
+.delete-account-list { margin: 0; padding-left: 18px; }
+.delete-account-list li + li { margin-top: 4px; }
+.logout-link.delete-account-link { color: var(--ink); }
+.delete-account-link + .logout-link { margin-top: 0; padding-top: 4px; }
 .toast-region {
   position: fixed;
   left: 50%;

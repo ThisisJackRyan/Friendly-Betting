@@ -1,9 +1,12 @@
 // Test-only in-memory Firestore stand-in for the Admin SDK surface the server
 // modules use. Transactions are optimistic like Firestore: if a doc read in
 // the transaction (or a query's result set) changed before commit, the callback runs again.
+// Queries run on a collection or a collection group. `failCollectionGroup:
+// { votes: err }` makes every collectionGroup('votes') query reject with err
+// (a missing index).
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
-export function fakeDb(initial = {}) {
+export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
   const store = new Map();
   const writes = [];
   let clock = 0;
@@ -32,10 +35,13 @@ export function fakeDb(initial = {}) {
     return actual !== undefined && actual !== null && typeof actual === typeof value && TESTS[op](actual, value);
   };
   // collection(path).where(...).orderBy(...).limit(n): one field per orderBy.
-  // A doc without the orderBy field is left out, like Firestore.
-  function query(path, filters = [], order = null, max = null) {
+  // A doc without the orderBy field is left out, like Firestore. `scope` is a
+  // collection path or a match function over doc paths (a collection group).
+  function query(scope, filters = [], order = null, max = null, fail = null) {
     const keys = () => {
-      let found = children(path).filter((key) => filters.every((filter) => matches(store.get(key)?.data, filter)));
+      if (fail) throw fail;
+      const candidates = typeof scope === 'function' ? Array.from(store.keys()).filter(scope) : children(scope);
+      let found = candidates.filter((key) => filters.every((filter) => matches(store.get(key)?.data, filter)));
       if (order) {
         const [field, dir] = order;
         const sign = dir === 'desc' ? -1 : 1;
@@ -50,20 +56,35 @@ export function fakeDb(initial = {}) {
       return max == null ? found : found.slice(0, max);
     };
     return {
-      path,
+      path: typeof scope === 'string' ? scope : undefined,
       query: true,
       keys,
       where: (field, op, value) => {
         if (!TESTS[op]) throw new Error(`fakeDb: unsupported op ${op}`);
-        return query(path, [...filters, [field, op, value]], order, max);
+        return query(scope, [...filters, [field, op, value]], order, max, fail);
       },
-      orderBy: (field, dir = 'asc') => query(path, filters, [field, dir], max),
-      limit: (n) => query(path, filters, order, n),
+      orderBy: (field, dir = 'asc') => query(scope, filters, [field, dir], max, fail),
+      limit: (n) => query(scope, filters, order, n, fail),
       get: async () => ({ docs: keys().map(snap) }),
     };
   }
   // A query's "version" is its membership plus each member's version.
   const queryVersion = (target) => target.keys().map((key) => `${key}@${version(key)}`).join(',');
+  // A shallow update with dotted field paths ('settlement.winners'), like Firestore's update().
+  const applyUpdate = (path, fields) => {
+    if (!store.has(path)) throw Object.assign(new Error('no doc to update'), { code: 'not-found' });
+    const next = clone(store.get(path).data);
+    Object.entries(clone(fields)).forEach(([key, value]) => {
+      const parts = key.split('.');
+      let target = next;
+      parts.slice(0, -1).forEach((part) => {
+        if (!target[part] || typeof target[part] !== 'object') target[part] = {};
+        target = target[part];
+      });
+      target[parts.at(-1)] = value;
+    });
+    put(path, next);
+  };
   function ref(path) {
     return {
       path,
@@ -71,6 +92,10 @@ export function fakeDb(initial = {}) {
       set: async (data) => {
         writes.push(['set', path]);
         put(path, data);
+      },
+      update: async (fields) => {
+        writes.push(['update', path]);
+        applyUpdate(path, fields);
       },
       delete: async () => {
         writes.push(['delete', path]);
@@ -86,6 +111,11 @@ export function fakeDb(initial = {}) {
     paths: (prefix) => Array.from(store.keys()).filter((key) => key.startsWith(prefix)),
     doc: ref,
     collection: (path) => query(path),
+    // Every collection named `id`, at any depth.
+    collectionGroup: (id) => query((key) => {
+      const parts = key.split('/');
+      return parts.length % 2 === 0 && parts.at(-2) === id;
+    }, [], null, null, failCollectionGroup[id] || null),
     runTransaction: async (run) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const reads = [];
@@ -98,6 +128,7 @@ export function fakeDb(initial = {}) {
             return target.query ? { docs: target.keys().map(snap) } : snap(target.path);
           },
           set: (target, data) => ops.push(['set', target.path, clone(data)]),
+          update: (target, fields) => ops.push(['update', target.path, clone(fields)]),
           delete: (target) => ops.push(['delete', target.path]),
         };
         const result = await run(tx);
@@ -105,6 +136,7 @@ export function fakeDb(initial = {}) {
         ops.forEach(([op, path, data]) => {
           writes.push([op, path]);
           if (op === 'set') put(path, data);
+          else if (op === 'update') applyUpdate(path, data);
           else store.delete(path);
         });
         return result;
