@@ -90,7 +90,7 @@ async function goToStake(question = 'Who is late') {
 
 test('step 1 is the type picker and back returns home', async () => {
   renderForm();
-  const home = screen.getByRole('link', { name: 'Friendly home' });
+  const home = screen.getByRole('link', { name: 'Home', exact: true });
   const row = home.closest('.nav-row');
   expect(home).toHaveClass('nav-home');
   expect(home).not.toHaveClass('wordmark');
@@ -414,11 +414,11 @@ test('phone tabs hide after step 1 and return when the walkthrough is back on pi
   });
 });
 
-test('the Friendly home link in the create nav returns home from every later step', async () => {
+test('the Home link in the create nav returns home from every later step', async () => {
   renderForm('/new/prop');
 
   const homeInNav = () => {
-    const link = screen.getByRole('link', { name: 'Friendly home' });
+    const link = screen.getByRole('link', { name: 'Home', exact: true });
     expect(link).toHaveClass('nav-home');
     expect(link).not.toHaveClass('wordmark');
     expect(link).toHaveAttribute('href', '/');
@@ -461,7 +461,7 @@ test('reduced motion skips the home slide', async () => {
   }));
   try {
     renderForm('/new/money-line');
-    await userEvent.click(screen.getByRole('link', { name: 'Friendly home' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Home', exact: true }));
     expect(navigation.push).toHaveBeenCalledWith('/');
     expect(document.querySelector('.create-pane.is-leaving')).not.toBeInTheDocument();
     expect(saveBet).not.toHaveBeenCalled();
@@ -1270,6 +1270,18 @@ test('the person check slot is in the phone step and is not clipped shut', () =>
   const enteringEnd = entering.indexOf('@keyframes create-out-forward');
   expect(entering.slice(0, enteringEnd)).toContain('transform: none');
   expect(entering.slice(0, enteringEnd)).not.toContain('translateX(0)');
+});
+
+test('the create header Home icon is dark ink, not the green CTA accent', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const blocks = [...css.matchAll(/(^|\n)\.nav-home \{([^}]*)\}/g)].map((m) => m[2]);
+  expect(blocks.length).toBeGreaterThan(0);
+  const colors = blocks.flatMap((block) =>
+    [...block.matchAll(/(?:^|[;\s])color:\s*([^;]+);/g)].map((m) => m[1].trim()),
+  );
+  expect(colors).toEqual(['var(--ink)']);
+  expect(blocks.join('\n')).not.toContain('--accent');
+  expect(css).toMatch(/\n\s*--ink: #203b2e;/);
 });
 
 test('an unknown create route leaves the walkthrough', () => {

@@ -239,7 +239,7 @@ body {
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: none;
   cursor: pointer;
 }

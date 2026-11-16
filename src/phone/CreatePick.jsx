@@ -12,7 +12,7 @@ const CreatePick = ({ onBack, onHomeClick, onPick, error = '', user }) => (
         <FiChevronLeft size={28} />
       </button>
       <h1 className="nav-title">New bet</h1>
-      <Link href="/" className="nav-home" aria-label="Friendly home" onClick={onHomeClick}>
+      <Link href="/" className="nav-home" aria-label="Home" onClick={onHomeClick}>
         <FiHome size={20} aria-hidden="true" />
       </Link>
     </div>
