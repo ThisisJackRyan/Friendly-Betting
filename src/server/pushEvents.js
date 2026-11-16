@@ -190,6 +190,33 @@ export function pickEventId(code, voterUid) {
   return `pick:${code}:${voterUid}`;
 }
 
+// Per-bet cap on pick pushes. Anyone with a bet link can sign in as many
+// fresh anonymous uids as Firebase allows and pick once with each, and every
+// one of those first picks would buzz the creator. At most
+// PICK_PUSH_BET_LIMIT pick pushes per bet in any rolling
+// PICK_PUSH_BET_WINDOW_MS. The send times live in
+// privatePushSends/pickcount:{code} as { code, sends: [ms, ...] }, counted in
+// the same transaction as the voter's claim.
+export const PICK_PUSH_BET_LIMIT = 10;
+export const PICK_PUSH_BET_WINDOW_MS = 10 * 60 * 1000;
+
+export function pickCountId(code) {
+  return `pickcount:${code}`;
+}
+
+// The send times still inside the window, oldest first.
+function recentSends(data, nowMs) {
+  const sends = Array.isArray(data?.sends) ? data.sends : [];
+  return sends.filter((ms) => typeof ms === 'number' && nowMs - ms < PICK_PUSH_BET_WINDOW_MS);
+}
+
+// Notification bodies are one line: no control characters (newlines, tabs,
+// C1 controls), runs of whitespace collapsed. Only for the push body; the
+// stored vote name is untouched.
+function singleLineName(name) {
+  return cleanName(name).replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // The actor's recorded pick (a truthy optionId) in the merged live votes, or
 // null. readBetWithVotes keeps one entry per voter; the last one wins anyway.
 export function recordedPick(bet, uid) {
@@ -203,12 +230,12 @@ function pickedSide(bet, vote) {
   return option ? String(optionVoteLabel(bet, option) || '') : '';
 }
 
-// Title is the bet question; data opens /b/{code}. The voter's cleaned name
-// goes in the body only (that is the copy); never a phone, token or uid, and
-// never the name in data.
+// Title is the bet question; data opens /b/{code}. The voter's cleaned name,
+// on one line, goes in the body only (that is the copy); never a phone, token
+// or uid, and never the name in data.
 export function buildPickPush(bet, code, vote) {
   const side = pickedSide(bet, vote);
-  const name = cleanName(vote?.name);
+  const name = singleLineName(vote?.name);
   return {
     title: String(questionOf(bet)),
     body: name ? PUSH_NOTIFICATION_COPY.firstPickNamed(name, side) : PUSH_NOTIFICATION_COPY.firstPickUnnamed(side),
@@ -237,15 +264,29 @@ export async function deliverPickPush({ db, code, actorUid, bet: given, now = Da
   const at = voteAtMs(vote.at);
   if (at != null && now() - at > MAX_EVENT_AGE_MS) return { sent: 0, failed: 0, skipped: 'stale' };
 
-  // Claim before the send; another run that already claimed it wins.
+  // Votes are only written while the bet is open, so this is a POST that
+  // landed after a settle or call-off. No claim: a settle can be undone, and a
+  // later POST on the reopened bet may still send.
+  if (isFinished(bet)) return { sent: 0, failed: 0, skipped: 'not-open' };
+
+  // Claim before the send; another run that already claimed it wins. The
+  // per-bet count is checked and bumped in the same transaction. Past the cap
+  // the claim is still written (that voter never sends, even after the window
+  // resets) but the count is not.
   const claimRef = db.doc(sendsPath(pickEventId(code, actorUid)));
-  const claimed = await db.runTransaction(async (tx) => {
+  const countRef = db.doc(sendsPath(pickCountId(code)));
+  const stamp = now();
+  const outcome = await db.runTransaction(async (tx) => {
     const current = await tx.get(claimRef);
-    if (current.exists) return false;
-    tx.set(claimRef, { code, at: now() });
-    return true;
+    const count = await tx.get(countRef);
+    if (current.exists) return 'already-sent';
+    const recent = recentSends(count.exists ? count.data() : null, stamp);
+    tx.set(claimRef, { code, at: stamp });
+    if (recent.length >= PICK_PUSH_BET_LIMIT) return 'bet-capped';
+    tx.set(countRef, { code, sends: [...recent, stamp] });
+    return 'claimed';
   });
-  if (!claimed) return { sent: 0, failed: 0, skipped: 'already-sent' };
+  if (outcome !== 'claimed') return { sent: 0, failed: 0, skipped: outcome };
 
   let sent = 0;
   let failed = 0;
@@ -259,12 +300,21 @@ export async function deliverPickPush({ db, code, actorUid, bet: given, now = Da
     failed = 1;
     console.warn(`pick push failed for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
   }
-  // Nothing reached a device and something failed: drop the claim so a retry
-  // can send. A creator with no registered device (push off in the app) is
-  // not a failure, so the claim stays.
+  // Nothing reached a device and something failed: drop the claim and this
+  // send's slot in the count so a retry can send. A creator with no
+  // registered device (push off in the app) is not a failure, so the claim
+  // and the slot stay.
   if (!sent && (failed || retryable)) {
     try {
-      await claimRef.delete();
+      await db.runTransaction(async (tx) => {
+        const count = await tx.get(countRef);
+        tx.delete(claimRef);
+        if (!count.exists) return;
+        const sends = Array.isArray(count.data()?.sends) ? count.data().sends : [];
+        const index = sends.indexOf(stamp);
+        if (index < 0) return;
+        tx.set(countRef, { code, sends: [...sends.slice(0, index), ...sends.slice(index + 1)] });
+      });
     } catch (err) {
       console.warn(`pick push claim not released for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
     }
