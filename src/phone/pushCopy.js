@@ -15,8 +15,14 @@ export const PUSH_COPY = Object.freeze({
 });
 
 // Notification bodies. Every title is the bet question, so they group by bet;
-// only the body changes. The closing-soon bodies land with their send PR.
+// only the body changes.
 export const PUSH_NOTIFICATION_COPY = Object.freeze({
+  // To the creator, once per bet, when under an hour is left before closesAt.
+  closingCreator: 'Under an hour left. Nudge anyone who hasn’t picked.',
+  // To friends in the bet who have not picked yet, same window. Approved, but
+  // nothing records who those friends are, so the cron sends only the
+  // creator body today (docs/PUSH.md).
+  closingPending: 'Under an hour left to pick a side.',
   // To the creator, on a friend's first pick. {name} is the voter's cleaned
   // name, {side} the picked option's vote label.
   firstPickNamed: (name, side) => `${name} picked ${side}.`,

@@ -42,6 +42,12 @@ test('first-pick bodies are the UX copy, verbatim', () => {
   expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Jack\u2019s team')).toBe('A friend picked Jack\u2019s team.');
 });
 
+test('closing-soon bodies are the UX copy, verbatim', () => {
+  expect(PUSH_NOTIFICATION_COPY.closingCreator).toBe('Under an hour left. Nudge anyone who hasn’t picked.');
+  expect(PUSH_NOTIFICATION_COPY.closingPending).toBe('Under an hour left to pick a side.');
+  expect(PUSH_NOTIFICATION_COPY.closingCreator.match(/’/g)).toHaveLength(1);
+});
+
 test('the Android channel name and description are the UX copy, verbatim', () => {
   expect(PUSH_CHANNEL_COPY).toEqual({
     name: 'Bet updates',
@@ -55,6 +61,8 @@ test('notification and channel copy: no em dashes, emoji, placeholders or money 
     PUSH_NOTIFICATION_COPY.calledOff,
     PUSH_NOTIFICATION_COPY.firstPickNamed('Sam', 'Over'),
     PUSH_NOTIFICATION_COPY.firstPickUnnamed('Over'),
+    PUSH_NOTIFICATION_COPY.closingCreator,
+    PUSH_NOTIFICATION_COPY.closingPending,
     ...Object.values(PUSH_CHANNEL_COPY),
   ].join('\n');
   expect(all).not.toMatch(/'/);
