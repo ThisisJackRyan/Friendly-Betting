@@ -1,7 +1,8 @@
 # Pro tier
 
-Pro is $3/mo, the only plan: no ads, Run it back and head-to-head stats. Creating bets is not capped
-(`FREE_BETS` is not enforced yet). Bettors (anyone who only picks a side) are always free and never
+Pro is $3/mo, the only plan: no ads, Run it back and head-to-head stats. With the paywall on, a
+creator without Pro can have at most `FREE_BETS` (3) bets, checked on the server (see
+[Server-side Pro checks](#server-side-pro-checks)); with it off, creating is not capped. Bettors (anyone who only picks a side) are always free and never
 need an account.
 
 Today Pro is a data model, rules, a client listener, badges, a flagged paywall and a
@@ -141,15 +142,95 @@ outlined chip right of the My bets heading when signed in.
 
 Locked features (`ProLock.jsx`): with the paywall on and no Pro, Run it back (tally reveal) and
 the Friends head-to-head filter on My bets keep their look plus a small outlined `Pro` chip, and
-a tap opens the sheet on their row. With the paywall off they work for everyone. The lock is
-client-side only: the rules don't check Pro for a rematch (it is an ordinary bet create) and
-head-to-head stats are computed from bets the creator can already read.
+a tap opens the sheet on their row. With the paywall off they work for everyone. With the paywall
+on, the server also refuses a rematch without Pro (see
+[Server-side Pro checks](#server-side-pro-checks)); head-to-head stats stay a client lock, since
+they are computed from bets the creator can already read.
 
-**Not done: the "4th bet" prompt.** Counting a creator's bets in Create would need a
-new query (My bets' list isn't loaded there), so for now creation is never blocked. TODO: count
-created bets (server-side counter on the user, or the My bets query) and show the paywall when a
-non-Pro creator starts bet 4; enforce the limit in rules or a server route if it should be more
-than a prompt.
+**Not done: the "4th bet" prompt.** With the paywall on the server refuses a 4th bet for a
+creator without Pro (`free-bet-limit`), but Create has no prompt for it yet: the error shows
+Create's generic `Could not save this bet.` See [Copy UX still needs](#copy-ux-still-needs).
+
+## Server-side Pro checks
+
+Launch step 11: every Pro gate, and where it is enforced.
+
+| Gate | Before | Now | Caveat |
+| --- | --- | --- | --- |
+| No ads | Client: `src/ads/adService.js` skips ads when `isPro()` (`src/ads/pro.js`, filled from `entitlements/{uid}`). Not tied to the paywall flag. | Unchanged, client only. | Ads are shown by the client (AdMob, the web house ad); there is no ad API to gate, so a patched client can always hide ads. Nothing to enforce. |
+| Run it back | Client lock: `useProLocked()` in `RunItBack.jsx`. The write was a plain client create. | Paywall on: `POST /api/bets` refuses a create with `rematchOf` unless the caller is Pro (`403 pro-required`). Paywall off: unchanged, client create for everyone. | The same bet typed into Create without the link is an ordinary bet (and counts toward the free cap). See the rules caveat below. |
+| Head-to-head stats | Client lock: `useProLocked()` in `MyBets.jsx`; `friendStats()` over My bets. | Unchanged, client only. | Computed from bets the creator can already list; there is no data to withhold. |
+| Early-access types | Client: `visibleEarlyTypes()` in `TypePicker.jsx` (flag and Pro). | Also on the server: with the paywall on, `POST /api/bets` refuses a type in `EARLY_ACCESS_TYPES` unless `NEXT_PUBLIC_PRO_EARLY_TYPES=1` and the caller is Pro (`403 pro-required`). | The list is empty, so nothing is refused today. With the paywall off the client writes the bet and only the picker hides the types. |
+| `FREE_BETS` (3) | Not enforced anywhere. | Paywall on: `POST /api/bets` refuses a create when a caller without Pro already has `FREE_BETS` bets (`403 free-bet-limit`). Pro (including unexpired `expiresAt` and legacy founder) is unlimited. Paywall off: not capped. | Counts the bets that exist now (`createdByID == uid`, the My bets query), so deleting one frees a slot. See the rules caveat below. |
+| Pro badge, Go Pro, `/pro`, the Pro sheet | Display and entry points. | Unchanged. | Not privileges; nothing to enforce on a write. |
+
+### `POST /api/bets`
+
+`app/api/bets/route.js` and `src/server/createBet.js` (tests: `src/server/createBet.test.js`,
+`src/server/createRoute.test.js`). Pro is read by `src/server/proEntitlement.js`, which reads
+`entitlements/{uid}` with the Admin SDK and calls `isProEntitlement` from
+`src/phone/entitlement.js` (tests: `src/server/proEntitlement.test.js`), so expiry and legacy
+founder plans count exactly as they do in the app. Body: `{ fields }`, the same fields Create and
+Run it back pass to `saveBet(null, fields)`. Answers `{ code }`.
+
+Guards, in order:
+
+1. **404** `not-found` unless `NEXT_PUBLIC_PRO_PAYWALL === '1'` (`proPaywallEnabled()`, the same
+   check the app uses). OPTIONS too. Nothing is read before this check.
+2. **401** `unauthorized` without a bearer token, or with one the Admin SDK can't verify.
+3. **403** `forbidden` without a `phone_number` claim (an anonymous bettor), or with a
+   `createdByID` in the fields that isn't the token's uid. The uid always comes from the token.
+4. **400** `invalid-bet` when `fields` is not an object.
+5. **403** `pro-required` for a rematch (`rematchOf` set) or an early-access type without Pro
+   (early types also need `NEXT_PUBLIC_PRO_EARLY_TYPES=1`).
+6. **403** `free-bet-limit` when the caller has no Pro and already has `FREE_BETS` bets.
+7. **503** `not-configured` without `FIREBASE_SERVICE_ACCOUNT`; **500** `server` otherwise.
+
+Steps 5 to 6 and the write are one transaction, so two creates at once can't both take the last
+free bet. The Admin SDK bypasses `firestore.rules`, so the route applies the create rule itself:
+the bet is written in the caller's name, open, with no winner, no votes and no result fields
+(`settledAt`, `settlement`, `calledOff` are dropped), in the same shape the client writes
+(`newBetDoc` in `src/phone/newBet.js`, shared with `createBet` in `api.js`).
+
+**Client.** `createBet` in `src/phone/api.js` (behind `saveBet(null, fields)`, used by Create
+and Run it back) calls the route only when `proPaywallEnabled()`. Any error, including `503
+not-configured`, fails closed: there is no fallback to the client write, which would skip the
+checks. With the paywall off it writes `bets/{code}` from the client exactly as before and never
+calls the route, so it needs no Admin credentials. The native app forces the paywall off, so it
+never calls this route. Editing an existing bet is unchanged (client update).
+
+### Rules caveat (a rules deploy needs sign-off)
+
+`firestore.rules` is **unchanged**. Its `bets/{code}` create rule still lets any phone-verified
+user create a bet in their own name, so with the paywall on, a patched client can still skip
+`POST /api/bets` and write the bet (rematch link included) directly: the server checks stop
+the real app, not a determined user. Rules can't read `NEXT_PUBLIC_PRO_PAYWALL`, so closing that
+gap can't be a paywall-dependent rule, and denying client creates outright would break the
+paywall-off path, which still writes bets from the client.
+
+To make the cap hard against patched clients when the paywall launches, one of these is needed,
+each a separate decision and a rules deploy:
+
+- deploy a rules version with the client `create` on `bets/{code}` removed, together with (never
+  before) the paywall-on web build, since every create then goes through the route; or
+- have rules read a server-written flag doc (for example `config/pro { paywall: true }`) and
+  refuse client creates while it is set. That is a second source of truth for the flag, so it
+  would have to be set in the same step as `NEXT_PUBLIC_PRO_PAYWALL`.
+
+Either way, cover it in `rules/firestore.rules.test.js` and follow the review note at the top of
+`firestore.rules`.
+
+### Copy UX still needs
+
+No new strings were added; these errors show Create's and Run it back's existing
+`Could not save this bet.` for now:
+
+- The 4th-bet prompt (`free-bet-limit`): what a creator without Pro sees when bet 4 is refused,
+  ideally opening the Pro sheet.
+- A refused rematch (`pro-required`), for a client that thought it was Pro (a plan that lapsed
+  while the reveal was open).
+- Paywall on and the server not configured (`503 not-configured`): creating fails until
+  `FIREBASE_SERVICE_ACCOUNT` is set.
 
 ## Flags
 
@@ -223,8 +304,9 @@ paywall is always off, so mock purchases only work on the web preview.
   the entitlement today. It must also re-validate the store's receipts for the signed-in user
   (a server route) and rewrite the entitlement before it reads. Decide
   how a purchase follows a user who changes phone number (new uid).
-- **Paid-bet gating.** The 4th-bet prompt above, and server or rules enforcement if the free limit
-  should be hard.
+- **Paid-bet gating.** The server cap is in (`POST /api/bets`). Still to do: the 4th-bet prompt
+  (copy above), and the rules change in [Rules caveat](#rules-caveat-a-rules-deploy-needs-sign-off)
+  if the cap must hold against patched clients.
 - **Mock removal.** Before launch, delete the mock route and `NEXT_PUBLIC_PRO_MOCK_PURCHASE`, or
   keep them strictly preview-only. Either way, do the [pre-launch cleanup](#pre-launch-cleanup).
 - **App Store review notes.** Digital goods inside the iOS app must use In-App Purchase (no
