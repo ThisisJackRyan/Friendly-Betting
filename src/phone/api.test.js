@@ -646,8 +646,9 @@ describe('live listeners merge the bet with its vote docs', () => {
   beforeEach(() => {
     listeners = [];
     onSnapshot.mockReset();
-    onSnapshot.mockImplementation((ref, next, error) => {
-      const entry = { ref, next, error, stopped: false };
+    onSnapshot.mockImplementation((ref, ...rest) => {
+      const [options, next, error] = typeof rest[0] === 'function' ? [undefined, ...rest] : rest;
+      const entry = { ref, options, next, error, stopped: false };
       listeners.push(entry);
       return () => { entry.stopped = true; };
     });
@@ -695,6 +696,47 @@ describe('live listeners merge the bet with its vote docs', () => {
     const err = new Error('offline');
     betListener().error(err);
     expect(onChange).toHaveBeenLastCalledWith(undefined, err);
+  });
+
+  test('subscribeBet listens to the bet doc with metadata changes, and the votes without', () => {
+    subscribeBet('abc123', () => {});
+    expect(betListener().options).toEqual({ includeMetadataChanges: true });
+    expect(votesListener().options).toBeUndefined();
+  });
+
+  test('subscribeBet reports a cache miss, then the metadata-only server miss', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(null, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: true });
+    // A repeat of the same miss is not reported again.
+    betListener().next(betSnap(null, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap(null, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: false });
+    betListener().next(betSnap(null, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('subscribeBet skips a metadata-only snapshot on a loaded bet, but not a vote doc update', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(stored, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap({ ...stored, votes: stored.votes.map((vote) => ({ ...vote })) }, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    votesListener().next(voteSnap({ maya: { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 2, nanoseconds: 0 } } }));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[1][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+    // Changed data still emits.
+    betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+    expect(onChange).toHaveBeenCalledTimes(3);
+    expect(onChange.mock.calls[2][0].status).toBe('closed');
   });
 
   test('subscribeMyBets merges each bet\'s vote docs and closes listeners with the list', () => {
@@ -806,7 +848,8 @@ describe('a session that learns the rules deny vote docs', () => {
 
   test('a denied vote listen is remembered: the next subscribeBet opens no votes listener', () => {
     const listeners = [];
-    onSnapshot.mockImplementation((ref, next, error) => {
+    onSnapshot.mockImplementation((ref, ...rest) => {
+      const [next, error] = typeof rest[0] === 'function' ? rest : rest.slice(1);
       listeners.push({ ref, next, error });
       return () => {};
     });

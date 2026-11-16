@@ -191,6 +191,44 @@ test('the grace timer is dropped on unmount and on a code change', () => {
   expect(result.current.failed).toBe(false);
 });
 
+test.each(['visibilitychange', 'online'])('a %s resubscribe inside the grace window drops the old timer', (event) => {
+  jest.useFakeTimers();
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  const target = event === 'online' ? window : document;
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  expect(jest.getTimerCount()).toBe(1);
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS - 500));
+  act(() => target.dispatchEvent(new Event(event)));
+  expect(feeds).toHaveLength(2);
+  expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+  expect(jest.getTimerCount()).toBe(0);
+
+  // Past the original deadline: the old timer never fires.
+  act(() => jest.advanceTimersByTime(1000));
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+
+  // A cache miss on the new feed starts a fresh grace wait.
+  act(() => feeds[1].onChange(null, undefined, cacheMiss));
+  expect(jest.getTimerCount()).toBe(1);
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS - 1));
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+
+  // The server hit on the new feed shows the bet with no flash.
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, serverMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+  expect(jest.getTimerCount()).toBe(0);
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS * 2));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+});
+
 test('a bad code is not-found on the first server snapshot', () => {
   const { result } = renderHook(() => useLiveBet('nope99'));
   act(() => feeds[0].onChange(null, undefined, { fromCache: false }));

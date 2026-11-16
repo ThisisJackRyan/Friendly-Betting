@@ -653,6 +653,24 @@ describe('live tally', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  test('a first-load cache miss then a server-confirmed miss shows the gone screen, not the load error', async () => {
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(null, undefined, { fromCache: true });
+      return feed.unsubscribe;
+    });
+    await renderTally();
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
+
+    await push(null, undefined, { fromCache: false });
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+  });
+
   test('the creator’s pick landing live hides Wanna vote?', async () => {
     await renderTally();
     await signIn(creator);
