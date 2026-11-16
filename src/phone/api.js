@@ -342,6 +342,18 @@ export function subscribeMyBets(uid, onChange) {
   };
 }
 
+// Deep equality for bet doc data. Firestore values with their own isEqual
+// (Timestamp, GeoPoint, DocumentReference) compare with it.
+function sameBetData(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (typeof a.isEqual === 'function') return a.constructor === b.constructor && a.isEqual(b);
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameBetData(a[key], b[key]));
+}
+
 // The bet doc and its vote docs, merged. Nothing is reported until both have
 // answered once (a failed vote listen counts as an answer), so the tally
 // never flashes the array alone.
@@ -357,10 +369,23 @@ export function subscribeBet(code, onChange) {
   };
   const stopBet = onSnapshot(
     doc(db, 'bets', code),
+    // fromCache tells a server-confirmed delete from an offline cache miss.
+    // Without includeMetadataChanges, a doc that is still missing when the
+    // server answers never fires again (only fromCache flips), so a first-load
+    // cache miss would never learn the bet is really gone.
+    { includeMetadataChanges: true },
     (snap) => {
-      // fromCache tells a server-confirmed delete from an offline cache miss.
-      meta = { fromCache: Boolean(snap.metadata?.fromCache) };
-      bet = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+      const fromCache = Boolean(snap.metadata?.fromCache);
+      const next = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+      // Metadata-only snapshots (fromCache, hasPendingWrites) on a loaded bet
+      // carry the same data: skip them so screens don't re-render. A missing
+      // bet is reported again only when fromCache changes.
+      const unchanged = bet !== undefined && (next
+        ? Boolean(bet) && sameBetData(bet, next)
+        : bet === null && meta?.fromCache === fromCache);
+      meta = { fromCache };
+      if (unchanged) return;
+      bet = next;
       emit();
     },
     (err) => {
