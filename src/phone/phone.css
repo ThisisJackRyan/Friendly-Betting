@@ -1276,14 +1276,6 @@ button:focus-visible {
   background: #7c9d60;
   flex: none;
 }
-.eyebrow {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.7px;
-  line-height: 1.6;
-  color: var(--muted);
-  text-transform: uppercase;
-}
 .scroll {
   padding: 28px 24px;
   scroll-behavior: smooth;
@@ -1468,41 +1460,17 @@ button:focus-visible {
     0 20px 45px #0c241c40;
   position: relative;
 }
-.ticket-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 17px;
-  border-bottom: 1px dashed #d1d8c9;
-}
-.ticket-top > span {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 7px;
-  letter-spacing: 1px;
-  font-weight: 800;
-}
-.ticket-top .live-dot {
-  width: 5px;
-  height: 5px;
-}
 .ticket-body {
   padding: 17px 19px 0;
 }
 .ticket-label {
   display: flex;
-  justify-content: space-between;
   gap: 8px;
   font-size: 7px;
   font-weight: 700;
   color: #596b50;
 }
-.ticket-label > span:first-child {
-  letter-spacing: 1.2px;
-}
-.ticket-label > span:last-child {
+.ticket-label > span {
   padding: 2px 5px;
   border: 1px solid #dce1d3;
   border-radius: 4px;
@@ -1839,9 +1807,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   letter-spacing: -1.2px;
   line-height: 1.25;
   max-width: 22ch;
-}
-.page-intro .eyebrow {
-  margin-bottom: 8px;
 }
 .page-intro .intro-copy {
   margin-top: 10px;
@@ -2651,9 +2616,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .ticket-pick {
     padding: 13px 12px;
   }
-  .ticket-top {
-    padding: 17px;
-  }
   .ticket-footer {
     padding: 16px 18px;
   }
@@ -2827,12 +2789,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .example-ticket {
     width: 255px;
   }
-  .ticket-top {
-    padding: 11px 14px;
-  }
-  .ticket-top > span {
-    font-size: 6px;
-  }
   .ticket-body {
     padding: 13px 17px 0;
   }
@@ -2878,10 +2834,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .section-heading h2,
   .how-heading h2 {
     font-size: 21px;
-  }
-  .eyebrow {
-    font-size: 8px;
-    letter-spacing: 1.4px;
   }
   .starter-grid {
     grid-template-columns: 1fr;

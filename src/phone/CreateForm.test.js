@@ -90,11 +90,14 @@ async function goToStake(question = 'Who is late') {
 
 test('step 1 is the type picker and back returns home', async () => {
   renderForm();
-  const home = screen.getByRole('link', { name: 'Friendly' });
+  const home = screen.getByRole('link', { name: 'Friendly home' });
   const row = home.closest('.nav-row');
   expect(home).toHaveClass('nav-home');
+  expect(home).not.toHaveClass('wordmark');
   expect(home).toHaveAttribute('href', '/');
-  expect(home.querySelector('svg')).not.toBeInTheDocument();
+  expect(home).toHaveTextContent(/^$/);
+  expect(home.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.queryByText('Friendly', { exact: false, selector: '.nav-row *' })).not.toBeInTheDocument();
   expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('heading', { name: 'New bet' })).toHaveClass('nav-title');
   expect(document.querySelector('.stack .wordmark')).not.toBeInTheDocument();
@@ -411,17 +414,23 @@ test('phone tabs hide after step 1 and return when the walkthrough is back on pi
   });
 });
 
-test('Friendly in the create nav returns home from every later step', async () => {
+test('the Friendly home link in the create nav returns home from every later step', async () => {
   renderForm('/new/prop');
 
   const homeInNav = () => {
-    const link = screen.getByRole('link', { name: 'Friendly' });
+    const link = screen.getByRole('link', { name: 'Friendly home' });
     expect(link).toHaveClass('nav-home');
+    expect(link).not.toHaveClass('wordmark');
+    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveTextContent(/^$/);
+    expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(link.closest('.nav-row')).toContainElement(screen.getByRole('button', { name: 'Back' }));
     return link;
   };
 
-  expect(screen.getByRole('heading', { name: 'Prop' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Prop' })).toHaveClass('nav-title');
+  expect(screen.getAllByText('Prop')).toHaveLength(1);
+  expect(document.querySelector('.page-intro .eyebrow')).not.toBeInTheDocument();
   homeInNav();
 
   await userEvent.type(screen.getByLabelText(/question/i), 'Who is last');
@@ -452,7 +461,7 @@ test('reduced motion skips the home slide', async () => {
   }));
   try {
     renderForm('/new/money-line');
-    await userEvent.click(screen.getByRole('link', { name: 'Friendly' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Friendly home' }));
     expect(navigation.push).toHaveBeenCalledWith('/');
     expect(document.querySelector('.create-pane.is-leaving')).not.toBeInTheDocument();
     expect(saveBet).not.toHaveBeenCalled();

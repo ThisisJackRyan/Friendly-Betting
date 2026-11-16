@@ -91,6 +91,10 @@ test('opens the clubhouse with a primary creation action and shortcuts for each 
     '/new/prop',
   );
   expect(screen.getByText('Example bet')).toBeInTheDocument();
+  expect(screen.queryByText(/group chat has spoken/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/weekend plans/i)).not.toBeInTheDocument();
+  expect(document.querySelector('.example-ticket .ticket-top')).not.toBeInTheDocument();
+  expect(screen.getByText('Coffee on the loser')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');

@@ -771,7 +771,7 @@ test('a tally opened from My bets backs out to My bets, and Home from Create unw
   await page.getByRole('button', { name: /Money Line/ }).click();
   await expect(page).toHaveURL(/\/new#step-2$/);
   expect(await appIndex(page)).toBe(2);
-  await page.locator('.create-pane:not(.is-leaving)').getByRole('link', { name: /friendly/i }).first().click();
+  await page.locator('.create-pane:not(.is-leaving)').getByRole('link', { name: 'Friendly home', exact: true }).click();
   await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
   await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
   expect(await appIndex(page)).toBe(0);
