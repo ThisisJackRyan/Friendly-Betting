@@ -243,8 +243,15 @@ A create that can't reach the network fails fast, paywall on or off: at once (no
 no request) when the browser reports offline, and after `CREATE_TIMEOUT_MS` (12s) when the client
 transaction or the route request hangs, instead of sitting on the busy button until Firestore
 gives up (~35s offline). Either way the error carries a network code and the message above. A save
-that timed out may still land: the retry (same bet, close time aside) waits up to
-`CREATE_TIMEOUT_MS` for it first and, if it landed, opens that bet instead of making a second one.
+that timed out may still land: the retry (same bet, close time aside, in Create and Run it back)
+waits up to `CREATE_TIMEOUT_MS` for it first and, if it landed, opens that bet instead of making a
+second one. Only the same bet's retry waits: a create with other fields starts at once, and if the
+earlier save lands late anyway (a retry with different fields, or no retry at all) it is a separate
+bet in My bets. A stalled save is dropped `CREATE_STALL_CAP_MS` (60s) after it started, so a hang
+never blocks later creates until reload: paywall on, its `POST /api/bets` is aborted (a token
+refresh still hung by then sends nothing); paywall off, the Firestore transaction can't be aborted,
+so if it lands after the cap it too is a separate bet. No new copy: both cases show the save line
+above.
 Delete keeps its own offline handling (code `offline`).
 
 `pro-required` mostly reaches Run it back when a plan lapsed while the reveal was open, so the

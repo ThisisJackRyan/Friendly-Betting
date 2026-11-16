@@ -1,7 +1,7 @@
 import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
 import {
-  __resetCreateForTests, __resetVoteRulesForTests, CREATE_TIMEOUT_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
+  __resetCreateForTests, __resetVoteRulesForTests, CREATE_STALL_CAP_MS, CREATE_TIMEOUT_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
   subscribeMyBets, undoSettle,
 } from './api';
 import { rememberBet } from './notificationStore';
@@ -974,6 +974,7 @@ describe('creating a bet', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
         body: JSON.stringify({ fields }),
+        signal: expect.any(AbortSignal),
       });
       expect(runTransaction).not.toHaveBeenCalled();
     });
@@ -1143,6 +1144,66 @@ describe('creating a bet', () => {
         expect(runTransaction).toHaveBeenCalledTimes(1);
       });
 
+      test('a late save, then a retry with other fields: a new bet, not the earlier one', async () => {
+        jest.useFakeTimers();
+        let land;
+        runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+          land = () => resolve(run(tx));
+        }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout' });
+        land();
+        await jest.advanceTimersByTimeAsync(0);
+        const earlier = tx.set.mock.calls[0][0].id;
+
+        const code = await saveBet(null, { ...fields, stake: 'Tacos' });
+        expect(code).not.toBe(earlier);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+        expect(tx.set).toHaveBeenCalledTimes(2);
+      });
+
+      test('a hung save never holds up a create with other fields', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        // No clock moves: it doesn't wait out the hung save.
+        const code = await saveBet(null, { ...fields, stake: 'Tacos' });
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      test('the stall cap drops a hung save: the same bet\'s retry then starts fresh', async () => {
+        jest.useFakeTimers();
+        expect(CREATE_STALL_CAP_MS).toBeGreaterThan(2 * CREATE_TIMEOUT_MS);
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - CREATE_TIMEOUT_MS);
+
+        const code = await saveBet(null, fields);
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      test('a retry still waiting when the cap passes starts fresh instead of timing out', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - 2 * CREATE_TIMEOUT_MS + 1000);
+
+        const retry = saveBet(null, fields);
+        await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS - 1000);
+        await expect(retry).resolves.toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
       test('Run it back offline fails at once with the save line, not retried without its link', async () => {
         goOffline();
         await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123'))
@@ -1183,6 +1244,78 @@ describe('creating a bet', () => {
         const retry = saveBet(null, fields);
         answer({ ok: true, status: 200, json: async () => ({ code: 'srv789' }) });
         await expect(retry).resolves.toBe('srv789');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      test('a late answer, then a retry with other fields: a new bet, not the earlier one', async () => {
+        jest.useFakeTimers();
+        let answer;
+        global.fetch = jest.fn()
+          .mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }))
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv222' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        answer({ ok: true, status: 200, json: async () => ({ code: 'srv111' }) });
+        await jest.advanceTimersByTimeAsync(0);
+
+        await expect(saveBet(null, { ...fields, stake: 'Tacos' })).resolves.toBe('srv222');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('a hung request never holds up a create with other fields', async () => {
+        jest.useFakeTimers();
+        global.fetch = jest.fn()
+          .mockImplementationOnce(never)
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv333' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        await expect(saveBet(null, { ...fields, stake: 'Tacos' })).resolves.toBe('srv333');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('the stall cap aborts a hung request; the same bet\'s retry then starts fresh', async () => {
+        jest.useFakeTimers();
+        let signal;
+        global.fetch = jest.fn()
+          .mockImplementationOnce((_url, init) => {
+            signal = init.signal;
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
+          })
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv444' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        // A retry before the cap still waits on it, and doesn't abort it.
+        const early = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await early).toMatchObject({ code: 'timeout' });
+        expect(signal.aborted).toBe(false);
+
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - 2 * CREATE_TIMEOUT_MS);
+        expect(signal.aborted).toBe(true);
+        await expect(saveBet(null, fields)).resolves.toBe('srv444');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('a token refresh still hung at the cap sends nothing when it comes back', async () => {
+        jest.useFakeTimers();
+        let token;
+        getIdToken.mockImplementationOnce(() => new Promise((resolve) => { token = resolve; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - CREATE_TIMEOUT_MS);
+        token('id-token');
+        await jest.advanceTimersByTimeAsync(0);
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        respond(200, { code: 'srv555' });
+        await expect(saveBet(null, fields)).resolves.toBe('srv555');
         expect(global.fetch).toHaveBeenCalledTimes(1);
       });
 

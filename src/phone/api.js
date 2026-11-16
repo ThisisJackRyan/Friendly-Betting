@@ -59,22 +59,34 @@ async function createBetHere(fields) {
 // CREATE_NETWORK_CODES): at once when the browser reports offline, and after
 // CREATE_TIMEOUT_MS when the write hangs. Offline, a Firestore transaction
 // otherwise retries for ~35s and then rejects with "Connection failed.".
+//
+// A save that timed out may still land. Only a retry of the same bet
+// (createKey) waits for it, so the same bet is never made twice: if it
+// landed, that's the bet. A create with other fields starts at once and never
+// waits on a hung save; if the earlier save lands late anyway (a retry with
+// different fields, or no retry at all), it is a separate bet in My bets.
+// After CREATE_STALL_CAP_MS from the save's start the stalled save is dropped
+// (and its POST /api/bets aborted, paywall on), so a hang can't block later
+// creates, the same bet's retry included, until the page is reloaded.
 export async function createBet(fields) {
   if (isOffline()) throw createNetworkError('offline');
   const key = createKey(fields);
-  // A save that timed out may still land. The retry waits for it first, so
-  // the same bet is never made twice: if it landed, that's the bet.
-  if (stalledCreate) {
-    const prior = stalledCreate;
-    const earlier = await settleWithin(prior.promise, CREATE_TIMEOUT_MS);
-    if (earlier.pending) throw createNetworkError('timeout');
-    if (stalledCreate === prior) stalledCreate = null;
-    if (earlier.ok && prior.key === key) return earlier.value;
+  const prior = stalledCreate;
+  if (prior && prior.key === key) {
+    const wait = Math.min(CREATE_TIMEOUT_MS, Math.max(0, prior.dropAt - Date.now()));
+    const earlier = await settleWithin(prior.promise, wait);
+    if (earlier.pending && Date.now() < prior.dropAt) throw createNetworkError('timeout');
+    dropStall(prior);
+    if (earlier.ok) return earlier.value;
   }
-  const run = proPaywallEnabled() ? createBetOnServer(fields) : createBetHere(fields);
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const startedAt = Date.now();
+  const run = proPaywallEnabled() ? createBetOnServer(fields, controller?.signal) : createBetHere(fields);
   const outcome = await settleWithin(run, CREATE_TIMEOUT_MS);
   if (outcome.pending) {
-    stalledCreate = { key, promise: run };
+    const entry = { key, promise: run, dropAt: startedAt + CREATE_STALL_CAP_MS, controller, timer: null };
+    entry.timer = setTimeout(() => dropStall(entry), Math.max(0, entry.dropAt - Date.now()));
+    stalledCreate = entry;
     throw createNetworkError('timeout');
   }
   if (outcome.ok) return outcome.value;
@@ -89,15 +101,33 @@ export async function createBet(fields) {
 // and offer the retry.
 export const CREATE_TIMEOUT_MS = 12000;
 
-// The last save that timed out, while it might still land: { key, promise }.
+// How long after its start a save that timed out is still waited on by the
+// same bet's retry. At the cap it is dropped: a hung POST /api/bets is
+// aborted (an abort before the token comes back means no request is sent),
+// and the next create starts fresh. A Firestore transaction can't be aborted,
+// so if it lands after the cap it is a separate bet.
+export const CREATE_STALL_CAP_MS = 60000;
+
+// The last save that timed out, while it might still land:
+// { key, promise, dropAt, controller, timer }.
 let stalledCreate = null;
 
+// Stops waiting on a stalled save; aborts its request if it's still out.
+function dropStall(entry) {
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  if (stalledCreate === entry) stalledCreate = null;
+  if (Date.now() >= entry.dropAt) entry.controller?.abort();
+}
+
 export function __resetCreateForTests() {
+  if (stalledCreate) clearTimeout(stalledCreate.timer);
   stalledCreate = null;
 }
 
 // The same bet, give or take its close time (Run it back's moves with the
-// clock).
+// clock). That holds for Create too: a retry with only closesAt changed is
+// still the same bet.
 function createKey(fields) {
   const { closesAt, ...rest } = fields || {};
   return JSON.stringify(rest);
@@ -135,7 +165,10 @@ function createNetworkError(code, cause) {
 // code is the route's (pro-required, not-configured, ...); its message is the
 // generic save fallback. Create and Run it back pick the line for a coded
 // error with createSaveError (createErrors.js).
-async function createBetOnServer(fields) {
+//
+// signal aborts the request when a stalled save is dropped at
+// CREATE_STALL_CAP_MS; aborted before the token comes back, nothing is sent.
+async function createBetOnServer(fields, signal) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
   let token;
@@ -145,10 +178,12 @@ async function createBetOnServer(fields) {
     if (cause?.code === 'auth/network-request-failed' || isOffline()) throw createNetworkError('offline', cause);
     throw cause;
   }
+  if (signal?.aborted) throw createNetworkError('timeout');
   let res;
   try {
     res = await fetch(apiUrl('/api/bets'), {
       method: 'POST',
+      signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ fields }),
     });
