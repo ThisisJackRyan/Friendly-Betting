@@ -17,7 +17,7 @@ import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
-import { requestBetPush } from './betPush';
+import { requestBetPush, requestPickPush } from './betPush';
 import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
 import { cleanName, mergeVotes, voteFromDoc, withVotes } from './votes';
 
@@ -305,38 +305,60 @@ async function readPickBet(tx, code, pick) {
 // they can write. A new side moves them to the end of the list, as before.
 // Rules from before per-voter docs deny that write, so a denied one is made
 // the old way, in the bet's `votes` array; once the session knows that
-// (voteDocsDenied), picks skip the doc and go there directly.
+// (voteDocsDenied), picks skip the doc and go there directly. A friend's first
+// pick (no recorded pick before this write, in the array or their doc) asks
+// the server to tell the creator, after the commit; a side change does not.
 export async function castVote(code, vote) {
   const pick = { voterId: vote.voterId, name: cleanName(vote.name), optionId: vote.optionId };
   if (voteDocsDenied) {
-    await castLegacyVote(code, pick);
+    const first = await castLegacyVote(code, pick);
     rememberBet(pick.voterId, code);
+    if (first) notifyAfterFirstPick(code);
     return;
   }
+  let first = false;
   try {
     await runTransaction(db, async (tx) => {
-      await readPickBet(tx, code, pick);
+      const data = await readPickBet(tx, code, pick);
+      // A denied read of the voter's own doc is a sure sign of the old rules;
+      // the catch below takes the array path.
+      const own = await tx.get(voteRef(code, pick.voterId));
+      const prior = own.exists() ? voteFromDoc(pick.voterId, own.data()) : null;
+      first = isFirstPick(data, mergeVotes(data.votes, prior ? [prior] : []), pick.voterId);
       tx.set(voteRef(code, pick.voterId), { ...pick, at: serverTimestamp() });
     });
   } catch (err) {
     if (!isDenied(err)) throw err;
-    await castLegacyVote(code, pick);
+    first = await castLegacyVote(code, pick);
     noteVoteDocsDenied();
   }
   rememberBet(pick.voterId, code);
+  if (first) notifyAfterFirstPick(code);
+}
+
+// True when this write is a friend's first pick: no recorded pick (a truthy
+// optionId) for them in the live votes before it, and they are not the
+// creator (the server skips the creator too).
+function isFirstPick(data, votes, voterId) {
+  if (!voterId || data?.createdByID === voterId) return false;
+  return !(votes || []).some((item) => item?.voterId === voterId && item.optionId);
 }
 
 // castVote's write for rules without per-voter docs: the voter's entry in the
-// bet's `votes` array, replaced and moved to the end.
+// bet's `votes` array, replaced and moved to the end. Resolves to whether it
+// was the voter's first pick (see isFirstPick).
 async function castLegacyVote(code, pick) {
   const ref = doc(db, 'bets', code);
+  let first = false;
   await runTransaction(db, async (tx) => {
     const data = await readPickBet(tx, code, pick);
     const votes = Array.isArray(data.votes) ? data.votes : [];
+    first = isFirstPick(data, votes, pick.voterId);
     const next = votes.filter((item) => item.voterId !== pick.voterId);
     next.push({ ...pick, at: Date.now() });
     tx.update(ref, { votes: next });
   });
+  return first;
 }
 
 // Changes only the name on a voter's own pick: same side, same place in the
@@ -400,6 +422,16 @@ function notifyAfterClose(code) {
   requestResultTexts(code);
   try {
     requestBetPush(code);
+  } catch (err) {
+    // Push is a bonus.
+  }
+}
+
+// The first-pick push, fire-and-forget. requestPickPush never throws; the
+// catch makes sure a push problem can never reach the pick either way.
+function notifyAfterFirstPick(code) {
+  try {
+    requestPickPush(code);
   } catch (err) {
     // Push is a bonus.
   }
