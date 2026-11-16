@@ -93,4 +93,11 @@ export const STRIPE_COPY = {
   manage: 'Manage subscription',
   // Replaces PRO_COPY.finePrint: cancelling is in the Stripe portal, not Settings.
   finePrint: `Pro renews at $${PRO_MONTHLY_USD}/mo until you cancel.`,
+  // A muted banner at the top of My bets while a failed payment is in its
+  // grace period (still Pro). The link opens the Stripe customer portal.
+  graceNotice: 'Your payment didn’t go through. Update it to keep Pro.',
+  updatePayment: 'Update payment',
+  // The same banner after that grace ran out and Pro ended, with the usual
+  // Go Pro link (PRO_COPY.link) to /pro. UX approved both in November.
+  graceEnded: 'Pro ended. Your bets are all still here.',
 };

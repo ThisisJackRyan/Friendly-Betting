@@ -25,8 +25,9 @@ Pro member: Manage subscription -> POST /api/pro/portal -> Stripe customer porta
 | Routes | `app/api/pro/checkout/route.js`, `app/api/pro/portal/route.js`, `app/api/stripe/webhook/route.js` |
 | Client calls | `requestCheckout`, `requestBillingPortal` in `src/phone/entitlementApi.js` |
 | Leaving for Stripe | `src/phone/billingRedirect.js` (https URLs only) |
-| UI | `src/phone/ProSheet.jsx`, `src/phone/Paywall.jsx`; new copy in `STRIPE_COPY` (`src/phone/proConfig.js`) |
-| Tests | `src/server/stripeConfig.test.js`, `src/server/stripeBilling.test.js`, `src/phone/ProSheet.stripe.test.jsx`, `rules/firestore.rules.test.js` (`stripe web billing`) |
+| past_due grace (read time) | `STRIPE_GRACE_DAYS`, `stripeGraceNotice` in `src/phone/entitlement.js` |
+| UI | `src/phone/ProSheet.jsx`, `src/phone/Paywall.jsx`, `src/phone/StripeBillingNotice.jsx` (My bets); new copy in `STRIPE_COPY` (`src/phone/proConfig.js`) |
+| Tests | `src/server/stripeConfig.test.js`, `src/server/stripeBilling.test.js`, `src/phone/entitlement.test.js`, `src/phone/ProSheet.stripe.test.jsx`, `src/phone/StripeBillingNotice.test.jsx`, `rules/firestore.rules.test.js` (`stripe web billing`) |
 
 ### Checkout: `POST /api/pro/checkout`
 
@@ -117,6 +118,7 @@ entitlements/{uid}
   plan: 'pro', source: 'stripe', since, expiresAt   // the shape the app already reads
   stripeCustomerId, stripeSubscriptionId,           // for the portal and for ordering
   stripeStatus, stripeEventCreated                  // last applied status and event.created (s)
+  stripePastDueAt                                   // first failed payment, while past_due (see below)
 stripeEvents/{eventId}      { type, created, processedAt, expireAt }   // server only
 stripeCustomers/{customerId} { uid }                         // server only
 ```
@@ -126,11 +128,11 @@ stripeCustomers/{customerId} { uid }                         // server only
 
 - **Live** (`active`, `trialing`): `expiresAt` = the period end, so Pro lapses on its own if
   webhooks ever stop. A renewal moves `expiresAt` and keeps `since`.
-- **Not live** (`past_due`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `canceled`):
+- **`past_due`**: Pro stays on for a [3-day grace](#past_due-grace-3-days), then ends.
+- **Not live** (`unpaid`, `incomplete`, `incomplete_expired`, `paused`, `canceled`):
   the doc stays and `expiresAt` becomes now (or `ended_at` if earlier, never later than it
-  already was), so `isProEntitlement` returns false. Nothing is deleted. A failed renewal
-  (`past_due`) ends Pro at once; if Stripe's retry then succeeds, `updated` -> `active` brings it
-  back. Keeping Pro during `past_due` is an [open question](#open-questions).
+  already was), so `isProEntitlement` returns false. Nothing is deleted. This holds even
+  during a `past_due` grace: `unpaid` or `canceled` ends Pro at once.
 - **Idempotent.** `stripeEvents/{event.id}` is read and written inside the same transaction as
   the entitlement: a redelivered event changes nothing. Each record has `expireAt` (a Timestamp
   90 days out) so a Firestore TTL policy can delete it; see the dashboard setup. 90 days is well
@@ -153,6 +155,57 @@ stripeCustomers/{customerId} { uid }                         // server only
   Stripe plan replaces it. A Stripe cancellation never ends a plan Stripe did not grant. Why: the
   member should always end up with the better of the two, and one billing system must not revoke
   what another granted. The renewal event at each period end re-checks, so there is no gap.
+
+### past_due grace (3 days)
+
+When a renewal payment fails, Stripe moves the subscription to `past_due` and retries the card.
+Pro stays on for **3 days from the first failed payment**, then ends. The 3 days are one
+constant, `STRIPE_GRACE_DAYS` in `src/phone/entitlement.js` (pure, shared by the server and the
+app).
+
+- **Stored by the server.** The first `past_due` the webhook applies to the doc's subscription,
+  coming from a live status (`active`, `trialing`), writes `stripePastDueAt` onto
+  `entitlements/{uid}`: the server's clock when the event is handled, or the event's `created`
+  if that is earlier and the event's own copy already says `past_due` (so a late delivery does
+  not push the grace back). Never the client's clock. `expiresAt` becomes `stripePastDueAt` + 3
+  days.
+- **Retries don't extend it.** Every later `past_due` event for the same subscription keeps the
+  stored `stripePastDueAt`, and so the same `expiresAt`. `invoice.payment_failed` (one per
+  retry) is not subscribed to and is a 200 no-op if it arrives; the status comes from
+  `customer.subscription.updated`.
+- **No cron.** The grace end is `expiresAt`, and every reader already checks it at read time
+  (`isProEntitlement`: the badge, ads, the Pro sheet, and the server's `already-pro` check). So
+  Pro ends when the 3 days are up even if no webhook arrives; a webhook after that (another
+  `past_due`, `unpaid`, `canceled`) keeps it ended.
+- **Recovery clears it.** A payment that goes through moves the subscription back to `active`
+  (or `trialing`): `stripePastDueAt` is removed and `expiresAt` is the new period end. The next
+  failure starts a new grace.
+- **`unpaid` / `canceled` end Pro at once**, grace left or not (`expiresAt` = now), and remove a
+  running `stripePastDueAt`, so it can never bring Pro back. A `stripePastDueAt` whose grace
+  already ran out is kept, only so My bets can say Pro ended (below). A later `past_due` reuses
+  it (already expired), and `canceled` never grants again anyway.
+- **No grace without a live plan first.** `past_due` after `paused` or `incomplete`, or for a
+  doc with no `stripePastDueAt` and a status that is not live, ends Pro as before.
+- **Other plans.** Only a Stripe plan gets a grace; an admin, mock or store plan is untouched
+  (Stripe never ends a plan it did not grant).
+- **Test-mode allowlist.** A grace extends Pro, so it counts as granting: for a uid off
+  `STRIPE_TEST_UIDS`, `past_due` gets no grace and ends Pro at once, and drops a running grace.
+  A grace that already ran out stays ended, and ending events still apply.
+
+**My bets banner** (`StripeBillingNotice`, web only, with `NEXT_PUBLIC_PRO_PAYWALL=1` and
+`NEXT_PUBLIC_STRIPE_WEB_PRO=1`). Read from the member's own doc by `stripeGraceNotice`:
+
+- During the grace (`past_due`, still Pro): `STRIPE_COPY.graceNotice` with an
+  `Update payment` link that opens the existing portal (`POST /api/pro/portal`). A failure shows
+  the existing error line.
+- After the grace ran out: `STRIPE_COPY.graceEnded` with the usual `Go Pro` link to `/pro`
+  (`GoProLink`). Only for a Stripe plan whose stored `stripePastDueAt` grace ran out: never for
+  free members, founders, other plans, or a member whose Pro ended another way (a cancel, even
+  during the grace, removes `stripePastDueAt`).
+- **Lifetime.** No dismiss button. The ended banner shows for
+  `STRIPE_GRACE_ENDED_NOTICE_DAYS` (14) days after the grace ended, then stops. Being Pro again
+  (recovery, a new subscription, any other plan) hides both at once; a new Stripe plan also
+  removes `stripePastDueAt`.
 
 **`stripeCustomers/{customerId}`** maps a Stripe customer back to its uid for a subscription
 event without `metadata.uid` (one edited in the dashboard, or created outside Checkout). Written
@@ -179,8 +232,10 @@ scope) is not affected. The check is `stripeUidAllowed` in `src/server/stripeCon
   buying must still be able to cancel and lose Pro; refusing those would leave a paid plan that
   only lapses at the period end. An ending event can only lower `expiresAt`
   (`nextEntitlement`), so it can never grant. About any other subscription, nothing is written.
+  `past_due` is an ending state here: no [grace](#past_due-grace-3-days), since a grace
+  extends Pro.
 - **Taken off the list after buying:** renewals stop extending Pro (it lapses at the end of the
-  paid period); cancel and `past_due` still end it at once. The member can no longer open the
+  paid period); cancel and `past_due` still end it at once (no grace, and a running grace ends). The member can no longer open the
   portal on that preview, so cancel the test subscription in the dashboard.
 
 ### Customer portal: `POST /api/pro/portal`
@@ -220,14 +275,19 @@ Turn the mock flags off where Stripe is tested, to keep `source` values honest.
 
 ### New on-screen copy
 
-Two strings, only with the flag on and only on the web (`STRIPE_COPY`, UX approved them Oct 22).
-Everything else reuses `PRO_COPY`.
+Only with the flag on and only on the web (`STRIPE_COPY`; UX approved the first two Oct 22 and
+the grace banner in November). Everything else reuses `PRO_COPY`.
 
 - `Manage subscription` (`STRIPE_COPY.manage`): a muted text link (`.pro-sheet-manage`) under
   `Back to my bets` on the success screen, not a second button and not green.
 - `Pro renews at $3/mo until you cancel.` (`STRIPE_COPY.finePrint`): the sheet's fine print.
   Native apps, and the web with the flag off, keep `PRO_COPY.finePrint`
   (`Pro renews at $3/mo until you cancel in Settings.`).
+- `Your payment didn’t go through. Update it to keep Pro.` (`STRIPE_COPY.graceNotice`) with the
+  link `Update payment` (`STRIPE_COPY.updatePayment`): the muted banner at the top of My bets
+  during a `past_due` grace.
+- `Pro ended. Your bets are all still here.` (`STRIPE_COPY.graceEnded`) with the link `Go Pro`
+  (`PRO_COPY.link`): the same banner after the grace ran out.
 
 ### Logging
 
@@ -321,7 +381,9 @@ Then sign in with a Firebase test phone number, open `/pro`, Get Pro, pay with `
 4242` (any future date, any CVC), and watch `entitlements/{uid}` turn Pro. Cancel in the portal
 (Manage subscription), then advance time with a test clock or cancel immediately in the dashboard
 to see `deleted` end the plan. Card `4000 0000 0000 0341` attaches but fails on renewal, for
-`past_due`. `stripe trigger` fixtures carry no `metadata.uid`, so on their own they are no-ops
+`past_due`: with a test clock, advance past the period end to see the grace (Pro kept,
+`stripePastDueAt` set, the My bets banner), then more than 3 days to see Pro end without a
+webhook, or update the card in the portal to see recovery clear it. `stripe trigger` fixtures carry no `metadata.uid`, so on their own they are no-ops
 (200) unless their customer is already in `stripeCustomers`.
 
 Unit tests need none of this: `npm test` mocks Stripe and the Admin SDK and signs webhook payloads
@@ -344,20 +406,19 @@ with the real library.
 6. Manage subscription > cancel at period end: still Pro, `stripeStatus` active. Cancel
    immediately in the dashboard: `deleted`, not Pro, doc kept.
 7. Resend an event from the dashboard: 200, nothing changes.
-8. Check Vercel logs hold no uids, phone numbers or Stripe ids.
-9. Before any production or live-mode work: Terms and Privacy URLs set, live product and price,
+8. Grace: a test-clock subscription on card `4000 0000 0000 0341`, advanced past the period end:
+   still Pro with the My bets grace banner, `stripePastDueAt` set. Advance more than 3 days: not
+   Pro, the Pro ended banner. Fix the card in the portal before the 3 days instead: Pro, no
+   banner, `stripePastDueAt` gone.
+9. Check Vercel logs hold no uids, phone numbers or Stripe ids.
+10. Before any production or live-mode work: Terms and Privacy URLs set, live product and price,
    `STRIPE_ALLOW_LIVE` review, App Store rules for the native apps (docs/PRO.md), and the mock
    [pre-launch cleanup](PRO.md#pre-launch-cleanup).
 
-## Open questions
+## Decided
 
-- **Keep Pro during `past_due`?** Today a failed renewal ends Pro at once (`past_due` is not in
-  `LIVE_STATUSES`), and Stripe's retry bringing the subscription back to `active` restores it.
-  A grace period (Pro kept while Stripe retries the card) is kinder to a member whose card just
-  expired, but gives away Pro for the retry window if it never pays. A product decision; the
-  code change would be adding `past_due` to `LIVE_STATUSES`; Pro would then last until Stripe's
-  retries give up and the subscription moves to `canceled` or `unpaid` (the dashboard's retry
-  settings). No change made.
+- **Pro during `past_due`:** a 3-day grace from the first failed payment (product decision, Nov 2026). See
+  [past_due grace](#past_due-grace-3-days).
 
 ## Out of scope
 

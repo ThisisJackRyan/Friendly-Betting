@@ -19,6 +19,7 @@ import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
 import { useProBadge } from './useEntitlement';
 import GoProLink from './GoProLink';
+import StripeBillingNotice from './StripeBillingNotice';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
 import ProSheet from './ProSheet';
@@ -183,6 +184,7 @@ export function MyBetsList({ user }) {
       {!reveal && <FriendlyLoader />}
       {reveal && (
         <>
+          <StripeBillingNotice />
           <div className="bets-heading">
             <div>
               <p className="eyebrow">YOUR SIDE OF THE STORY</p>
