@@ -36,3 +36,14 @@ test('anything else: its own message, else the fallback; permission-denied as be
   expect(createSaveError(new Error('You’re offline.'))).toEqual({ message: 'You’re offline.', action: null });
   expect(createSaveError({ code: 'permission-denied' }).message).toBe('Saving was blocked. Try again in a moment.');
 });
+
+test.each([
+  ['offline', 'You are offline.'],
+  ['timeout', EXACT.failed],
+  ['unavailable', 'Connection failed.'],
+  ['deadline-exceeded', 'Request time out'],
+  ['firestore/unavailable', 'Connection failed.'],
+  ['auth/network-request-failed', 'Firebase: Error (auth/network-request-failed).'],
+])('a network failure (%s) shows the fallback, never its own message', (code, message) => {
+  expect(createSaveError(Object.assign(new Error(message), { code }))).toEqual({ message: EXACT.failed, action: null });
+});

@@ -226,6 +226,20 @@ test('a failed save shows the shared fallback and lets the creator try again', a
   expect(navigation.push).toHaveBeenCalledWith('/t/new456');
 });
 
+test('offline or a dropped network shows the shared fallback, never the raw message, and retries', async () => {
+  // Firestore's own error when the network is gone.
+  saveBet.mockRejectedValueOnce(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+  await renderTally(creator);
+  await userEvent.click(runItBack());
+  expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByText(/Connection failed|offline/i)).toBeNull();
+  expect(runItBack()).toBeEnabled();
+
+  saveBet.mockResolvedValueOnce('new456');
+  await userEvent.click(runItBack());
+  expect(navigation.push).toHaveBeenCalledWith('/t/new456');
+});
+
 test('leaving mid-save opens no tally', async () => {
   const save = deferred();
   saveBet.mockReturnValue(save.promise);

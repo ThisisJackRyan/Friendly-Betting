@@ -18,9 +18,30 @@ export const CREATE_ERROR_COPY = {
 // 'retry': a Try again button saves again.
 export const CREATE_ERROR_ACTION = { goPro: 'go-pro', retry: 'retry' };
 
+// A save that never got an answer: the browser is offline, the network
+// dropped or hung (createBet's 'timeout'), or Firestore / Auth couldn't reach
+// their servers. These show the fallback line, never the raw message
+// (Firestore's "Connection failed.", say), and the main button saves again.
+export const CREATE_NETWORK_CODES = [
+  'offline',
+  'timeout',
+  'unavailable',
+  'deadline-exceeded',
+  'firestore/unavailable',
+  'firestore/deadline-exceeded',
+  'auth/network-request-failed',
+];
+
+export function isCreateNetworkError(err) {
+  return CREATE_NETWORK_CODES.includes(err?.code);
+}
+
 // The line to show for a failed create, and the button that goes with it
 // (action is null when there is none).
 export function createSaveError(err) {
+  if (isCreateNetworkError(err)) {
+    return { message: CREATE_ERROR_COPY.failed, action: null };
+  }
   if (err?.code === 'pro-required') {
     return { message: CREATE_ERROR_COPY.proRequired, action: CREATE_ERROR_ACTION.goPro };
   }
