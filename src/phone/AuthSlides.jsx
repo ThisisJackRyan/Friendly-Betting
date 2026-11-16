@@ -511,7 +511,6 @@ function AuthChrome({ title, onBack, children, cta }) {
       </div>
       <div className="scroll">
         <div className="page-intro auth-intro">
-          <p className="eyebrow">YOUR FRIENDLY CLUBHOUSE</p>
           <h2>
             {title === AUTH_COPY.phoneTitle
               ? 'Welcome to your side of the bet.'

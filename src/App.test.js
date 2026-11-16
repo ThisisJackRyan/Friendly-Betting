@@ -91,6 +91,10 @@ test('opens the clubhouse with a primary creation action and shortcuts for each 
     '/new/prop',
   );
   expect(screen.getByText('Example bet')).toBeInTheDocument();
+  expect(screen.queryByText(/group chat has spoken/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/weekend plans/i)).not.toBeInTheDocument();
+  expect(document.querySelector('.example-ticket .ticket-top')).not.toBeInTheDocument();
+  expect(screen.getByText('Coffee on the loser')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
@@ -138,7 +142,7 @@ test('my bets is a tab with an empty state', () => {
   }
 });
 
-test('Start a bet slides forward into Pick a type', async () => {
+test('Start a bet slides forward into the type picker', async () => {
   navigation.pathname = '/';
   render(
     <CreateChromeProvider>
@@ -156,7 +160,7 @@ test('Start a bet slides forward into Pick a type', async () => {
   const leaving = document.querySelector('.create-pane.is-leaving');
   expect(entering).toHaveClass('slide-forward');
   expect(leaving).toHaveClass('slide-forward');
-  expect(entering).toHaveTextContent('Pick a type');
+  expect(within(entering).getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(leaving.querySelector('.landing-title')).toHaveTextContent('A little rivalry.');
   expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   expect(navigation.push).not.toHaveBeenCalled();
@@ -210,7 +214,7 @@ test.each(['/', '/bets'])(
     expect(document.querySelector('.create-pane.is-leaving')).toContainElement(current);
     expect(document.querySelector('.create-pane.is-leaving')).toHaveAttribute('inert');
     expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
-    expect(document.querySelector('.create-pane.is-entering')).toHaveTextContent('Pick a type');
+    expect(within(document.querySelector('.create-pane.is-entering')).getByRole('button', { name: /money line/i })).toBeInTheDocument();
     expect(create).toHaveAttribute('aria-current', 'page');
     expect(navigation.push).not.toHaveBeenCalled();
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/new'));
