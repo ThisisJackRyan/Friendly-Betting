@@ -16,13 +16,16 @@ export function useMinHold(resetKey) {
   return elapsed;
 }
 
+// A neutral page skeleton: a heading block and a few content bars in grey.
+// No wordmark, no brand colour, no visible text.
 const FriendlyLoader = () => (
   <div className="friendly-load" role="status" aria-label="Loading">
-    <p className="friendly-load-mark">Friendly</p>
     <div className="friendly-load-bars" aria-hidden="true">
+      <span className="friendly-load-title" />
       <span className="friendly-load-bar" />
       <span className="friendly-load-bar" />
       <span className="friendly-load-bar" />
+      <span className="friendly-load-card" />
     </div>
   </div>
 );
