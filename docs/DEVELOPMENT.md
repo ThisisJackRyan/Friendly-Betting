@@ -90,6 +90,8 @@ The default notification delivery channel is the in-app inbox, while open or on 
 
 Optional result texts ("text me who won"), off by default: with `NEXT_PUBLIC_RESULT_TEXTS=1`, `VoteScreen` shows `ResultTextCard` after a recorded pick → `resultTexts.saveResultText` → `POST /api/bets/:code/result-texts` (Admin SDK, private storage). After settling, `requestResultTexts` → `POST /api/bets/:code/result-texts/send` → `deliverResultTexts` → `sendResultSms` in `src/server/sms.js`. That function is still a `TODO(notify)` that throws `sms-not-configured`, so **no SMS is actually sent yet**; saved numbers are deleted at settle and counted as failed. Leave the flag off until an SMS provider and `FIREBASE_SERVICE_ACCOUNT` are configured. Full details: [docs/result-texts.md](result-texts.md).
 
+Push notifications are infra only, off by default (`NEXT_PUBLIC_PUSH_ENABLED`): a token route, native token plumbing and a server send helper, with no UI, no permission prompt and no sends wired to bet events yet. Setup steps that stay outside the repo (APNs key, Xcode capabilities, Firebase config files) are in [docs/PUSH.md](PUSH.md).
+
 ## Settlement and results
 
 Creators pick the winning side, review the result, then tap **Settle & notify**. The close and result snapshot are saved in one Firestore transaction, including all winning participants, the stake, and recipient IDs. Repeating the same close keeps the original result; a different winner or a late edit is rejected by the app and by this repo's `firestore.rules` (see [Firestore rules](#firestore-rules) for deployment). Only the creator can close or settle (`calledOff` can only be set by settling).
@@ -116,7 +118,7 @@ Next, after this loop works with real friends: one nudge for non-voters, “run 
 
 ## Firestore rules
 
-`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; per-voter vote docs (`bets/{code}/votes/{uid}`) that only their voter writes, plus an append-only legacy `votes` array for older builds (docs/VOTE-SECURITY.md, NOT DEPLOYED); and a deny-all for `privateResultTexts` (Admin SDK only). Tests live in `rules/*.rules.test.js` and run with `npm run test:rules`.
+`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; per-voter vote docs (`bets/{code}/votes/{uid}`) that only their voter writes, plus an append-only legacy `votes` array for older builds (docs/VOTE-SECURITY.md, NOT DEPLOYED); and a deny-all for `privateResultTexts`, `privatePushTokens` and `privatePushSends` (Admin SDK only). Tests live in `rules/*.rules.test.js` and run with `npm run test:rules`.
 
 The file is **not auto-deployed**. Nothing in this repo or on Vercel deploys it. Prod rules live in the Firebase console. Before anyone runs `firebase deploy --only firestore:rules`, review it line by line against the rules live in the console for `friendly-betting-fb47e` and merge anything the live rules allow that is missing here. Any catch-all `match /{document=**}` allow rule in the console would expose private result-text numbers and must not exist.
 
@@ -149,13 +151,14 @@ Preflight never touches auth or the database.
 | `FIREBASE_SERVICE_ACCOUNT` | Vercel, server only | Service-account JSON (or base64 of it) for the API routes. Optional; without it the routes return 503 and the app uses its client fallbacks. |
 | `NEXT_PUBLIC_RESULT_TEXTS` | Vercel and native builds | `1` shows the optional result-text field and fires the send call after settling. Leave unset until an SMS provider is wired into `src/server/sms.js` and the service account is set. |
 | `NEXT_PUBLIC_ADS_ENABLED` | Vercel and native builds | `1` lets `showInterstitial` show ads (house ad on web, AdMob test ads in the app). No flow calls it yet. See [docs/ADS.md](ADS.md). |
+| `NEXT_PUBLIC_PUSH_ENABLED` | Vercel and native builds | `1` turns on the push token route (`/api/push/tokens`), the native token plumbing and the server send helper. Off (unset) by default: the route is a 404 and nothing sends. No UI or bet event uses it yet. See [docs/PUSH.md](PUSH.md). |
 | `NEXT_PUBLIC_PRO_PAYWALL` | Vercel only | `1` turns on the paywall at `/pro` and the Go Pro link on My bets. Always off in native builds until store In-App Purchase is wired (`mobile/vite.config.mjs` ignores it). See [docs/PRO.md](PRO.md). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | Vercel and native builds | `1` shows early-access bet types (none yet) to Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | Preview and native preview builds | `1` enables the paywall buttons, which call the mock purchase route. Never in production. |
 | `PRO_MOCK_PURCHASE` | Vercel preview, server only | `1` lets `POST /api/pro/mock-purchase` grant Pro with no payment. The route also refuses `VERCEL_ENV=production`. |
 | `PRO_MOCK_UIDS` | Vercel preview, server only | Testers' uids allowed to use the mock purchase, comma separated. Empty or unset means nobody. Anonymous sessions and tokens without a phone number are always refused. Unset before launch, see [docs/PRO.md](PRO.md#pre-launch-cleanup). |
 
-`NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
+`NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED`, `NEXT_PUBLIC_PUSH_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 
 ## Screenshots
 

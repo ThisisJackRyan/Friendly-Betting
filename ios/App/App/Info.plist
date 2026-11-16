@@ -78,6 +78,12 @@
 			</array>
 		</dict>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>FirebaseMessagingAutoInitEnabled</key>
+	<false/>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
 	<key>GADApplicationIdentifier</key>

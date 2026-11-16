@@ -2,7 +2,8 @@
 import { cert, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { adminAuth, adminDb } from './firebaseAdmin';
+import { getMessaging } from 'firebase-admin/messaging';
+import { adminAuth, adminDb, adminMessaging } from './firebaseAdmin';
 
 const apps = [];
 jest.mock('firebase-admin/app', () => ({
@@ -17,6 +18,7 @@ jest.mock('firebase-admin/app', () => ({
 }));
 jest.mock('firebase-admin/auth', () => ({ getAuth: jest.fn((app) => ({ auth: app.name })) }));
 jest.mock('firebase-admin/firestore', () => ({ getFirestore: jest.fn((app) => ({ db: app.name })) }));
+jest.mock('firebase-admin/messaging', () => ({ getMessaging: jest.fn((app) => ({ messaging: app.name })) }));
 
 const saved = process.env.FIREBASE_SERVICE_ACCOUNT;
 const account = { project_id: 'friendly', client_email: 'a@b.c', private_key: 'k' };
@@ -37,6 +39,8 @@ test('importing does nothing; a missing service account fails clearly on first u
   expect(() => adminDb()).toThrow(expect.objectContaining({ code: 'admin-not-configured' }));
   process.env.FIREBASE_SERVICE_ACCOUNT = 'not json';
   expect(() => adminAuth()).toThrow(expect.objectContaining({ code: 'admin-not-configured' }));
+  expect(() => adminMessaging()).toThrow(expect.objectContaining({ code: 'admin-not-configured' }));
+  expect(getMessaging).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -46,8 +50,10 @@ test.each([
   process.env.FIREBASE_SERVICE_ACCOUNT = value;
   expect(adminDb()).toEqual({ db: 'friendly-admin' });
   expect(adminAuth()).toEqual({ auth: 'friendly-admin' });
+  expect(adminMessaging()).toEqual({ messaging: 'friendly-admin' });
   expect(initializeApp).toHaveBeenCalledTimes(1);
   expect(cert).toHaveBeenLastCalledWith(account);
   expect(getFirestore).toHaveBeenCalled();
   expect(getAuth).toHaveBeenCalled();
+  expect(getMessaging).toHaveBeenCalled();
 });
