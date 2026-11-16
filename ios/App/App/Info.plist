@@ -83,7 +83,7 @@
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>TODO_UX_ATT</string>
+	<string>This lets us show you ads that are more relevant to you.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

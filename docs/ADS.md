@@ -17,11 +17,11 @@ None of these block merging the infrastructure. All of them block shipping ads.
 
   `src/ads/config.test.js` asserts the IDs are test IDs and that the native files match
   config. Update that test with the real IDs in the same change.
-- **TODO: ATT copy (UX).** `NSUserTrackingUsageDescription` in `Info.plist` is the placeholder
-  `TODO_UX_ATT`, waiting on UX for the real sentence (Apple shows it in the system tracking
-  prompt). App Review rejects the placeholder, so it must be replaced before an iOS build ships
-  with ads on. The prompt order is wired: UMP first, then ATT only if the status is still
-  `notDetermined` (see [Consent and ATT](#consent-and-att)). There is no pre-prompt screen.
+- **Done: ATT copy (UX).** `NSUserTrackingUsageDescription` in `Info.plist` is final and
+  UX-approved: "This lets us show you ads that are more relevant to you." Apple shows it in the
+  system tracking prompt, and `src/ads/config.test.js` asserts the exact sentence. The prompt
+  order is wired: UMP first, then ATT only if the status is still `notDetermined` (see
+  [Consent and ATT](#consent-and-att)). There is no pre-prompt screen.
 - **Done: SKAdNetwork.** `SKAdNetworkItems` in `Info.plist` matches Google's list (50 IDs: Google
   plus its published third-party buyers), fetched 2026-11-16 from
   <https://developers.google.com/admob/ios/3p-skadnetworks> (page "Last updated: January 30, 2026"),
@@ -53,14 +53,12 @@ None of this can be done from the repo.
    quiet. **Until these messages exist and are published, the consent form may not appear**
    (`isConsentFormAvailable` is false); `canRequestAds` then follows Google's default for the
    user's region.
-3. **ATT copy**: get the real `NSUserTrackingUsageDescription` sentence from UX to replace
-   `TODO_UX_ATT`.
-4. **App Store privacy labels** (App Store Connect > App Privacy): declare tracking, identifiers
+3. **App Store privacy labels** (App Store Connect > App Privacy): declare tracking, identifiers
    (device ID / IDFA), advertising data and the other data the Google Mobile Ads SDK collects
    (Google lists it for the SDK), and answer "Yes" to tracking if ATT can be granted.
-5. **Google Play**: the Data safety form (advertising ID, the ads SDK's data) and the "Contains
+4. **Google Play**: the Data safety form (advertising ID, the ads SDK's data) and the "Contains
    ads" declaration in the Play Console (App content).
-6. **app-ads.txt** (a later launch step, above).
+5. **app-ads.txt** (a later launch step, above).
 
 ## Consent and ATT
 
@@ -347,7 +345,7 @@ From Google's sample ad units (they always serve test ads, safe to click):
 - Android: the plugin applies its own Kotlin Gradle plugin. The first Gradle sync downloads
   `play-services-ads`.
 - `Info.plist` carries `GADApplicationIdentifier`, `NSUserTrackingUsageDescription`
-  (`TODO_UX_ATT`, see Release TODOs) and `SKAdNetworkItems`. UMP needs no extra plist or manifest
+  (UX's final ATT sentence, see Release TODOs) and `SKAdNetworkItems`. UMP needs no extra plist or manifest
   keys. The Android manifest carries the AdMob application ID `meta-data`.
   The Google Mobile Ads SDK crashes at launch if the app ID is missing, so keep these in sync
   with config.
