@@ -272,13 +272,18 @@ function appSources() {
 
 const hitsFor = (pattern) => appSources().filter(({ text }) => pattern.test(text)).map(({ file }) => file).sort();
 
-test('only the opt-in modules reach the push plumbing, the messaging plugin or the settings plugin', () => {
+test('only the opt-in modules and the channel helper reach the push plumbing, the messaging plugin or the settings plugin', () => {
   expect(hitsFor(/pushTokens['"]|@capacitor-firebase\/messaging|capacitor-native-settings/)).toEqual([
     'src/phone/PushSettingsRow.jsx',
     'src/phone/PushSync.jsx',
+    'src/phone/pushChannel.js',
     'src/phone/pushOptIn.js',
     'src/phone/pushTokens.js',
   ]);
+});
+
+test('the channel helper is only used by the app-start sync', () => {
+  expect(hitsFor(/from '\.\/pushChannel'/)).toEqual(['src/phone/PushSync.jsx']);
 });
 
 test('the opt-in module is only used by the first-bet path, the row, the auth sync and log out', () => {

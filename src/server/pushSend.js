@@ -3,10 +3,11 @@ import { pushEnabled } from '../phone/pushConfig';
 import { devicesPath } from './pushTokens';
 import { validCode } from './http';
 
-// Server-side push to every registered device of one uid (docs/PUSH.md). Not
-// wired to any bet event yet. The caller supplies the title, body and data;
-// this module has no user-facing copy. Never logs a token, a uid or a phone
-// number: at most an FCM error code (and a bet code if the caller passes one).
+// Server-side push to every registered device of one uid (docs/PUSH.md).
+// Settle and call-off send through pushEvents.js. The caller supplies the
+// title, body and data; this module has no user-facing copy. Never logs a
+// token, a uid or a phone number: at most an FCM error code (and a bet code
+// if the caller passes one).
 
 // FCM says these tokens will never work again, so their device docs go.
 const DEAD_TOKEN_CODES = new Set([
@@ -23,7 +24,9 @@ function stringData(data) {
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
-export function buildMessage(token, payload = {}, { collapseKey, threadId } = {}) {
+// channelId puts the Android notification in that channel (PUSH_CHANNEL_ID)
+// instead of FCM's default one.
+export function buildMessage(token, payload = {}, { collapseKey, threadId, channelId } = {}) {
   const message = { token };
   const notification = {};
   if (payload.title) notification.title = String(payload.title);
@@ -34,6 +37,10 @@ export function buildMessage(token, payload = {}, { collapseKey, threadId } = {}
   if (collapseKey) {
     // collapseKey replaces a pending message; the tag replaces a shown one.
     message.android = { collapseKey: String(collapseKey), notification: { tag: String(collapseKey) } };
+  }
+  if (channelId) {
+    message.android = message.android || {};
+    message.android.notification = { ...message.android.notification, channelId: String(channelId) };
   }
   if (collapseKey || threadId) {
     message.apns = {};
@@ -64,13 +71,13 @@ function setupErrorCode(err) {
   return typeof err?.code === 'string' && SETUP_ERROR_CODES.has(err.code) ? err.code : 'setup-error';
 }
 
-// payload: { title, body, data }. options: { collapseKey, threadId, code }.
+// payload: { title, body, data }. options: { collapseKey, threadId, channelId, code }.
 // Returns counts only: { sent, failed, removed } (plus skipped when it did nothing,
 // including skipped: 'admin-not-configured' when the Admin SDK is not set up).
 export async function sendToUser(uid, payload = {}, options = {}) {
   if (!pushEnabled()) return { sent: 0, failed: 0, removed: 0, skipped: 'disabled' };
   if (!uid || typeof uid !== 'string') return { sent: 0, failed: 0, removed: 0, skipped: 'no-user' };
-  const { collapseKey, threadId, code } = options;
+  const { collapseKey, threadId, channelId, code } = options;
   const where = validCode(code) ? ` for bet ${code}` : '';
   let db;
   let messaging;
@@ -95,7 +102,7 @@ export async function sendToUser(uid, payload = {}, options = {}) {
     .filter((device) => typeof device.token === 'string' && device.token);
   if (!devices.length) return { sent: 0, failed: 0, removed: 0, skipped: 'no-devices' };
 
-  const messages = devices.map((device) => buildMessage(device.token, payload, { collapseKey, threadId }));
+  const messages = devices.map((device) => buildMessage(device.token, payload, { collapseKey, threadId, channelId }));
   let responses;
   try {
     ({ responses } = await messaging.sendEach(messages));

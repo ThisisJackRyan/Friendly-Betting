@@ -195,3 +195,17 @@ describe('admin setup failures never throw', () => {
     expectNoSecretsLogged();
   });
 });
+
+test('channelId puts the Android notification in that channel, with or without a collapse key', () => {
+  expect(buildMessage('t', { title: 'x' }, { channelId: 'bet_updates' }).android).toEqual({ notification: { channelId: 'bet_updates' } });
+  expect(buildMessage('t', { title: 'x' }, { collapseKey: 'abc123', channelId: 'bet_updates' }).android).toEqual({
+    collapseKey: 'abc123',
+    notification: { tag: 'abc123', channelId: 'bet_updates' },
+  });
+});
+
+test('sendToUser passes channelId through to every message', async () => {
+  await sendToUser(UID, payload, { collapseKey: 'abc123', threadId: 'abc123', channelId: 'bet_updates' });
+  const [messages] = messaging.sendEach.mock.calls[0];
+  messages.forEach((m) => expect(m.android.notification.channelId).toBe('bet_updates'));
+});

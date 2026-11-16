@@ -17,6 +17,7 @@ import { isBetCreator, isCreator } from './creatorSession';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
+import { requestBetPush } from './betPush';
 import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
 import { cleanName, mergeVotes, voteFromDoc, withVotes } from './votes';
 
@@ -392,6 +393,18 @@ async function renameLegacyVote(code, voterId, trimmed) {
   });
 }
 
+// Result texts and push, each behind its own flag and each fire-and-forget.
+// requestBetPush never throws; the catch makes sure a push problem can never
+// reach the settle or call-off either way.
+function notifyAfterClose(code) {
+  requestResultTexts(code);
+  try {
+    requestBetPush(code);
+  } catch (err) {
+    // Push is a bonus.
+  }
+}
+
 export async function settleBet(code, winnerId) {
   const ref = doc(db, 'bets', code);
   const settled = await runTransaction(db, async (tx) => {
@@ -424,8 +437,9 @@ export async function settleBet(code, winnerId) {
     return { ...full, ...update, settledAt: null };
   });
   // Fire-and-forget: the server waits out the undo window, re-reads the bet
-  // and texts each saved number once.
-  requestResultTexts(code);
+  // and texts each saved number once, and pushes the result to the voters.
+  // Neither can fail or slow the settle.
+  notifyAfterClose(code);
   return settled;
 }
 
@@ -462,7 +476,7 @@ export async function undoSettle(code) {
 }
 
 // The creator calls off an open bet: closed, nobody won, no undo. Called-off
-// texts go out right away.
+// texts and push go out right away.
 export async function callOffBet(code) {
   const ref = doc(db, 'bets', code);
   const calledOff = await runTransaction(db, async (tx) => {
@@ -482,7 +496,7 @@ export async function callOffBet(code) {
     tx.update(ref, { status: 'closed', calledOff: true, settledAt: serverTimestamp() });
     return { ...full, status: 'closed', calledOff: true, settledAt: null };
   });
-  requestResultTexts(code);
+  notifyAfterClose(code);
   return calledOff;
 }
 

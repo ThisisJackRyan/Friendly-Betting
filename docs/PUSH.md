@@ -1,6 +1,6 @@
 # Push notifications
 
-Status: **infra plus opt-in UX, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. There is still no send wired to any bet event: settle, call-off, vote and closing-soon sends are later PRs, so a granted permission and a registered token do nothing yet.
+Status: **infra, opt-in UX, and settle and call-off sends, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, and the Android app creates its one notification channel at start. The first-pick vote send and the closing-soon cron are later PRs. Nothing is sent while the flag is off, and it is off.
 
 ## The flag
 
@@ -13,7 +13,9 @@ With the flag off (and always on the web):
 - the client plumbing does nothing (no permission, no token read, no Preferences read, no fetch);
 - the opt-in sheet and the Notifications row never render, and the opt-in module (`src/phone/pushOptIn.js`) makes no plugin, Preferences or register calls; Create does no first-bet lookup, and the tally's share sheet opens after Create exactly as before;
 - `POST`, `DELETE` and `OPTIONS /api/push/tokens` answer a plain 404 with no CORS headers, as if the route did not exist;
-- `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM.
+- `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM;
+- settle and call-off do not post to `/api/bets/{code}/push`, and that route answers `{ skipped: 'disabled' }` without reading the bet, a token or calling Messaging;
+- no Android notification channel is created.
 
 To stop server sends, set the flag off and redeploy the server: the send helper and the token route then go quiet even for installed apps built with it on (their register calls get a 404). Installed apps still run their own client plumbing until a new native build ships with the flag off.
 
@@ -28,7 +30,9 @@ To stop server sends, set the flag off and redeploy the server: the send helper 
 | Opt-in UI | `src/phone/PushOptInSheet.jsx` (on the tally), `src/phone/PushSettingsRow.jsx` (on My bets), `src/phone/PushSync.jsx` (mounted in `mobile/App.jsx`) |
 | Token route | `app/api/push/tokens/route.js` (`POST` and `DELETE /api/push/tokens`) |
 | Token storage | `src/server/pushTokens.js` (`saveDeviceToken`, `removeDeviceToken`) |
-| Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, code })` |
+| Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, channelId, code })` |
+| Settle and call-off send | `src/server/pushEvents.js` (`deliverBetPush`), `app/api/bets/[code]/push/route.js`, client `src/phone/betPush.js` (`requestBetPush`) |
+| Android channel | `src/phone/pushChannel.js` (`ensurePushChannel`, called by `PushSync`); id `PUSH_CHANNEL_ID` in `pushConfig.js` |
 | Admin Messaging | `adminMessaging()` in `src/server/firebaseAdmin.js`, lazy like `adminDb()` / `adminAuth()` |
 | Device owners | `privatePushDevices/{deviceId}` (`{ uid, updatedAt }`), written by `saveDeviceToken` / `removeDeviceToken` |
 | Rules | `privatePushTokens`, `privatePushDevices` and `privatePushSends` deny all client access in `firestore.rules` |
@@ -73,10 +77,11 @@ The opt-in UX still unregisters before log out (`signOutCreator`) and re-registe
 
 ### Server send helper
 
-`sendToUser(uid, { title, body, data }, { collapseKey, threadId, code })` loads that uid's device docs and calls `adminMessaging().sendEach(...)`, one message per device. It is not called from vote, settle, call-off or any cron yet.
+`sendToUser(uid, { title, body, data }, { collapseKey, threadId, channelId, code })` loads that uid's device docs and calls `adminMessaging().sendEach(...)`, one message per device. Settle and call-off call it through `deliverBetPush` (below); vote and the closing cron do not exist yet.
 
 - Title and body come from the caller; this module has no user-facing copy. `data` values are sent as strings.
-- `collapseKey` sets Android `collapseKey` and `notification.tag` (a newer notification replaces the shown one) and the iOS `apns-collapse-id` header. `threadId` sets `aps.thread-id`. Later pick sends pass the bet code for both, so a busy bet replaces instead of stacking.
+- `collapseKey` sets Android `collapseKey` and `notification.tag` (a newer notification replaces the shown one) and the iOS `apns-collapse-id` header. `threadId` sets `aps.thread-id`. Bet sends pass the bet code for both, so a later event on the same bet replaces the earlier notification instead of stacking.
+- `channelId` sets Android `notification.channelId`. Bet sends pass `bet_updates` (`PUSH_CHANNEL_ID`). `betPushOptions(code)` in `pushEvents.js` returns all four options; later vote and closing-soon sends should use it too.
 - On `messaging/registration-token-not-registered` or `messaging/invalid-registration-token`, it deletes that device doc (only if it still holds the dead token).
 - Never throws for setup problems. If `adminDb()` / `adminMessaging()` throw (for example `admin-not-configured` when `FIREBASE_SERVICE_ACCOUNT` is missing or invalid), or the first device read fails on a bad credential, it returns `{ sent: 0, failed: 0, removed: 0, skipped: 'admin-not-configured' }` without calling FCM or writing anything. Any other device read failure returns `skipped: 'read-failed'`. Either way it logs only a safe error code, so a settle caller can ignore the result.
 - Returns counts only: `{ sent, failed, removed }`. Logs at most error codes and, if the caller passes a valid one, the bet code. Never a token, uid or phone number. Payloads must never contain phone numbers.
@@ -91,7 +96,7 @@ The opt-in UX still unregisters before log out (`signOutCreator`) and re-registe
 - Android: `POST_NOTIFICATIONS` in `AndroidManifest.xml` (Android 13+ asks only when the app requests it). `firebase_messaging_auto_init_enabled` is `false`, so no FCM token is created until the app asks for one.
 - iOS: `UIBackgroundModes` → `remote-notification` and `FirebaseMessagingAutoInitEnabled` = `NO` in `Info.plist`. `AppDelegate.swift` forwards `didRegisterForRemoteNotificationsWithDeviceToken`, the failure callback and `didReceiveRemoteNotification` to the plugin. `App.entitlements` is unchanged: the Push Notifications entitlement is added in Xcode (below).
 - SPM: the messaging plugin uses `packageOptions.symlink` in `capacitor.config.json`, like the authentication plugin, to avoid a package identity collision. `npx cap sync` regenerates `Package.swift` and the Gradle includes.
-- No Android notification channel is created yet; FCM's default channel applies until a later PR adds one with approved copy.
+- Android notification channel: see "Android notification channel" below.
 
 ## Opt-in UX
 
@@ -124,17 +129,64 @@ State is kept per uid in Preferences: `fb.pushAsked.{uid}` (`granted` or `denied
 - `PushSync` (mounted once in `mobile/App.jsx`) re-registers on each auth change when that uid's in-app choice is on and the OS permission is already granted. It never asks.
 - Log out (`signOutCreator`) calls `unregisterPushToken()` first, while the user's ID token still works, for a uid whose choice is on. It waits at most 3 s and never blocks the logout. The in-app choice stays, so signing back in registers again.
 
-### Notification copy
+## Settle and call-off send
 
-Titles and bodies for the pick, settle, call-off and closing-soon sends are approved by UX (Nov 16 2026) but are not in the app yet; each lands with its send PR below.
+### Copy (UX final, Nov 16 2026)
+
+In `src/phone/pushCopy.js` (`PUSH_NOTIFICATION_COPY`), asserted verbatim in `pushCopy.test.js` and `pushEvents.test.js`. Every title is the bet question (the settlement snapshot's `question`, else `questionOf(bet)`), so notifications group by bet; only the body changes.
+
+| Event | Title | Body |
+| --- | --- | --- |
+| Settled with a winner | `{question}` | `{side} won. See who called it.` (`{side}` is `settlement.optionLabel`, the winning option's vote label, for example `Over won. See who called it.`) |
+| Called off | `{question}` | `This bet was called off. Nobody won this one.` |
+
+The pick and closing-soon bodies are approved too and land with their send PRs.
+
+Payload `data` (strings only): `code`, `route` = `/b/{code}`, `event` = `settle` or `calloff`. No phone numbers, tokens, uids or names. Options: `collapseKey` and `threadId` = the bet code, `channelId` = `bet_updates`.
+
+### Who gets it
+
+- **Settle:** the voters on `settlement.recipients` (the snapshot taken in the settle transaction), minus the creator and the settler (settle is creator-only, so they are the same uid; a `settledBy` uid, if a later build writes one, is skipped too). A voter without a uid is skipped. Winners and losers get the same body.
+- **Call-off:** voters with a pick in the live votes (the bet's `votes` array merged with `bets/{code}/votes/*`, via `readBetWithVotes`), minus the creator. There is no settlement snapshot on a call-off. The in-app inbox skips called-off bets; push does not.
+- A recipient with no registered device just gets nothing.
+
+### Trigger: fire-and-forget POST plus a server-side wait
+
+After `settleBet` or `callOffBet` commits, the client calls `requestBetPush(code)`, right next to `requestResultTexts(code)`: a fire-and-forget `POST /api/bets/{code}/push` with no body. It is never awaited, every error is caught, and with the flag off it does not post at all. It runs from any client (a web settle still pings the voters' phones), and it is independent of the result-texts flag.
+
+The route (`runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 60`, CORS from `src/server/http.js`) calls `deliverBetPush`:
+
+1. Flag off: returns `{ skipped: 'disabled' }` before the database.
+2. Reads the bet with its votes. While a run for the same `code` + `settledAt` is in flight on this instance, a repeat returns `{ skipped: 'in-flight' }` at once, so a double POST does not start two 35s waits.
+3. **Settle:** waits `undoHoldMs(bet)` (until 35s after the server `settledAt`, the rules' undo window), then re-reads the bet. Still inside a window (it was undone and settled again), or no longer settled (undone): nobody is sent and no claim is written. A later settle has a new `settledAt`, so its own POST is a new event and may send. **Call-off:** no undo exists (`undoHoldMs` is 0), so it sends right away.
+4. An event older than 10 minutes (`MAX_EVENT_AGE_MS`) or with no `settledAt` sends nobody, so a stray POST cannot ping voters about a bet settled long ago (for example before the flag was on).
+5. Claims `privatePushSends/{eventId}` in a transaction, with `eventId` = `settle:{code}:{settledAtMs}` or `calloff:{code}:{settledAtMs}`. An existing claim means already sent: `{ skipped: 'already-sent' }`. The claim holds only `{ code, at }`.
+6. Sends to each recipient through `sendToUser`, one at a time; a failure or throw for one is caught and counted, and the rest still go. If nothing reached any device and something failed (or the Admin SDK was not set up), the claim is deleted so a retry can send. Recipients who simply have no device are not a failure.
+7. Answers counts only: `{ sent, failed }` (plus `skipped` when it did nothing). 503 when `FIREBASE_SERVICE_ACCOUNT` is missing, 500 on any other read failure; logs at most the bet code and an error code.
+
+No auth, like the result-text send route: the body is ignored, the server picks the recipients, it only acts on a bet already settled past its undo window or called off, and each event is claimed once. The worst a stranger can do is trigger, early, the one notification the creator's own POST would have sent anyway.
+
+Why this trigger. It is the pattern result texts already ship (`deliverResultTexts`, same 35s hold, same re-read). The alternatives are worse on Vercel today: a check on next read would hold the ping until someone opens the bet, which defeats the point; a Vercel cron has a granularity of minutes, needs `vercel.json` and `CRON_SECRET` (planned only for closing-soon, PR 5), and would have to scan for settled bets; Firestore triggers would need Cloud Functions, which this project does not deploy.
+
+**Tradeoff (same as result texts):** the wait lives inside one function invocation. If the function dies mid-wait (a crash, a deploy, a platform timeout), or the client's POST never reaches the server (offline right after settling, app killed), that settle sends no push, and nothing retries it later. Nothing is claimed in that case, so a later POST for the same settle (for example a settle retry with the same winner, which posts again) can still send within the 10-minute limit. Call-offs do not wait, so they only miss on a lost POST or a crash mid-send.
+
+## Android notification channel
+
+UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
+
+- Name: `Bet updates`
+- Description: `Picks, results, and closing reminders on your bets.`
+- Id: `bet_updates` (`PUSH_CHANNEL_ID` in `src/phone/pushConfig.js`; not user-facing; never rename it, Android keeps the user's channel settings under the id).
+- Importance: default (sound, no heads-up). Android fixes importance at creation, so changing it later needs a new id.
+
+`ensurePushChannel()` (`src/phone/pushChannel.js`) calls `FirebaseMessaging.createChannel` once at app start from `PushSync`. Android only (SDK 26+; iOS has no channels); with the flag off or on the web, `PushSync` renders nothing and no plugin or Preferences call is made. It never asks for permission, never blocks the auth sync, and swallows every error (FCM's default channel still delivers). Creating an existing channel only updates its name and description, so running every launch is safe. Every bet push sets `android.notification.channelId` to this id.
 
 ## Later PRs
 
-1. **Settle and call-off send**: `POST /api/bets/{code}/push`, server-chosen recipients, `privatePushSends/{eventId}` claims, after the 35s undo window for settle.
-2. **First-pick vote send** to the creator, collapsed per bet (`collapseKey` / `threadId` = bet code).
-3. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
+1. **First-pick vote send** to the creator, collapsed per bet (`betPushOptions(code)`).
+2. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
 
-All of these ship with the flag off. Their notification titles and bodies (already approved, see above) arrive with those PRs.
+Both ship with the flag off. Their bodies (already approved) arrive with those PRs.
 
 ## What Jack must do himself
 

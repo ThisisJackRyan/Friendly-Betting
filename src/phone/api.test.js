@@ -6,6 +6,7 @@ import {
 } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
+import { requestBetPush } from './betPush';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
@@ -24,6 +25,7 @@ jest.mock('firebase/firestore', () => ({
   deleteField: () => 'DELETE_FIELD',
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
+jest.mock('./betPush', () => ({ requestBetPush: jest.fn() }));
 jest.mock('./resultTexts', () => ({
   requestResultTexts: jest.fn(),
   apiUrl: (path) => `https://www.friendly-bets.com${path}`,
@@ -102,6 +104,7 @@ beforeEach(() => {
   });
   rememberBet.mockClear();
   requestResultTexts.mockReset();
+  requestBetPush.mockReset();
 });
 
 test('closing writes one atomic result with both winner and loser recipients', async () => {
@@ -348,6 +351,41 @@ test('a failed settle never asks for result texts', async () => {
   await settleBet('abc123', 'a');
   await expect(settleBet('abc123', 'b')).rejects.toThrow('already settled');
   expect(requestResultTexts).toHaveBeenCalledTimes(1);
+});
+
+test('a committed settle or call-off asks for a push once, after the write', async () => {
+  const statusAtCall = [];
+  requestBetPush.mockImplementation(() => { statusAtCall.push(stored.status); });
+  await settleBet('abc123', 'a');
+  expect(requestBetPush).toHaveBeenCalledTimes(1);
+  expect(requestBetPush).toHaveBeenCalledWith('abc123');
+  stored = { ...stored, status: 'open', winnerId: null, settlement: undefined, settledAt: undefined };
+  await callOffBet('abc123');
+  expect(requestBetPush).toHaveBeenCalledTimes(2);
+  expect(statusAtCall).toEqual(['closed', 'closed']);
+  // Push sits next to result texts; neither replaces the other.
+  expect(requestResultTexts).toHaveBeenCalledTimes(2);
+});
+
+test('a failed settle or call-off never asks for a push', async () => {
+  auth.currentUser = null;
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('Only the creator');
+  await expect(callOffBet('abc123')).rejects.toThrow('Only the creator');
+  auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }] };
+  runTransaction.mockRejectedValueOnce(new Error('offline'));
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('offline');
+  expect(requestBetPush).not.toHaveBeenCalled();
+});
+
+test('a throwing push request never breaks a settle or call-off', async () => {
+  requestBetPush.mockImplementation(() => { throw new Error('push broke'); });
+  const result = await settleBet('abc123', 'a');
+  expect(result.status).toBe('closed');
+  expect(stored.winnerId).toBe('a');
+  stored = { ...stored, status: 'open', winnerId: null, settlement: undefined, settledAt: undefined };
+  const off = await callOffBet('abc123');
+  expect(off.calledOff).toBe(true);
+  expect(requestBetPush).toHaveBeenCalledTimes(2);
 });
 
 test('votes and settlements never carry a phone number', async () => {

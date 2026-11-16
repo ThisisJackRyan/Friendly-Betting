@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react';
 import { Capacitor } from '@capacitor/core';
 import PushSync from './PushSync';
 import { syncPushForUser } from './pushOptIn';
+import { ensurePushChannel } from './pushChannel';
 
 const mockAuth = { listener: null };
 jest.mock('firebase/auth', () => ({
@@ -17,6 +18,7 @@ jest.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: jest.fn(() => true), getPlatform: jest.fn(() => 'ios') },
 }));
 jest.mock('./pushOptIn', () => ({ syncPushForUser: jest.fn(async () => true) }));
+jest.mock('./pushChannel', () => ({ ensurePushChannel: jest.fn(async () => true) }));
 
 const saved = process.env.NEXT_PUBLIC_PUSH_ENABLED;
 
@@ -54,4 +56,20 @@ test.each([
   expect(container).toBeEmptyDOMElement();
   expect(mockAuth.listener).toBeNull();
   expect(syncPushForUser).not.toHaveBeenCalled();
+  expect(ensurePushChannel).not.toHaveBeenCalled();
+});
+
+test('creates the Android channel once at start, before any sign-in, and not again on auth changes', async () => {
+  render(<PushSync />);
+  expect(ensurePushChannel).toHaveBeenCalledTimes(1);
+  await act(async () => mockAuth.listener({ uid: 'creator-1' }));
+  await act(async () => mockAuth.listener({ uid: 'creator-2' }));
+  expect(ensurePushChannel).toHaveBeenCalledTimes(1);
+});
+
+test('a failing channel never blocks the auth sync', async () => {
+  ensurePushChannel.mockRejectedValueOnce(new Error('boom'));
+  render(<PushSync />);
+  await act(async () => mockAuth.listener({ uid: 'creator-1' }));
+  expect(syncPushForUser).toHaveBeenCalledWith('creator-1');
 });
