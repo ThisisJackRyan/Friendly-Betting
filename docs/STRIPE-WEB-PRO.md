@@ -16,14 +16,15 @@ and `/pro` render the same markup (tested), and the mock purchase works as befor
           -> Stripe Checkout (hosted) -> back to /pro?checkout=success | cancel
 Stripe -> POST /api/stripe/webhook (signed) -> entitlements/{uid} (Admin SDK)
 Pro member: Manage subscription -> POST /api/pro/portal -> Stripe customer portal -> /pro
+My bets: Pro ended banner X -> POST /api/pro/billing-notice -> stripeNoticeDismissals/{uid} (Admin SDK)
 ```
 
 | Piece | File |
 | --- | --- |
 | Flag, secrets, test-key guard, lazy Stripe client | `src/server/stripeConfig.js` |
 | Member auth, Checkout, portal, webhook logic | `src/server/stripeBilling.js` |
-| Routes | `app/api/pro/checkout/route.js`, `app/api/pro/portal/route.js`, `app/api/stripe/webhook/route.js` |
-| Client calls | `requestCheckout`, `requestBillingPortal` in `src/phone/entitlementApi.js` |
+| Routes | `app/api/pro/checkout/route.js`, `app/api/pro/portal/route.js`, `app/api/pro/billing-notice/route.js`, `app/api/stripe/webhook/route.js` |
+| Client calls | `requestCheckout`, `requestBillingPortal`, `requestGraceEndedNotice`, `requestDismissGraceEndedNotice` in `src/phone/entitlementApi.js` |
 | Leaving for Stripe | `src/phone/billingRedirect.js` (https URLs only) |
 | past_due grace (read time) | `STRIPE_GRACE_DAYS`, `stripeGraceNotice` in `src/phone/entitlement.js` |
 | UI | `src/phone/ProSheet.jsx`, `src/phone/Paywall.jsx`, `src/phone/StripeBillingNotice.jsx` (My bets); new copy in `STRIPE_COPY` (`src/phone/proConfig.js`) |
@@ -102,7 +103,7 @@ account's default version never changes what the API returns. Webhook payloads a
 **endpoint's** API version, not the client's: create the endpoint with this same version, and
 update both together when the SDK is upgraded.
 
-**Time limit.** The three Stripe routes set `maxDuration = 30` (seconds), so a stuck Stripe or
+**Time limit.** The Stripe routes (and `billing-notice`) set `maxDuration = 30` (seconds), so a stuck Stripe or
 Firestore call can't hold a function open. A webhook that times out is retried by Stripe.
 
 **Where the period end lives.** The installed `stripe` SDK (v23, API version
@@ -121,6 +122,8 @@ entitlements/{uid}
   stripePastDueAt                                   // first failed payment, while past_due (see below)
 stripeEvents/{eventId}      { type, created, processedAt, expireAt }   // server only
 stripeCustomers/{customerId} { uid }                         // server only
+stripeNoticeDismissals/{uid} { graceEndedPastDueAt, dismissedAt } // server only, written by
+                                                             // /api/pro/billing-notice (below)
 ```
 
 (Checkout itself writes only `stripeCustomerId` onto `entitlements/{uid}` and the
@@ -184,6 +187,13 @@ app).
   running `stripePastDueAt`, so it can never bring Pro back. A `stripePastDueAt` whose grace
   already ran out is kept, only so My bets can say Pro ended (below). A later `past_due` reuses
   it (already expired), and `canceled` never grants again anyway.
+- **Only near the paid period's end.** The first `past_due` starts a grace only while the
+  doc's stored `expiresAt` (the period end the last live event wrote) is still in the future, or
+  at most `PAST_DUE_GRACE_START_WINDOW_DAYS` (1 day, `src/server/stripeBilling.js`) behind the
+  server's clock. A `past_due` that arrives later than that (a missed renewal whose webhooks
+  never came, so Pro already lapsed at the period end) starts no fresh grace: `stripeStatus`
+  becomes `past_due`, `expiresAt` stays where it was, no `stripePastDueAt` is written, and Pro
+  stays ended (no My bets banner either). A payment that goes through is Pro again as usual.
 - **No grace without a live plan first.** `past_due` after `paused` or `incomplete`, or for a
   doc with no `stripePastDueAt` and a status that is not live, ends Pro as before.
 - **Other plans.** Only a Stripe plan gets a grace; an admin, mock or store plan is untouched
@@ -202,10 +212,23 @@ app).
   (`GoProLink`). Only for a Stripe plan whose stored `stripePastDueAt` grace ran out: never for
   free members, founders, other plans, or a member whose Pro ended another way (a cancel, even
   during the grace, removes `stripePastDueAt`).
-- **Lifetime.** No dismiss button. The ended banner shows for
+- **Lifetime.** The grace banner has no dismiss. The ended banner shows for
   `STRIPE_GRACE_ENDED_NOTICE_DAYS` (14) days after the grace ended, then stops. Being Pro again
   (recovery, a new subscription, any other plan) hides both at once; a new Stripe plan also
   removes `stripePastDueAt`.
+- **Dismissing the ended banner.** The ended banner (only) has a muted, icon-only X
+  (`aria-label="Dismiss"`, 44px tap area). Dismissing hides it for good **on that account**, on
+  every device: `POST /api/pro/billing-notice` with `{ action: 'dismiss' }` stores the grace's
+  `stripePastDueAt` as `graceEndedPastDueAt` in `stripeNoticeDismissals/{uid}` (Admin SDK). The
+  uid comes from the ID token only (same member checks and test-mode allowlist as the portal
+  route); it is a 409 `no-notice` unless the ended banner is showing for that doc now. Not on
+  `entitlements/{uid}`: clients can't write there and the webhook replaces that doc. No rule
+  matches `stripeNoticeDismissals`, so the default deny keeps every client out (tested in
+  `rules/firestore.rules.test.js`); **no `firestore.rules` change.** The same route with `{}`
+  answers `{ dismissed }` for the grace now on the doc; My bets asks once per session before
+  showing the ended banner (so a dismissed one never flashes; a failed read shows it). A later
+  grace has a new `stripePastDueAt`, so its ended banner shows again. A failed dismiss save
+  still hides the banner for that visit; the next load asks the server again.
 
 **`stripeCustomers/{customerId}`** maps a Stripe customer back to its uid for a subscription
 event without `metadata.uid` (one edited in the dashboard, or created outside Checkout). Written

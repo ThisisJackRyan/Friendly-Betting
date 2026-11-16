@@ -95,6 +95,18 @@ export function requestBillingPortal() {
   return postWithToken('/api/pro/portal', {});
 }
 
+// Web only: whether the signed-in member dismissed My bets' "Pro ended"
+// banner for their current grace ({ dismissed }), and dismissing it. Stored
+// per account on the server (stripeNoticeDismissals/{uid}), never on the
+// device.
+export function requestGraceEndedNotice() {
+  return postWithToken('/api/pro/billing-notice', {});
+}
+
+export function requestDismissGraceEndedNotice() {
+  return postWithToken('/api/pro/billing-notice', { action: 'dismiss' });
+}
+
 function postWithToken(path, body) {
   const controller = new AbortController();
   return withTimeout(postPro(path, body, controller.signal), controller);

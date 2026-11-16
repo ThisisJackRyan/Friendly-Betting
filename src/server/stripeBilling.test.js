@@ -6,6 +6,7 @@ import {
   createCheckout,
   handleStripeEvent,
   memberAllowed,
+  PAST_DUE_GRACE_START_WINDOW_DAYS,
   nextEntitlement,
   periodEndMillis,
   subscriptionState,
@@ -13,6 +14,7 @@ import {
 import { STRIPE_GRACE_DAYS, isProEntitlement, stripeGraceNotice } from '../phone/entitlement';
 import * as checkoutRoute from '../../app/api/pro/checkout/route';
 import * as portalRoute from '../../app/api/pro/portal/route';
+import * as billingNoticeRoute from '../../app/api/pro/billing-notice/route';
 import * as webhookRoute from '../../app/api/stripe/webhook/route';
 import * as mockRoute from '../../app/api/pro/mock-purchase/route';
 
@@ -165,6 +167,7 @@ describe('every route is a 404 with the feature off', () => {
   const routes = [
     ['checkout', checkoutRoute],
     ['portal', portalRoute],
+    ['billing notice', billingNoticeRoute],
     ['webhook', webhookRoute],
   ];
 
@@ -437,7 +440,7 @@ describe('checkout route', () => {
 
 describe('portal route', () => {
   test.each([
-    ['no token', undefined, 401],
+    ['no token', '', 401],
     ['a bad token', 'forged', 401],
     ['an anonymous session', 'anon-token', 403],
     ['a token without a phone number', 'nophone-token', 403],
@@ -481,6 +484,84 @@ describe('portal route', () => {
     mockStripeApi.billingPortal.sessions.create.mockRejectedValue(Object.assign(new Error('cus_jack'), { code: 'resource_missing' }));
     const res = await post(portalRoute, { token: 'jack-token' });
     expect(res.status).toBe(500);
+    expectQuietLogs();
+  });
+});
+
+describe('billing notice route (the Pro ended banner’s dismiss)', () => {
+  const GRACE_MS = STRIPE_GRACE_DAYS * DAY * 1000;
+  const URL = 'http://localhost/api/pro/billing-notice';
+  // A Stripe plan whose grace started `ago` ms before NOW, as the webhook
+  // writes it (the fake Admin Timestamp shape).
+  const graced = (ago, extra = {}) => ({ plan: 'pro', source: 'stripe', since: 1, stripeCustomerId: 'cus_jack', stripeSubscriptionId: 'sub_1', stripeStatus: 'past_due', stripePastDueAt: stamp(NOW - ago), expiresAt: stamp(NOW - ago + GRACE_MS), ...extra });
+  const ENDED = () => graced(GRACE_MS + 1000);
+  const read = (token, body = {}) => post(billingNoticeRoute, { token, body, url: URL });
+  const dismiss = (token, body = {}) => post(billingNoticeRoute, { token, body: { action: 'dismiss', ...body }, url: URL });
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(NOW));
+  afterEach(() => Date.now.mockRestore());
+
+  test.each([
+    ['no token', '', 401],
+    ['a bad token', 'forged', 401],
+    ['a revoked token', 'revoked-token', 401],
+    ['an anonymous session', 'anon-token', 403],
+    ['no phone number', 'nophone-token', 403],
+  ])('%s: %s, nothing read or written', async (_name, token, status) => {
+    db = fakeDb({ 'entitlements/jack': ENDED() });
+    for (const res of [await read(token), await dismiss(token)]) expect(res.status).toBe(status);
+    expect(db.writes).toEqual([]);
+  });
+
+  test('dismiss saves the ended grace for the token’s account, server only, never a uid from the body', async () => {
+    db = fakeDb({ 'entitlements/jack': ENDED(), 'entitlements/maya': ENDED() });
+    expect(await (await read('jack-token')).json()).toEqual({ dismissed: false });
+    const res = await dismiss('jack-token', { uid: 'maya' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ dismissed: true });
+    expect(db.data('stripeNoticeDismissals/jack')).toEqual({ graceEndedPastDueAt: NOW - GRACE_MS - 1000, dismissedAt: 'SERVER_TIME' });
+    expect(db.data('stripeNoticeDismissals/maya')).toBeUndefined();
+    // Nothing on entitlements: clients can't write there, and the webhook replaces it.
+    expect(db.writes).toEqual([['set', 'stripeNoticeDismissals/jack']]);
+    expect(db.data('entitlements/jack')).toEqual(ENDED());
+    // Every later read, on any device, says dismissed; Maya's doesn't.
+    expect(await (await read('jack-token')).json()).toEqual({ dismissed: true });
+    expect(await (await read('maya-token')).json()).toEqual({ dismissed: false });
+    expectQuietLogs();
+  });
+
+  test('a later grace that runs out is a new banner: not dismissed', async () => {
+    db = fakeDb({ 'entitlements/jack': ENDED(), 'stripeNoticeDismissals/jack': { graceEndedPastDueAt: NOW - 40 * DAY * 1000 } });
+    expect(await (await read('jack-token')).json()).toEqual({ dismissed: false });
+  });
+
+  test.each([
+    ['no entitlement', null],
+    ['a free member with a Stripe customer', { stripeCustomerId: 'cus_jack' }],
+    ['a member in the grace (still Pro)', graced(DAY * 1000)],
+    ['a member who is Pro again', { ...graced(GRACE_MS + 1000), stripeStatus: 'active', stripePastDueAt: undefined, expiresAt: stamp(NOW + 30 * DAY * 1000) }],
+    ['a member long after the ended notice', graced(GRACE_MS + 20 * DAY * 1000)],
+  ])('%s: nothing to dismiss is a 409 that writes nothing', async (_name, doc) => {
+    db = fakeDb(doc ? { 'entitlements/jack': JSON.parse(JSON.stringify(doc)) } : {});
+    const res = await dismiss('jack-token');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'no-notice' });
+    expect(db.writes).toEqual([]);
+  });
+
+  test('503 without admin credentials', async () => {
+    adminDb.mockImplementation(() => {
+      throw Object.assign(new Error('x'), { code: 'admin-not-configured' });
+    });
+    expect((await read('jack-token')).status).toBe(503);
+  });
+
+  test('a failed write is a 500 that logs only a code', async () => {
+    db = fakeDb({ 'entitlements/jack': ENDED() });
+    const failing = { ...db, doc: (path) => ({ ...db.doc(path), set: async () => { throw Object.assign(new Error('jack'), { code: 'unavailable' }); } }) };
+    adminDb.mockImplementation(() => failing);
+    const res = await dismiss('jack-token');
+    expect(res.status).toBe(500);
+    expect(console.error).toHaveBeenCalledWith('billing notice failed: unavailable');
     expectQuietLogs();
   });
 });
@@ -695,6 +776,7 @@ describe('test mode: only uids on STRIPE_TEST_UIDS', () => {
   const routes = [
     ['checkout', checkoutRoute],
     ['portal', portalRoute],
+    ['billing notice', billingNoticeRoute],
   ];
   beforeEach(() => {
     db = fakeDb({
@@ -923,6 +1005,73 @@ describe('webhook route: past_due grace (3 days)', () => {
     expect(ent()).toMatchObject({ stripePastDueAt: { ts: NOW - 3600 * 1000 }, expiresAt: { ts: NOW - 3600 * 1000 + GRACE } });
   });
 
+  describe('a missed renewal: a grace starts only near the stored period end', () => {
+    const WINDOW = PAST_DUE_GRACE_START_WINDOW_DAYS * DAY * 1000;
+    const paidUntil = (ms) => {
+      db = fakeDb({ 'entitlements/jack': { ...paidDoc(), expiresAt: stamp(ms) } });
+    };
+
+    test('the window is one named constant: 1 day', () => {
+      expect(PAST_DUE_GRACE_START_WINDOW_DAYS).toBe(1);
+    });
+
+    test('expiresAt still in the future: the grace starts', async () => {
+      paidUntil(NOW + 60 * 60 * 1000);
+      await update(NOW, pastDue());
+      expect(ent()).toMatchObject({ stripeStatus: 'past_due', stripePastDueAt: { ts: NOW }, expiresAt: { ts: NOW + GRACE } });
+      expect(proAt(NOW + DAY * 1000)).toBe(true);
+      expect(stripeGraceNotice(entAsRead(), NOW)).toBe('grace');
+    });
+
+    test.each([
+      ['an hour', 60 * 60 * 1000],
+      ['just under a day', 24 * 60 * 60 * 1000 - 1000],
+      ['exactly the window', 24 * 60 * 60 * 1000],
+    ])('expiresAt %s in the past: the grace starts', async (_label, ago) => {
+      paidUntil(NOW - ago);
+      await update(NOW, pastDue());
+      expect(ent()).toMatchObject({ stripeStatus: 'past_due', stripePastDueAt: { ts: NOW }, expiresAt: { ts: NOW + GRACE } });
+      expect(proAt(NOW + 1000)).toBe(true);
+    });
+
+    test.each([
+      ['just past the window', 1000],
+      ['days later', 5 * DAY * 1000],
+      ['a month later', 30 * DAY * 1000],
+    ])('expiresAt further in the past (%s): no new grace, Pro stays ended', async (_label, extra) => {
+      const paidThrough = NOW - WINDOW - extra;
+      paidUntil(paidThrough);
+      expect(proAt(NOW, { ...entAsRead(), expiresAt: paidThrough })).toBe(false);
+      const res = await update(NOW, pastDue());
+      expect(res.status).toBe(200);
+      expect(ent().stripeStatus).toBe('past_due');
+      expect(ent()).not.toHaveProperty('stripePastDueAt');
+      // The stored end is kept; nothing moves it forward.
+      expect(ent().expiresAt).toEqual(stamp(paidThrough));
+      expect(proAt(NOW)).toBe(false);
+      expect(stripeGraceNotice(entAsRead(), NOW)).toBeNull();
+      // Later retries still find no grace to keep, so none starts.
+      await update(NOW + DAY * 1000, pastDue());
+      expect(ent()).not.toHaveProperty('stripePastDueAt');
+      expect(proAt(NOW + DAY * 1000)).toBe(false);
+      // A payment that goes through is Pro again, as always.
+      await update(NOW + 2 * DAY * 1000, subscription({ end: SEC + 40 * DAY }));
+      expect(ent()).toMatchObject({ stripeStatus: 'active', expiresAt: { ts: (SEC + 40 * DAY) * 1000 } });
+      expect(proAt(NOW + 2 * DAY * 1000)).toBe(true);
+    });
+
+    test('the window is measured from the server clock, not a late event’s time', async () => {
+      // The event says past_due a while ago, but it arrives two days after
+      // the period ended: no grace.
+      paidUntil(NOW - 2 * DAY * 1000);
+      at(NOW);
+      mockStripeApi.subscriptions.retrieve.mockResolvedValue(pastDue());
+      await deliver(event('customer.subscription.updated', pastDue(), SEC - 3 * DAY));
+      expect(ent()).not.toHaveProperty('stripePastDueAt');
+      expect(proAt(NOW)).toBe(false);
+    });
+  });
+
   test('a retry does not extend the grace', async () => {
     await update(NOW, pastDue());
     // Stripe retries the card a day and two days later; the subscription
@@ -1097,6 +1246,14 @@ describe('webhook helpers', () => {
 
       test('live to past_due starts it at the state’s time', () => {
         expect(nextEntitlement(args(paid, pastDue))).toMatchObject({ stripePastDueAt: NOW - 50, expiresAt: NOW - 50 + GRACE, stripeStatus: 'past_due' });
+      });
+
+      test('no grace starts when the stored period ended over the window ago', () => {
+        const WINDOW = PAST_DUE_GRACE_START_WINDOW_DAYS * DAY * 1000;
+        expect(nextEntitlement(args({ ...paid, expiresAt: NOW - WINDOW }, pastDue))).toMatchObject({ stripePastDueAt: NOW - 50 });
+        const late = nextEntitlement(args({ ...paid, expiresAt: NOW - WINDOW - 1 }, pastDue));
+        expect(late).not.toHaveProperty('stripePastDueAt');
+        expect(late.expiresAt).toBe(NOW - WINDOW - 1);
       });
 
       test('a later past_due keeps the stored start', () => {

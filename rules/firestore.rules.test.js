@@ -582,6 +582,19 @@ describe('stripe web billing (docs/STRIPE-WEB-PRO.md)', () => {
       await assertFails(db.doc('stripeCustomers/cus_test_2').set({ uid: 'creator-1' }));
     }
   });
+
+  test('no client reads or writes the Pro ended banner dismissals (stripeNoticeDismissals), not even its own', async () => {
+    const mine = 'stripeNoticeDismissals/creator-1';
+    await seed({ [mine]: { graceEndedPastDueAt: 1 } });
+    for (const db of [creator(), otherPhone(), anon(), guest()]) {
+      await assertFails(db.doc(mine).get());
+      await assertFails(db.collection('stripeNoticeDismissals').get());
+      await assertFails(db.doc(mine).set({ graceEndedPastDueAt: 2 }));
+      await assertFails(db.doc(mine).update({ graceEndedPastDueAt: 2 }));
+      await assertFails(db.doc(mine).delete());
+    }
+    await assertFails(creator().doc('stripeNoticeDismissals/creator-2').set({ graceEndedPastDueAt: 2 }));
+  });
 });
 
 describe('meta', () => {

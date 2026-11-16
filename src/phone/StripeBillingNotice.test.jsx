@@ -4,9 +4,10 @@ import { MyBetsList } from './MyBets';
 import EntitlementSync from './EntitlementSync';
 import { subscribeMyBets } from './api';
 import { useIdentity, useSignedInUser } from './identity';
-import { requestBillingPortal, subscribeEntitlement } from './entitlementApi';
+import { requestBillingPortal, requestDismissGraceEndedNotice, requestGraceEndedNotice, subscribeEntitlement } from './entitlementApi';
 import { leaveForBilling } from './billingRedirect';
 import { __resetEntitlementForTests } from './useEntitlement';
+import { __resetBillingNoticeForTests } from './StripeBillingNotice';
 import { STRIPE_GRACE_DAYS, STRIPE_GRACE_ENDED_NOTICE_DAYS } from './entitlement';
 import { STRIPE_COPY } from './proConfig';
 import { isNativeApp } from '../platform/runtime';
@@ -33,6 +34,7 @@ const ERROR = 'Couldn’t finish that. Try again.';
 
 const DAY = 24 * 60 * 60 * 1000;
 const JACK = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
+const MAYA = { uid: 'maya', providerData: [{ providerId: 'phone' }] };
 const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_STRIPE_WEB_PRO'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
 
@@ -44,22 +46,43 @@ const pastDue = (ago, status = 'past_due') => {
 };
 
 let plan;
+let pushPlan;
+// The server's stripeNoticeDismissals: uid -> the stripePastDueAt whose
+// ended banner that account dismissed. The mocked calls answer for the
+// signed-in account (the ID token), like /api/pro/billing-notice.
+let serverDismissals;
+let signedIn;
+const signIn = (user) => {
+  signedIn = user;
+  useIdentity.mockReturnValue(user);
+  useSignedInUser.mockReturnValue(user);
+};
 beforeEach(() => {
   __resetEntitlementForTests();
+  __resetBillingNoticeForTests();
   plan = null;
+  pushPlan = null;
+  serverDismissals = new Map();
   FLAGS.forEach((flag) => {
     process.env[flag] = '1';
   });
-  useIdentity.mockReturnValue(JACK);
-  useSignedInUser.mockReturnValue(JACK);
+  signIn(JACK);
   subscribeMyBets.mockImplementation((_uid, onChange) => {
     onChange([]);
     return () => {};
   });
   subscribeEntitlement.mockReset();
   subscribeEntitlement.mockImplementation((_uid, onChange) => {
+    pushPlan = onChange;
     onChange(plan);
     return () => {};
+  });
+  requestGraceEndedNotice.mockReset();
+  requestGraceEndedNotice.mockImplementation(async () => ({ dismissed: serverDismissals.get(signedIn.uid) === plan?.stripePastDueAt }));
+  requestDismissGraceEndedNotice.mockReset();
+  requestDismissGraceEndedNotice.mockImplementation(async () => {
+    serverDismissals.set(signedIn.uid, plan.stripePastDueAt);
+    return { dismissed: true };
   });
   requestBillingPortal.mockReset();
   requestBillingPortal.mockResolvedValue({ url: 'https://billing.stripe.com/p/session/bps_1' });
@@ -75,10 +98,11 @@ afterEach(() => {
   });
 });
 
-async function show(entitlement) {
+async function show(entitlement, user = JACK) {
   plan = entitlement;
-  render(<><EntitlementSync /><MyBetsList user={JACK} /></>);
+  const view = render(<><EntitlementSync /><MyBetsList user={user} /></>);
   await act(async () => {});
+  return view;
 }
 
 const banner = () => document.querySelector('.billing-notice');
@@ -142,10 +166,113 @@ test.each([
   ['the native app', () => isNativeApp.mockReturnValue(true)],
 ])('nothing with %s', async (_label, turnOff) => {
   turnOff();
-  await show(pastDue(DAY));
+  const first = await show(pastDue(DAY));
   expect(banner()).toBeNull();
-  plan = pastDue(STRIPE_GRACE_DAYS * DAY + 1000);
+  // A fresh load with the ended plan: unmount first, so resetting the shared
+  // entitlement store notifies no mounted component (outside act).
+  first.unmount();
   __resetEntitlementForTests();
-  await show(plan);
+  await show(pastDue(STRIPE_GRACE_DAYS * DAY + 1000));
   expect(banner()).toBeNull();
+});
+
+describe('dismissing the Pro ended banner', () => {
+  const endedPlan = (extra = 0) => pastDue(STRIPE_GRACE_DAYS * DAY + 1000 + extra);
+  const dismissButton = () => screen.queryByRole('button', { name: 'Dismiss' });
+  // A reload: everything unmounted, and the session's module state gone.
+  const reload = async (view, entitlement, user) => {
+    view.unmount();
+    __resetEntitlementForTests();
+    __resetBillingNoticeForTests();
+    return show(entitlement, user);
+  };
+
+  test('the ended banner has a muted, icon-only X labelled exactly Dismiss', async () => {
+    await show(endedPlan());
+    const button = within(banner()).getByRole('button', { name: 'Dismiss' });
+    expect(button).toHaveAttribute('aria-label', 'Dismiss');
+    expect(button).toHaveAttribute('type', 'button');
+    expect(button).toHaveClass('billing-notice-dismiss');
+    // Icon only: no visible text, and the icon is hidden from assistive tech.
+    expect(button.textContent).toBe('');
+    expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    // The approved copy is unchanged.
+    expect(banner()).toHaveTextContent(`${ENDED} Go Pro`);
+  });
+
+  test('the in-grace banner has no dismiss', async () => {
+    await show(pastDue(DAY));
+    expect(banner()).toHaveTextContent(GRACE);
+    expect(dismissButton()).toBeNull();
+    expect(requestGraceEndedNotice).not.toHaveBeenCalled();
+  });
+
+  test('Dismiss hides the banner at once and saves it on the server for the account', async () => {
+    await show(endedPlan());
+    await userEvent.click(dismissButton());
+    expect(banner()).toBeNull();
+    expect(screen.queryByText(ENDED)).toBeNull();
+    expect(requestDismissGraceEndedNotice).toHaveBeenCalledTimes(1);
+    expect(serverDismissals.get('jack')).toBe(plan.stripePastDueAt);
+  });
+
+  test('stays hidden after a remount and after a reload, for that account only', async () => {
+    let view = await show(endedPlan());
+    await userEvent.click(dismissButton());
+    // Leaving My bets and coming back.
+    view.unmount();
+    view = await show(plan);
+    expect(banner()).toBeNull();
+    // A reload: nothing kept on the device; the server still says dismissed.
+    requestGraceEndedNotice.mockClear();
+    view = await reload(view, plan);
+    expect(requestGraceEndedNotice).toHaveBeenCalledTimes(1);
+    expect(banner()).toBeNull();
+    expect(screen.queryByText(ENDED)).toBeNull();
+    // Another account on the same device still sees its own ended banner.
+    signIn(MAYA);
+    await reload(view, endedPlan(), MAYA);
+    expect(banner()).toHaveTextContent(ENDED);
+    expect(dismissButton()).not.toBeNull();
+  });
+
+  test('nothing flashes while the server is asked; a failed read shows the banner', async () => {
+    let answer;
+    requestGraceEndedNotice.mockImplementation(() => new Promise((resolve, reject) => {
+      answer = { resolve, reject };
+    }));
+    await show(endedPlan());
+    expect(banner()).toBeNull();
+    await act(async () => answer.reject(new Error('offline')));
+    expect(banner()).toHaveTextContent(ENDED);
+  });
+
+  test('a failed save still hides it now; the next load shows it again', async () => {
+    requestDismissGraceEndedNotice.mockRejectedValue(new Error('offline'));
+    const view = await show(endedPlan());
+    await userEvent.click(dismissButton());
+    expect(banner()).toBeNull();
+    await reload(view, plan);
+    expect(banner()).toHaveTextContent(ENDED);
+  });
+
+  test('hides once the member is Pro again, and a later grace’s ended banner shows again', async () => {
+    await show(endedPlan());
+    expect(banner()).toHaveTextContent(ENDED);
+    // Pro again (a new subscription): no banner, no dismiss.
+    await act(async () => pushPlan({ plan: 'pro', source: 'stripe', since: 2, stripeStatus: 'active', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_2', expiresAt: Date.now() + 30 * DAY }));
+    expect(banner()).toBeNull();
+    expect(dismissButton()).toBeNull();
+    // A dismissed ended banner stays hidden while Pro again too.
+    plan = endedPlan(-1000);
+    await act(async () => pushPlan(plan));
+    await userEvent.click(dismissButton());
+    expect(banner()).toBeNull();
+    await act(async () => pushPlan({ ...plan, stripeStatus: 'active', stripePastDueAt: undefined, expiresAt: Date.now() + 30 * DAY }));
+    expect(banner()).toBeNull();
+    // A new grace that runs out later has its own banner.
+    plan = endedPlan(5000);
+    await act(async () => pushPlan(plan));
+    expect(banner()).toHaveTextContent(ENDED);
+  });
 });

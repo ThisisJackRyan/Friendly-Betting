@@ -1,7 +1,7 @@
 import { getDocFromServer, onSnapshot } from 'firebase/firestore';
 import * as entitlementApi from './entitlementApi';
 
-const { fetchEntitlement, requestBillingPortal, requestCheckout, requestMockPurchase, subscribeEntitlement } = entitlementApi;
+const { fetchEntitlement, requestBillingPortal, requestCheckout, requestDismissGraceEndedNotice, requestGraceEndedNotice, requestMockPurchase, subscribeEntitlement } = entitlementApi;
 
 jest.unmock('./entitlementApi');
 jest.mock('firebase/firestore', () => ({
@@ -30,11 +30,25 @@ afterEach(() => {
 
 test('only the entitlement reads, the mock purchase and the Stripe routes: no founder count', () => {
   expect(Object.keys(entitlementApi).sort()).toEqual([
-    'fetchEntitlement', 'logsDeniedReads', 'requestBillingPortal', 'requestCheckout', 'requestMockPurchase', 'subscribeEntitlement',
+    'fetchEntitlement', 'logsDeniedReads', 'requestBillingPortal', 'requestCheckout', 'requestDismissGraceEndedNotice', 'requestGraceEndedNotice', 'requestMockPurchase', 'subscribeEntitlement',
   ]);
 });
 
 describe('Stripe routes (docs/STRIPE-WEB-PRO.md)', () => {
+  test.each([
+    ['requestGraceEndedNotice', () => requestGraceEndedNotice(), '{}'],
+    ['requestDismissGraceEndedNotice', () => requestDismissGraceEndedNotice(), '{"action":"dismiss"}'],
+  ])('%s posts the ID token to the billing notice route, and nothing about the user', async (_name, call, body) => {
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ dismissed: true }) });
+    await expect(call()).resolves.toEqual({ dismissed: true });
+    expect(fetch).toHaveBeenCalledWith('/api/pro/billing-notice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
+      body,
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   test.each([
     ['requestCheckout', () => requestCheckout(), '/api/pro/checkout'],
     ['requestBillingPortal', () => requestBillingPortal(), '/api/pro/portal'],

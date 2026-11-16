@@ -844,7 +844,9 @@ async function mockEntitlement(page, { plan = null } = {}) {
       export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
       export const requestMockPurchase = async () => ({ ok: true });
       export const requestCheckout = async () => { throw new Error('No Stripe in the app.'); };
-      export const requestBillingPortal = async () => { throw new Error('No Stripe in the app.'); };`,
+      export const requestBillingPortal = async () => { throw new Error('No Stripe in the app.'); };
+      export const requestGraceEndedNotice = async () => { throw new Error('No Stripe in the app.'); };
+      export const requestDismissGraceEndedNotice = async () => { throw new Error('No Stripe in the app.'); };`,
   }));
 }
 

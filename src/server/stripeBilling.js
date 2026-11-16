@@ -1,4 +1,4 @@
-import { STRIPE_GRACE_MS, isProEntitlement, toMillis } from '../phone/entitlement';
+import { STRIPE_GRACE_MS, isProEntitlement, stripeGraceNotice, toMillis } from '../phone/entitlement';
 import { stripeUidAllowed } from './stripeConfig';
 
 // Web Pro billing with Stripe (docs/STRIPE-WEB-PRO.md): Checkout, the
@@ -73,6 +73,19 @@ const SECOND = 1000;
 // the 30 days an event can be resent from the dashboard.
 export const EVENT_RECORD_DAYS = 90;
 const DAY = 24 * 60 * 60 * SECOND;
+// A live-to-past_due event starts a grace only while the stored paid period
+// (expiresAt) is still running or ended at most this long ago. A past_due
+// that shows up later than that (a missed renewal whose webhooks never came)
+// must not start a fresh grace on a plan that already ended: Pro stays ended.
+export const PAST_DUE_GRACE_START_WINDOW_DAYS = 1;
+const PAST_DUE_GRACE_START_WINDOW_MS = PAST_DUE_GRACE_START_WINDOW_DAYS * DAY;
+
+// Whether a live Stripe plan's stored period is recent enough for a first
+// past_due to start a grace (PAST_DUE_GRACE_START_WINDOW_DAYS).
+function graceMayStart(existing, now) {
+  const paidThrough = toMillis(existing?.expiresAt);
+  return Number.isFinite(paidThrough) && paidThrough >= now - PAST_DUE_GRACE_START_WINDOW_MS;
+}
 
 // Checkout -----------------------------------------------------------------
 
@@ -140,6 +153,43 @@ export async function createPortal({ db, stripe, config, uid }) {
   return { url: session.url };
 }
 
+// Pro ended banner dismissal -------------------------------------------------
+
+// The My bets "Pro ended" banner (stripeGraceNotice 'ended') can be
+// dismissed for good, per account. stripeNoticeDismissals/{uid} (server
+// only: no rule matches it, so clients can't read or write it) holds the
+// stripePastDueAt of the grace whose ended banner was dismissed. Not on
+// entitlements/{uid}: clients can't write there and the webhook replaces
+// that doc. A later grace has its own stripePastDueAt, so its ended banner
+// shows again.
+
+const dismissalRef = (db, uid) => db.doc(`stripeNoticeDismissals/${uid}`);
+
+async function graceEndedPastDueAt(db, uid) {
+  const snap = await db.doc(`entitlements/${uid}`).get();
+  const ent = snap.exists ? snap.data() : null;
+  const pastDueAt = toMillis(ent?.stripePastDueAt);
+  return { ent, pastDueAt: Number.isFinite(pastDueAt) ? pastDueAt : null };
+}
+
+// { dismissed }: whether the member dismissed the ended banner of the grace
+// now on their doc.
+export async function graceEndedNoticeState({ db, uid }) {
+  const { pastDueAt } = await graceEndedPastDueAt(db, uid);
+  if (pastDueAt === null) return { dismissed: false };
+  const snap = await dismissalRef(db, uid).get();
+  return { dismissed: snap.exists && Number(snap.data()?.graceEndedPastDueAt) === pastDueAt };
+}
+
+// Dismisses the ended banner for the grace on the member's doc. Throws
+// { code: 'no-notice' } unless that banner is showing now.
+export async function dismissGraceEndedNotice({ db, uid, now = Date.now(), since }) {
+  const { ent, pastDueAt } = await graceEndedPastDueAt(db, uid);
+  if (pastDueAt === null || stripeGraceNotice(ent, now) !== 'ended') throw failure('no-notice');
+  await dismissalRef(db, uid).set({ graceEndedPastDueAt: pastDueAt, dismissedAt: since ?? now });
+  return { dismissed: true };
+}
+
 // Webhook ------------------------------------------------------------------
 
 // The end of the paid period, in millis. Newer API versions (the installed
@@ -200,7 +250,10 @@ const stripeFields = (state, eventCreated) => ({
 //   now (or when it ended), so the doc stays and reads as not Pro.
 // - past_due grace (with `grace`, i.e. not a uid off the test-mode
 //   allowlist): a Stripe plan whose subscription goes from live to past_due
-//   keeps Pro until stripePastDueAt + STRIPE_GRACE_DAYS. stripePastDueAt is
+//   keeps Pro until stripePastDueAt + STRIPE_GRACE_DAYS, provided its
+//   stored expiresAt is still ahead or at most
+//   PAST_DUE_GRACE_START_WINDOW_DAYS behind (a late past_due after a missed
+//   renewal leaves Pro ended, with no grace). stripePastDueAt is
 //   stored once, at the first failure, and kept by every later past_due
 //   event (retries), so the grace never moves. Recovery (live again) clears
 //   it. Any other ending status (unpaid, canceled, ...) ends Pro now and
@@ -245,7 +298,7 @@ export function nextEntitlement({ existing, state, eventCreated, now, since, toT
   if (state.status === 'past_due' && grace) {
     // The first failure starts the grace; a retry keeps the stored time.
     if (hadGrace) return { ...base, stripePastDueAt: priorPastDueAt, expiresAt: toTimestamp(priorSince + STRIPE_GRACE_MS) };
-    if (LIVE_STATUSES.has(existing.stripeStatus)) {
+    if (LIVE_STATUSES.has(existing.stripeStatus) && graceMayStart(existing, now)) {
       return { ...base, stripePastDueAt: toTimestamp(state.pastDueAt), expiresAt: toTimestamp(state.pastDueAt + STRIPE_GRACE_MS) };
     }
   }
