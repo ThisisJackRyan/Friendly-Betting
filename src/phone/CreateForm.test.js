@@ -302,6 +302,23 @@ test('a failed save stays on the stake step with the error and can try again', a
   expect(saveBet).toHaveBeenCalledTimes(2);
 });
 
+test.each([
+  ['Firestore unavailable', { code: 'unavailable', message: 'Connection failed.' }],
+  ['offline', { code: 'offline', message: 'You are offline.' }],
+  ['timed out', { code: 'timeout', message: 'Couldn’t save this bet. Try again.' }],
+])('%s: the generic save line, the text kept, and the same button saves again', async (_name, failure) => {
+  saveBet.mockRejectedValueOnce(Object.assign(new Error(failure.message), { code: failure.code }));
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByRole('button', { name: /^(Go Pro|Try again)$/ })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(saveBet).toHaveBeenCalledTimes(2);
+  expect(saveBet.mock.calls[1]).toEqual(saveBet.mock.calls[0]);
+});
+
 describe('a save the server refuses', () => {
   const coded = (code) => Object.assign(new Error('Couldn’t save this bet. Try again.'), { code });
 

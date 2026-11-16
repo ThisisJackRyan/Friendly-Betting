@@ -233,10 +233,19 @@ says:
 | --- | --- | --- |
 | `403 pro-required` | `Your Pro ended, so Run it back is locked.` | `Go Pro`: opens the Pro sheet with row 3 (`PRO_ROW.runItBack`, Run it back) highlighted. |
 | `503 not-configured` | `Couldn’t check Pro right now. Try again in a bit.` | `Try again`: saves the same bet again. |
-| Anything else | The error's own message (offline, `permission-denied`'s `Saving was blocked. Try again in a moment.`), else `Couldn’t save this bet. Try again.` | None; the main button saves again. |
+| Offline, a dropped or hung network (`offline`, `timeout`, `unavailable`, `deadline-exceeded`, `auth/network-request-failed`; `CREATE_NETWORK_CODES`) | `Couldn’t save this bet. Try again.`, never the raw message (Firestore's `Connection failed.`, say) | None; the main button saves again. |
+| Anything else | The error's own message (`permission-denied`'s `Saving was blocked. Try again in a moment.`), else `Couldn’t save this bet. Try again.` | None; the main button saves again. |
 
 `createBet` in `api.js` gives every route error the message `Couldn’t save this bet. Try again.`
 (and a code), so a route error never shows anything else.
+
+A create that can't reach the network fails fast, paywall on or off: at once (no write, no token,
+no request) when the browser reports offline, and after `CREATE_TIMEOUT_MS` (12s) when the client
+transaction or the route request hangs, instead of sitting on the busy button until Firestore
+gives up (~35s offline). Either way the error carries a network code and the message above. A save
+that timed out may still land: the retry (same bet, close time aside) waits up to
+`CREATE_TIMEOUT_MS` for it first and, if it landed, opens that bet instead of making a second one.
+Delete keeps its own offline handling (code `offline`).
 
 `pro-required` mostly reaches Run it back when a plan lapsed while the reveal was open, so the
 client lock still said Pro. The same line and button show in Create if a create there is ever

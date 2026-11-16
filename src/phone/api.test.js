@@ -1,7 +1,7 @@
 import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
 import {
-  __resetVoteRulesForTests, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
+  __resetCreateForTests, __resetVoteRulesForTests, CREATE_TIMEOUT_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
   subscribeMyBets, undoSettle,
 } from './api';
 import { rememberBet } from './notificationStore';
@@ -905,17 +905,27 @@ describe('creating a bet', () => {
     }));
   };
   const getIdToken = jest.fn(async () => 'id-token');
+  const SAVE_FAILED = 'Couldn’t save this bet. Try again.';
+  const goOffline = () => jest.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+  const never = () => new Promise(() => {});
+  // Lets the save's promise chain run, then moves the clock past the timeout.
+  const timeOut = async () => {
+    await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS);
+  };
 
   beforeEach(() => {
     stored = null;
     auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }], getIdToken };
     getIdToken.mockClear();
+    __resetCreateForTests();
     global.fetch = jest.fn(async () => {
       throw new Error('fetch must not be called');
     });
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
     delete global.fetch;
     if (savedFlag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
     else process.env.NEXT_PUBLIC_PRO_PAYWALL = savedFlag;
@@ -1010,13 +1020,13 @@ describe('creating a bet', () => {
       global.fetch = jest.fn(async () => {
         throw new TypeError('Failed to fetch');
       });
-      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline' });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
       expect(runTransaction).not.toHaveBeenCalled();
     });
 
     test('a token that can\'t refresh offline is tagged offline; nothing is sent', async () => {
       getIdToken.mockRejectedValueOnce(Object.assign(new Error('net'), { code: 'auth/network-request-failed' }));
-      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline' });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
@@ -1032,6 +1042,158 @@ describe('creating a bet', () => {
       await expect(saveBet('abc123', { stake: 'Tacos' })).resolves.toBe('abc123');
       expect(stored.stake).toBe('Tacos');
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  // QA: offline, a save sat on "Getting it ready…" ~35s, then showed
+  // Firestore's "Connection failed.". A create that can't reach the network
+  // fails fast with the generic save line, and the retry never makes two bets.
+  describe('a save that can\'t reach the network', () => {
+    describe('paywall off (the client transaction)', () => {
+      beforeEach(() => {
+        delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+      });
+
+      test('already offline: fails at once with the save line, nothing is written', async () => {
+        goOffline();
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(runTransaction).not.toHaveBeenCalled();
+        expect(stored).toBeNull();
+      });
+
+      test('Firestore\'s "Connection failed." becomes the save line', async () => {
+        runTransaction.mockRejectedValueOnce(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+        const err = await saveBet(null, fields).catch((e) => e);
+        expect(err).toMatchObject({ code: 'unavailable', message: SAVE_FAILED });
+        expect(err.message).not.toMatch(/Connection failed/);
+      });
+
+      test('a failure while the browser went offline becomes the save line', async () => {
+        runTransaction.mockImplementationOnce(async () => {
+          goOffline();
+          throw new Error('Failed to get document because the client is offline.');
+        });
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      });
+
+      test('permission-denied is passed through untouched', async () => {
+        runTransaction.mockRejectedValueOnce(denied());
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'permission-denied' });
+      });
+
+      test('a hung write gives up after CREATE_TIMEOUT_MS with the save line', async () => {
+        jest.useFakeTimers();
+        expect(CREATE_TIMEOUT_MS).toBeGreaterThanOrEqual(10000);
+        expect(CREATE_TIMEOUT_MS).toBeLessThanOrEqual(15000);
+        runTransaction.mockImplementationOnce(never);
+        const result = saveBet(null, fields).catch((e) => e);
+        await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS - 1);
+        let settled = false;
+        result.then(() => { settled = true; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(await result).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+      });
+
+      test('the retry after a timeout: a save that landed late is the bet, never a second one', async () => {
+        jest.useFakeTimers();
+        let land;
+        runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+          land = () => resolve(run(tx));
+        }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout' });
+
+        // Run it back's close time moves with the clock; it's still the same bet.
+        const retry = saveBet(null, { ...fields, closesAt: 999 });
+        land();
+        const code = await retry;
+        expect(tx.set).toHaveBeenCalledTimes(1);
+        expect(tx.set.mock.calls[0][0]).toEqual({ collection: 'bets', id: code });
+        expect(runTransaction).toHaveBeenCalledTimes(1);
+      });
+
+      test('the retry after a timeout: a save that failed meanwhile is made fresh', async () => {
+        jest.useFakeTimers();
+        let fail;
+        runTransaction.mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        const retry = saveBet(null, fields);
+        fail(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+        const code = await retry;
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+        expect(tx.set).toHaveBeenCalledTimes(1);
+      });
+
+      test('the retry while the earlier save still hangs fails again without a second write', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        const retry = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await retry).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+        expect(runTransaction).toHaveBeenCalledTimes(1);
+      });
+
+      test('Run it back offline fails at once with the save line, not retried without its link', async () => {
+        goOffline();
+        await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123'))
+          .rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(runTransaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('paywall on (POST /api/bets)', () => {
+      beforeEach(() => {
+        process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+      });
+
+      test('already offline: fails at once; no token, no request', async () => {
+        goOffline();
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(getIdToken).not.toHaveBeenCalled();
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      test('an HTTP failure while the browser reports offline is the save line', async () => {
+        respond(502, undefined);
+        global.fetch.mockImplementationOnce(async () => {
+          goOffline();
+          return { ok: false, status: 502, json: async () => ({}) };
+        });
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      });
+
+      test('a hung request gives up after CREATE_TIMEOUT_MS; the retry waits on it and makes one bet', async () => {
+        jest.useFakeTimers();
+        let answer;
+        global.fetch = jest.fn(() => new Promise((resolve) => { answer = resolve; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+
+        const retry = saveBet(null, fields);
+        answer({ ok: true, status: 200, json: async () => ({ code: 'srv789' }) });
+        await expect(retry).resolves.toBe('srv789');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      test('a hung token refresh gives up too', async () => {
+        jest.useFakeTimers();
+        getIdToken.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
     });
   });
 });

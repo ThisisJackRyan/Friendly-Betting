@@ -16,7 +16,7 @@ import { isCalledOff, isFinished, isSettled, votingOpen } from './betStatus';
 import { isBetCreator, isCreator } from './creatorSession';
 import { makeCode, newBetDoc } from './newBet';
 import { proPaywallEnabled } from './proConfig';
-import { CREATE_ERROR_COPY } from './createErrors';
+import { CREATE_ERROR_COPY, isCreateNetworkError } from './createErrors';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
@@ -53,9 +53,81 @@ async function createBetHere(fields) {
 // the server (src/server/createBet.js, docs/PRO.md). Creating is not capped. With it off, nothing changes: the
 // client writes bets/{code} itself, as firestore.rules allow, and the route
 // is never called.
+//
+// Either way a save that can't reach the network fails fast with the generic
+// save line (CREATE_ERROR_COPY.failed) and a network code (createErrors.js,
+// CREATE_NETWORK_CODES): at once when the browser reports offline, and after
+// CREATE_TIMEOUT_MS when the write hangs. Offline, a Firestore transaction
+// otherwise retries for ~35s and then rejects with "Connection failed.".
 export async function createBet(fields) {
-  if (proPaywallEnabled()) return createBetOnServer(fields);
-  return createBetHere(fields);
+  if (isOffline()) throw createNetworkError('offline');
+  const key = createKey(fields);
+  // A save that timed out may still land. The retry waits for it first, so
+  // the same bet is never made twice: if it landed, that's the bet.
+  if (stalledCreate) {
+    const prior = stalledCreate;
+    const earlier = await settleWithin(prior.promise, CREATE_TIMEOUT_MS);
+    if (earlier.pending) throw createNetworkError('timeout');
+    if (stalledCreate === prior) stalledCreate = null;
+    if (earlier.ok && prior.key === key) return earlier.value;
+  }
+  const run = proPaywallEnabled() ? createBetOnServer(fields) : createBetHere(fields);
+  const outcome = await settleWithin(run, CREATE_TIMEOUT_MS);
+  if (outcome.pending) {
+    stalledCreate = { key, promise: run };
+    throw createNetworkError('timeout');
+  }
+  if (outcome.ok) return outcome.value;
+  const err = outcome.error;
+  if (isCreateNetworkError(err) || isOffline()) {
+    throw createNetworkError(isCreateNetworkError(err) ? err.code : 'offline', err);
+  }
+  throw err;
+}
+
+// How long a new bet's save may take before Create and Run it back give up
+// and offer the retry.
+export const CREATE_TIMEOUT_MS = 12000;
+
+// The last save that timed out, while it might still land: { key, promise }.
+let stalledCreate = null;
+
+export function __resetCreateForTests() {
+  stalledCreate = null;
+}
+
+// The same bet, give or take its close time (Run it back's moves with the
+// clock).
+function createKey(fields) {
+  const { closesAt, ...rest } = fields || {};
+  return JSON.stringify(rest);
+}
+
+// { ok: true, value } or { ok: false, error } if the promise settles within
+// ms, else { pending: true }; the promise is never left unhandled.
+function settleWithin(promise, ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ pending: true }), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve({ ok: true, value });
+      },
+      (error) => {
+        clearTimeout(timer);
+        resolve({ ok: false, error });
+      },
+    );
+  });
+}
+
+// A create that couldn't reach the network: the generic save line, never
+// "You are offline." or the raw cause's message.
+function createNetworkError(code, cause) {
+  const err = new Error(CREATE_ERROR_COPY.failed);
+  err.code = code;
+  if (cause) err.cause = cause;
+  return err;
 }
 
 // Fails closed: a 503 (no Admin credentials) is an error, never a fallback
@@ -70,7 +142,7 @@ async function createBetOnServer(fields) {
   try {
     token = await user.getIdToken();
   } catch (cause) {
-    if (cause?.code === 'auth/network-request-failed' || isOffline()) throw offlineError(cause);
+    if (cause?.code === 'auth/network-request-failed' || isOffline()) throw createNetworkError('offline', cause);
     throw cause;
   }
   let res;
@@ -81,11 +153,11 @@ async function createBetOnServer(fields) {
       body: JSON.stringify({ fields }),
     });
   } catch (cause) {
-    throw offlineError(cause);
+    throw createNetworkError('offline', cause);
   }
   const body = await res.json().catch(() => ({}));
   if (res.ok && typeof body?.code === 'string' && body.code) return body.code;
-  if (!res.ok && isOffline()) throw offlineError();
+  if (!res.ok && isOffline()) throw createNetworkError('offline');
   const err = new Error(CREATE_ERROR_COPY.failed);
   err.code = (!res.ok && body?.error) || 'create-failed';
   throw err;
