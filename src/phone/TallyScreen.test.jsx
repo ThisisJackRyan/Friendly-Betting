@@ -535,8 +535,8 @@ describe('live tally', () => {
 
     const votes = [named('v1', 'Jake', 'a'), named('v2', 'Maya', 'b'), named('v3', '', 'b')];
     await push({ ...openBet, votes });
-    expect(list(1)).toHaveAttribute('aria-label', 'Picked by Maya and 1 friend');
-    expect(list(1)).toHaveTextContent('Maya1 friend');
+    expect(list(1)).toHaveAttribute('aria-label', 'Picked by Maya and a friend');
+    expect(list(1)).toHaveTextContent('Mayaa friend');
 
     const voted = { ...openBet, votes };
     await push({ ...voted, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(voted, 'a') });

@@ -122,15 +122,40 @@ The file is **not auto-deployed**. Nothing in this repo or on Vercel deploys it.
 
 ## API routes
 
-All three run on the Node runtime with the Firebase Admin SDK (`src/server/firebaseAdmin.js`). Without `FIREBASE_SERVICE_ACCOUNT` they answer `503 { error: 'not-configured' }`.
+All of them run on the Node runtime with the Firebase Admin SDK (`src/server/firebaseAdmin.js`). Without `FIREBASE_SERVICE_ACCOUNT` they answer `503 { error: 'not-configured' }`.
 
 | Route | Who | What |
 | --- | --- | --- |
 | `POST /api/bets/[code]/result-texts` | Voter (Firebase ID token, the anonymous user) | Saves one US number per voter per bet in `privateResultTexts/{code}`. Side comes from the recorded vote. |
 | `POST /api/bets/[code]/result-texts/send` | Anyone; acts only on settled bets | Claims each saved number once (deleted in a transaction) and calls `sendResultSms`. |
 | `DELETE /api/bets/[code]` | Creator (ID token with the creator uid and phone) | `src/server/deleteBet.js`: deletes the bet, its result-text numbers and the `privateResultTexts/{code}` doc in one transaction. |
+| `DELETE /api/account` | Phone-verified member who signed in within the last 10 minutes | `src/server/deleteAccount.js`: deletes the account. See [Delete account](#delete-account). |
 
 If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` and its vote docs directly from the client, in one batch, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
+
+### Delete account
+
+My bets shows **Delete account** above Log out, to phone-verified members only. After a confirm, the app calls `DELETE /api/account` (`app/api/account/route.js`, `maxDuration` 60) with a freshly minted ID token.
+
+**Who.** The token is verified with the revocation check (`verifyIdToken(token, true)`). Missing, invalid or revoked: `401 unauthorized`. Anonymous or no phone number: `403 forbidden`. A sign-in (`auth_time`) older than 10 minutes: `401 requires-recent-login`, and nothing is written. The dialog then offers **Sign in again**, which signs out into the usual phone sign-in on My bets and reopens the confirm afterwards (`fb.deleteAccountResume` in sessionStorage, good for 10 minutes).
+
+**Order** (every step is idempotent; missing docs and an Auth user that is already gone are success):
+
+1. Tombstone `accountDeletions/{uid}` = `{ at }`, written once and kept. Rules deny it to every client.
+2. Stripe, only when `entitlements/{uid}` has `stripeCustomerId` / `stripeSubscriptionId` and `STRIPE_SECRET_KEY` is set (`src/server/deleteAccountStripe.js`, plain REST): cancel the open subscription now (not at period end), cancel any other open subscription the customer has, then delete the customer. Any Stripe failure stops here with `503 billing-unavailable`: bets, entitlement and Auth are untouched and a retry is safe. Apple and Google billing are never touched (the dialog tells those members to cancel in the store).
+3. Bets they created: each through `deleteBet` (bet, vote docs, every result-text number), plus the `closing:{code}` / `pickcount:{code}` push receipts.
+4. Their picks on other bets (collection-group query on `votes.voterId`). Open bets: the vote doc and any legacy `votes[]` entry are removed. Settled or called-off bets: the pick stays, the name is cleared on the vote doc, the legacy entry and `settlement.winners`. Their uid stays on those finished bets as an opaque id. Their `privateResultTexts/{code}/numbers` docs are deleted on every bet.
+5. Push: `privatePushTokens/{uid}` and its devices, `privatePushDevices/{id}` that still name them, and `privatePushSends/pick:{code}:{uid}` for every bet seen.
+6. `stripeNoticeDismissals/{uid}`, `stripeCustomers/{cus}` and `entitlements/{uid}`.
+7. Auth last: `deleteUser`, then `revokeRefreshTokens` best effort (deleting the user already invalidates its refresh tokens, so any revoke error is ignored). A `deleteUser` failure is a 500 with nothing revoked, so the member can retry with the same ID token without signing in again.
+
+The client then clears its local keys (display name, local id, results inbox, result-text choices, ad caps, fresh-bet notes, and the push Preferences keys on native builds), signs out and goes home. Logs carry error codes only, never a uid, phone number, token, name or Stripe id.
+
+Cleared names render as "a friend" (two or more as "N friends", capitalized at the start of a sentence).
+
+**Index (Jack deploys).** The vote query needs the collection-group index in `firestore.indexes.json` (`votes.voterId`, wired in `firebase.json`). Deploy it once with `firebase deploy --only firestore:indexes` before the route goes live. Without it, the query fails and the route answers 500 after the owned bets are already deleted (a retry finishes once the index is built).
+
+**Follow-up for #89 (`feature/stripe-web-pro`).** `applySubscriptionEvent` and Checkout must call `isAccountDeleted(db, uid)` from `src/server/deleteAccount.js` and, when it is true, record the event as handled without writing `entitlements/{uid}` or `stripeCustomers/{cus}`. Land that guard before Stripe is enabled in production.
 
 ### CORS
 

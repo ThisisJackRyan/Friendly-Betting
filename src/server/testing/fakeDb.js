@@ -1,6 +1,8 @@
 // Test-only in-memory Firestore stand-in for the Admin SDK surface the server
 // modules use. Transactions are optimistic like Firestore: if a doc read in
 // the transaction (or a query's result set) changed before commit, the callback runs again.
+// Queries support where(field, '==', value) on a collection or a collection
+// group, outside transactions.
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
 export function fakeDb(initial = {}) {
@@ -19,6 +21,34 @@ export function fakeDb(initial = {}) {
     Array.from(store.keys()).filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'));
   // A query's "version" is its membership plus each member's version.
   const queryVersion = (path) => children(path).map((key) => `${key}@${version(key)}`).join(',');
+  // A shallow update with dotted field paths ('settlement.winners'), like Firestore's update().
+  const applyUpdate = (path, fields) => {
+    if (!store.has(path)) throw Object.assign(new Error('no doc to update'), { code: 'not-found' });
+    const next = clone(store.get(path).data);
+    Object.entries(clone(fields)).forEach(([key, value]) => {
+      const parts = key.split('.');
+      let target = next;
+      parts.slice(0, -1).forEach((part) => {
+        if (!target[part] || typeof target[part] !== 'object') target[part] = {};
+        target = target[part];
+      });
+      target[parts.at(-1)] = value;
+    });
+    put(path, next);
+  };
+  const query = (match, filters = []) => ({
+    query: true,
+    where: (field, op, value) => {
+      if (op !== '==') throw new Error(`fakeDb supports only == (got ${op})`);
+      return query(match, [...filters, [field, value]]);
+    },
+    get: async () => ({
+      docs: Array.from(store.keys())
+        .filter(match)
+        .filter((key) => filters.every(([field, value]) => store.get(key).data?.[field] === value))
+        .map(snap),
+    }),
+  });
   function ref(path) {
     return {
       path,
@@ -26,6 +56,10 @@ export function fakeDb(initial = {}) {
       set: async (data) => {
         writes.push(['set', path]);
         put(path, data);
+      },
+      update: async (fields) => {
+        writes.push(['update', path]);
+        applyUpdate(path, fields);
       },
       delete: async () => {
         writes.push(['delete', path]);
@@ -40,7 +74,17 @@ export function fakeDb(initial = {}) {
     data: (path) => clone(store.get(path)?.data),
     paths: (prefix) => Array.from(store.keys()).filter((key) => key.startsWith(prefix)),
     doc: ref,
-    collection: (path) => ({ path, query: true, get: async () => ({ docs: children(path).map(snap) }) }),
+    collection: (path) => ({
+      path,
+      query: true,
+      get: async () => ({ docs: children(path).map(snap) }),
+      where: (...args) => query((key) => children(path).includes(key)).where(...args),
+    }),
+    // Every collection named `id`, at any depth.
+    collectionGroup: (id) => query((key) => {
+      const parts = key.split('/');
+      return parts.length % 2 === 0 && parts.at(-2) === id;
+    }),
     runTransaction: async (run) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const reads = [];
@@ -53,6 +97,7 @@ export function fakeDb(initial = {}) {
             return target.query ? { docs: children(target.path).map(snap) } : snap(target.path);
           },
           set: (target, data) => ops.push(['set', target.path, clone(data)]),
+          update: (target, fields) => ops.push(['update', target.path, clone(fields)]),
           delete: (target) => ops.push(['delete', target.path]),
         };
         const result = await run(tx);
@@ -60,6 +105,7 @@ export function fakeDb(initial = {}) {
         ops.forEach(([op, path, data]) => {
           writes.push([op, path]);
           if (op === 'set') put(path, data);
+          else if (op === 'update') applyUpdate(path, data);
           else store.delete(path);
         });
         return result;

@@ -538,3 +538,29 @@ describe('meta', () => {
     await assertFails(creator().doc('meta/other').set({ secret: false }));
   });
 });
+
+describe('account deletion tombstones', () => {
+  const own = 'accountDeletions/creator-1';
+
+  beforeEach(async () => {
+    await seed({ [own]: { at: 1 }, 'accountDeletions/creator-9': { at: 2 } });
+  });
+
+  test('no client can read a tombstone, their own included', async () => {
+    for (const db of [guest(), anon(), anon('creator-1'), otherPhone(), creator()]) {
+      await assertFails(db.doc(own).get());
+      await assertFails(db.collection('accountDeletions').get());
+    }
+  });
+
+  test('no client can write, change or remove a tombstone', async () => {
+    for (const db of [guest(), anon(), otherPhone(), creator()]) {
+      await assertFails(db.doc(own).set({ at: 3 }));
+      await assertFails(db.doc(own).update({ at: 3 }));
+      await assertFails(db.doc(own).delete());
+      await assertFails(db.doc('accountDeletions/someone-new').set({ at: 3 }));
+    }
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(own).set({ at: 3 }));
+  });
+});

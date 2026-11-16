@@ -36,7 +36,7 @@ export function settlementOf(bet) {
 }
 
 export function winnerNames(result) {
-  const names = result.winners.map((winner) => winner.name).filter(Boolean);
+  const names = result.winners.map((winner) => String(winner.name || '').trim()).filter(Boolean);
   const unnamed = result.winners.length - names.length;
   if (unnamed) names.push(unnamed === 1 ? 'a friend' : `${unnamed} friends`);
   if (!names.length) return '';
