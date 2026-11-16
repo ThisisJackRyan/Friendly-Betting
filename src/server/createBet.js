@@ -1,17 +1,18 @@
 import { makeCode, newBetDoc } from '../phone/newBet';
-import { EARLY_ACCESS_TYPES, FREE_BETS, proEarlyTypesEnabled } from '../phone/proConfig';
+import { EARLY_ACCESS_TYPES, proEarlyTypesEnabled } from '../phone/proConfig';
 import { hasProEntitlement } from './proEntitlement';
 
 // The server create for bets/{code}, used only with the paywall on
 // (POST /api/bets, docs/PRO.md "Server-side Pro checks"). The Admin SDK
 // bypasses firestore.rules, so this checks everything the create rule does,
-// and then Pro:
+// and then Pro for the Pro features only:
 //
 //   - a rematch (fields carry rematchOf) needs Pro: 'pro-required'
-//   - an early-access type needs NEXT_PUBLIC_PRO_EARLY_TYPES=1 and Pro
-//   - without Pro, a creator may have at most FREE_BETS bets: the bets with
-//     createdByID == uid, the My bets query (deleted bets are gone, so they
-//     don't count): 'free-bet-limit'
+//   - an early-access type needs NEXT_PUBLIC_PRO_EARLY_TYPES=1 and Pro:
+//     'pro-required'
+//
+// Creating bets is not capped: without Pro a creator makes as many bets as
+// they like (with ads).
 //
 // Pro is isProEntitlement on entitlements/{uid}: expiry and legacy founder
 // plans count the same way the app counts them.
@@ -50,8 +51,8 @@ export function isEarlyType(type, earlyTypes = EARLY_ACCESS_TYPES) {
   return typeof type === 'string' && earlyTypes.some((early) => early?.id === type);
 }
 
-// Creates the bet in one transaction with the Pro and count checks, so two
-// creates at once can't both take the last free bet. Returns { code }.
+// Creates the bet in one transaction with the Pro check and the code
+// collision check. Returns { code }.
 export async function createBetForCreator({
   db,
   uid,
@@ -64,7 +65,6 @@ export async function createBetForCreator({
 }) {
   if (!uid || !phoneNumber) throw failure('forbidden');
   const clean = creatorFields(fields, uid);
-  const mine = db.collection('bets').where('createdByID', '==', uid).limit(FREE_BETS);
   for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
     const code = newCode();
     const betRef = db.doc(`bets/${code}`);
@@ -72,10 +72,6 @@ export async function createBetForCreator({
       const pro = await hasProEntitlement({ db, uid, tx, now });
       if (isRematch(clean) && !pro) throw failure('pro-required');
       if (isEarlyType(clean.type, earlyTypes) && !(earlyTypesOn && pro)) throw failure('pro-required');
-      if (!pro) {
-        const existing = await tx.get(mine);
-        if (existing.docs.length >= FREE_BETS) throw failure('free-bet-limit');
-      }
       const snap = await tx.get(betRef);
       if (snap.exists) return null;
       tx.set(betRef, newBetDoc(clean, code, now));

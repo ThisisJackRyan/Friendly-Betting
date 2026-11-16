@@ -976,15 +976,14 @@ describe('creating a bet', () => {
     });
 
     test.each([
-      [403, 'free-bet-limit'],
       [403, 'pro-required'],
       [403, 'forbidden'],
       [400, 'invalid-bet'],
       [401, 'unauthorized'],
       [500, 'server'],
-    ])('a %i %s is an error with that code and Create\'s existing message', async (status, error) => {
+    ])('a %i %s is an error with that code and the generic save message', async (status, error) => {
       respond(status, { error });
-      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: error, message: 'Could not save this bet.' });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: error, message: 'Couldn’t save this bet. Try again.' });
       expect(runTransaction).not.toHaveBeenCalled();
     });
 

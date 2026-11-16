@@ -16,6 +16,7 @@ import { isCalledOff, isFinished, isSettled, votingOpen } from './betStatus';
 import { isBetCreator, isCreator } from './creatorSession';
 import { makeCode, newBetDoc } from './newBet';
 import { proPaywallEnabled } from './proConfig';
+import { CREATE_ERROR_COPY } from './createErrors';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
@@ -44,12 +45,12 @@ async function createBetHere(fields) {
       throw err;
     }
   }
-  throw lastError || new Error('Could not create a bet. Try again.');
+  throw lastError || new Error(CREATE_ERROR_COPY.failed);
 }
 
 // With the paywall on, every new bet (Create and Run it back) goes through
-// POST /api/bets, which checks Pro and the free-bet cap on the server
-// (src/server/createBet.js, docs/PRO.md). With it off, nothing changes: the
+// POST /api/bets, which checks Pro for Run it back and early-access types on
+// the server (src/server/createBet.js, docs/PRO.md). Creating is not capped. With it off, nothing changes: the
 // client writes bets/{code} itself, as firestore.rules allow, and the route
 // is never called.
 export async function createBet(fields) {
@@ -59,9 +60,9 @@ export async function createBet(fields) {
 
 // Fails closed: a 503 (no Admin credentials) is an error, never a fallback
 // to the client write, which would skip the server's Pro checks. The error's
-// code is the route's (pro-required, free-bet-limit, not-configured, ...);
-// its message is Create's existing fallback, since there is no copy for
-// these yet (docs/PRO.md, "Copy UX still needs").
+// code is the route's (pro-required, not-configured, ...); its message is the
+// generic save fallback. Create and Run it back pick the line for a coded
+// error with createSaveError (createErrors.js).
 async function createBetOnServer(fields) {
   const user = auth?.currentUser;
   if (!user) throw new Error('Not signed in.');
@@ -85,7 +86,7 @@ async function createBetOnServer(fields) {
   const body = await res.json().catch(() => ({}));
   if (res.ok && typeof body?.code === 'string' && body.code) return body.code;
   if (!res.ok && isOffline()) throw offlineError();
-  const err = new Error('Could not save this bet.');
+  const err = new Error(CREATE_ERROR_COPY.failed);
   err.code = (!res.ok && body?.error) || 'create-failed';
   throw err;
 }

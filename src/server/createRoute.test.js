@@ -2,7 +2,6 @@
 import { adminAuth, adminDb } from './firebaseAdmin';
 import { POST, OPTIONS } from '../../app/api/bets/route';
 import * as createModule from '../../app/api/bets/route';
-import { FREE_BETS } from '../phone/proConfig';
 import { fakeDb } from './testing/fakeDb';
 
 jest.mock('firebase-admin/app', () => ({}));
@@ -16,6 +15,8 @@ jest.mock('../phone/proConfig', () => ({
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
+// Many bets: creating is never capped.
+const MANY = 25;
 const fields = {
   schemaVersion: 2,
   type: 'money-line',
@@ -133,37 +134,25 @@ describe('paywall on', () => {
     expect(await res.json()).toEqual({ error: 'invalid-bet' });
   });
 
-  test(`a free creator gets ${FREE_BETS} bets, then free-bet-limit`, async () => {
-    for (let i = 0; i < FREE_BETS; i += 1) {
-      expect((await post()).status).toBe(200);
-    }
-    const res = await post();
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'free-bet-limit' });
-    expect(betsBy('creator-1')).toHaveLength(FREE_BETS);
-  });
-
   test.each([
-    ['under', FREE_BETS - 1, 200],
-    ['at', FREE_BETS, 403],
-    ['over', FREE_BETS + 1, 403],
-  ])('no entitlement doc, %s the limit: %i', async (_name, count, status) => {
-    seed({ count });
-    expect((await post()).status).toBe(status);
-  });
-
-  test('an expired plan is free', async () => {
-    seed({ count: FREE_BETS, entitlement: { plan: 'pro', source: 'mock', expiresAt: Date.now() - DAY } });
-    const res = await post();
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'free-bet-limit' });
+    ['no entitlement doc', undefined],
+    ['an expired plan', { plan: 'pro', source: 'mock', expiresAt: Date.now() - DAY }],
+  ])('a free creator (%s) with many bets still creates with the paywall on', async (_name, entitlement) => {
+    seed({ count: MANY, entitlement });
+    for (let i = 0; i < 3; i += 1) {
+      const res = await post();
+      expect(res.status).toBe(200);
+      const { code } = await res.json();
+      expect(db.data(`bets/${code}`)).toMatchObject({ createdByID: 'creator-1', status: 'open' });
+    }
+    expect(betsBy('creator-1')).toHaveLength(MANY + 3);
   });
 
   test.each([
     ['live Pro', { plan: 'pro', source: 'mock', expiresAt: Date.now() + DAY }],
     ['a legacy founder', { plan: 'founder', source: 'mock', founderNumber: 2, expiresAt: null }],
-  ])('%s is unlimited and can run it back', async (_name, entitlement) => {
-    seed({ count: FREE_BETS + 3, entitlement });
+  ])('%s creates and can run it back', async (_name, entitlement) => {
+    seed({ count: MANY, entitlement });
     expect((await post()).status).toBe(200);
     const res = await post({ fields: { ...fields, rematchOf: { code: 'old123' } } });
     expect(res.status).toBe(200);
@@ -171,7 +160,7 @@ describe('paywall on', () => {
     expect(db.data(`bets/${code}`).rematchOf).toEqual({ code: 'old123' });
   });
 
-  test('a rematch without Pro is pro-required, even with free bets left', async () => {
+  test('a rematch without Pro is pro-required', async () => {
     const res = await post({ fields: { ...fields, rematchOf: { code: 'old123' } } });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'pro-required' });

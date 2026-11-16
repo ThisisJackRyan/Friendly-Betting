@@ -19,7 +19,12 @@ import { useCreateChrome } from './createChrome';
 import { armHomeArrival, prefersReducedMotion, SLIDE_MS } from './createMotion';
 import { AUTH_COPY, CREATE_STEP, adjacentCreateStep, isCreator } from './creatorSession';
 import { creatorName, useIdentity } from './identity';
-import { buildDraft, DEFAULT_CLOSES, friendlyError, parseCloses, TYPE_META } from './model';
+import { buildDraft, DEFAULT_CLOSES, parseCloses, TYPE_META } from './model';
+import { CREATE_ERROR_ACTION, createSaveError } from './createErrors';
+import { refreshEntitlement } from './useEntitlement';
+import CreateSaveError from './CreateSaveError';
+import ProSheet from './ProSheet';
+import { PRO_ROW } from './proConfig';
 import { markFreshBet } from './freshBet';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
@@ -113,6 +118,10 @@ const CreateForm = () => {
   const fieldsRef = useRef(EMPTY_FIELDS);
   const { question, stake, closes, optionA, optionB, line, overLabel, underLabel, propOptions } = fields;
   const [error, setError] = useState('');
+  // The last failed save (createSaveError). Its button shows only while its
+  // line is still the error on screen.
+  const [saveFailure, setSaveFailure] = useState(null);
+  const [proSheet, setProSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const leavingRef = useRef(false);
@@ -270,7 +279,12 @@ const CreateForm = () => {
       // A spent code can't be used again, so a failed save after sign-in
       // waits on the stake slide, where trying again makes the bet.
       if (stepRef.current !== CREATE_STEP.stake) go(CREATE_STEP.stake);
-      setError(friendlyError(err, 'Could not save this bet.'));
+      const failure = createSaveError(err);
+      // The server says Pro ended: catch the local plan up, so the Pro sheet
+      // agrees with it.
+      if (failure.action === CREATE_ERROR_ACTION.goPro) refreshEntitlement().catch(() => {});
+      setSaveFailure(failure);
+      setError(failure.message);
     }
   };
 
@@ -666,9 +680,14 @@ const CreateForm = () => {
           <FlowProgress step={stepNumber} user={user} />
           {body}
           {error && stepNumber === step ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
+            <CreateSaveError
+              error={saveFailure?.message === error ? saveFailure : { message: error }}
+              disabled={saving}
+              onGoPro={() => setProSheet(true)}
+              onRetry={() => {
+                if (user) makeBet(user);
+              }}
+            />
           ) : null}
         </div>
         {cta ? <div className="cta-bar">{cta}</div> : null}
@@ -715,6 +734,13 @@ const CreateForm = () => {
           </div>
         )}
       </div>
+      {proSheet && (
+        <ProSheet
+          highlight={PRO_ROW.runItBack}
+          onClose={() => setProSheet(false)}
+          onDone={() => router.push('/bets')}
+        />
+      )}
     </div>
   );
 };

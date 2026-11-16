@@ -78,7 +78,7 @@ Firebase JS remains the session authority on both platforms, with IndexedDB pers
 
 Native release check: create each bet type on a device, verify a configured test phone, invite a browser participant, cast picks from both clients, settle as the creator, check winner/loser results, reopen the app, share the result and confirm the URL uses prod. Also test OTP resend/expiry, Android back, cold/warm deep links, notches, keyboard, rotation and lost connection. Browser smoke tests cannot verify native phone auth, Messages, OS link association or signing.
 
-The paywall is off unless `NEXT_PUBLIC_PRO_PAYWALL=1` (web only). Pro is $3/month: no ads, Run it back and head-to-head stats. There is one plan (Pro); the Founder tier was dropped. Creating bets is not capped: `FREE_BETS` in `src/phone/proConfig.js` is not enforced anywhere yet. Bettors always free. One non-voter nudge remains later work. (The README has the same Pro line.)
+The paywall is off unless `NEXT_PUBLIC_PRO_PAYWALL=1` (web only). Pro is $3/month: no ads, the Pro badge, Run it back, head-to-head stats and early access. There is one plan (Pro); the Founder tier was dropped. Creating bets is never capped: free creators make unlimited bets, with ads. Bettors always free. One non-voter nudge remains later work. (The README has the same Pro line.)
 
 ### Current close/settle and SMS map
 
@@ -129,7 +129,7 @@ All four run on the Node runtime with the Firebase Admin SDK (`src/server/fireba
 | `POST /api/bets/[code]/result-texts` | Voter (Firebase ID token, the anonymous user) | Saves one US number per voter per bet in `privateResultTexts/{code}`. Side comes from the recorded vote. |
 | `POST /api/bets/[code]/result-texts/send` | Anyone; acts only on settled bets | Claims each saved number once (deleted in a transaction) and calls `sendResultSms`. |
 | `DELETE /api/bets/[code]` | Creator (ID token with the creator uid and phone) | `src/server/deleteBet.js`: deletes the bet, its result-text numbers and the `privateResultTexts/{code}` doc in one transaction. |
-| `POST /api/bets` | Creator (ID token with the creator uid and phone); 404 unless `NEXT_PUBLIC_PRO_PAYWALL=1` | `src/server/createBet.js`: creates a bet with the server-side Pro checks (rematch and early types need Pro; without Pro at most `FREE_BETS` bets). See [docs/PRO.md](PRO.md#server-side-pro-checks). |
+| `POST /api/bets` | Creator (ID token with the creator uid and phone); 404 unless `NEXT_PUBLIC_PRO_PAYWALL=1` | `src/server/createBet.js`: creates a bet with the server-side Pro checks (rematch and early types need Pro; creating is not capped). See [docs/PRO.md](PRO.md#server-side-pro-checks). |
 
 If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` and its vote docs directly from the client, in one batch, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
 

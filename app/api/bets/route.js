@@ -21,7 +21,7 @@ export async function POST(request) {
   return withCors(request, await create(request), METHODS);
 }
 
-const FORBIDDEN = ['forbidden', 'pro-required', 'free-bet-limit'];
+const FORBIDDEN = ['forbidden', 'pro-required'];
 
 // A phone-verified creator makes a bet, with the Pro checks in
 // src/server/createBet.js. The creator uid always comes from the token.

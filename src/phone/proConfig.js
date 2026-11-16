@@ -1,8 +1,6 @@
 // Pro pricing, flags and copy (docs/PRO.md). Shared by the paywall and the
 // mock purchase route, so nothing here loads Firebase.
 
-// Creators make this many bets free, then Pro. Bettors (voters) never pay.
-export const FREE_BETS = 3;
 export const PRO_MONTHLY_USD = 3;
 // A mock Pro month. Real renewals will come from the store (docs/PRO.md).
 export const PRO_PERIOD_DAYS = 30;

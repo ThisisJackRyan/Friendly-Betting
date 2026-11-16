@@ -1,6 +1,5 @@
 /** @jest-environment node */
 import { createBetForCreator, creatorFields, isEarlyType, isRematch } from './createBet';
-import { FREE_BETS } from '../phone/proConfig';
 import { fakeDb } from './testing/fakeDb';
 
 const PHONE = '+15551234567';
@@ -21,8 +20,10 @@ const fields = {
 const PRO = { plan: 'pro', source: 'mock', expiresAt: NOW + DAY };
 const EXPIRED = { plan: 'pro', source: 'mock', expiresAt: NOW - DAY };
 const FOUNDER = { plan: 'founder', source: 'mock', founderNumber: 3, expiresAt: null };
+// Many bets: creating is never capped.
+const MANY = 25;
 
-// `count` existing bets by creator-1, plus one by someone else that never counts.
+// `count` existing bets by creator-1, plus one by someone else.
 function seeded({ count = 0, entitlement } = {}) {
   const docs = { 'bets/theirs': { createdByID: 'someone-else', status: 'open' } };
   for (let i = 0; i < count; i += 1) docs[`bets/mine${i}`] = { createdByID: 'creator-1', status: i ? 'open' : 'closed' };
@@ -68,8 +69,8 @@ describe('creatorFields', () => {
 });
 
 describe('createBetForCreator', () => {
-  test('a free creator under the limit creates the bet in the shape createBet writes', async () => {
-    const db = seeded({ count: FREE_BETS - 1 });
+  test('a free creator creates the bet in the shape createBet writes', async () => {
+    const db = seeded({ count: 2 });
     await expect(create(db, { fields: { ...fields, status: 'closed', winnerId: 'a', votes: [{ voterId: 'x' }], code: 'zzz', createdAt: 1 } }))
       .resolves.toEqual({ code: 'new001' });
     expect(db.data('bets/new001')).toEqual({
@@ -83,50 +84,23 @@ describe('createBetForCreator', () => {
     });
   });
 
-  test('FREE_BETS is 3: the 1st, 2nd and 3rd bets save, the 4th does not', async () => {
-    expect(FREE_BETS).toBe(3);
+  test.each([
+    ['no entitlement', undefined],
+    ['an expired plan', EXPIRED],
+    ['live Pro', PRO],
+    ['a legacy founder', FOUNDER],
+  ])('creating is not capped: a creator with %s and many bets still creates', async (_name, entitlement) => {
+    const db = seeded({ count: MANY, entitlement });
+    await expect(create(db)).resolves.toEqual({ code: 'new001' });
+    expect(db.data('bets/new001')).toMatchObject({ question: fields.question, createdByID: 'creator-1' });
+  });
+
+  test('a free creator makes one bet after another', async () => {
     const db = seeded();
-    for (let i = 0; i < FREE_BETS; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       await expect(create(db, { newCode: codes(`b${i}`) })).resolves.toEqual({ code: `b${i}` });
     }
-    await expect(create(db, { newCode: codes('b9') })).rejects.toMatchObject({ code: 'free-bet-limit' });
-    expect(db.data('bets/b9')).toBeUndefined();
-  });
-
-  test.each([
-    ['at', FREE_BETS],
-    ['over', FREE_BETS + 2],
-  ])('a free creator %s the limit gets free-bet-limit and nothing is written', async (_name, count) => {
-    const db = seeded({ count });
-    const before = db.writes.length;
-    await expect(create(db)).rejects.toMatchObject({ code: 'free-bet-limit' });
-    expect(db.writes.length).toBe(before);
-  });
-
-  test('deleted bets don\'t count: only bets that still exist', async () => {
-    const db = seeded({ count: FREE_BETS });
-    db.store.delete('bets/mine0');
-    await expect(create(db)).resolves.toEqual({ code: 'new001' });
-  });
-
-  test('an expired Pro plan is free: the limit applies', async () => {
-    await expect(create(seeded({ count: FREE_BETS, entitlement: EXPIRED }))).rejects.toMatchObject({ code: 'free-bet-limit' });
-  });
-
-  test.each([
-    ['live Pro', PRO],
-    ['Pro with no expiry', { plan: 'pro', source: 'admin' }],
-    ['a legacy founder', FOUNDER],
-  ])('%s is unlimited', async (_name, entitlement) => {
-    const db = seeded({ count: FREE_BETS + 5, entitlement });
-    await expect(create(db)).resolves.toEqual({ code: 'new001' });
-  });
-
-  test('another creator\'s bets and entitlement never count', async () => {
-    const db = seeded({ count: 0 });
-    db.store.set('entitlements/someone-else', { data: PRO, version: 99 });
-    for (let i = 0; i < FREE_BETS; i += 1) db.store.set(`bets/x${i}`, { data: { createdByID: 'someone-else' }, version: 99 });
-    await expect(create(db)).resolves.toEqual({ code: 'new001' });
+    expect(db.paths('bets/b')).toHaveLength(6);
   });
 
   describe('rematch', () => {
@@ -135,7 +109,7 @@ describe('createBetForCreator', () => {
     test.each([
       ['no entitlement', undefined],
       ['an expired plan', EXPIRED],
-    ])('needs Pro: %s is pro-required, even under the free limit', async (_name, entitlement) => {
+    ])('needs Pro: %s is pro-required, even with no other bets', async (_name, entitlement) => {
       const db = seeded({ count: 0, entitlement });
       await expect(create(db, { fields: rematch })).rejects.toMatchObject({ code: 'pro-required' });
       expect(db.paths('bets/new')).toEqual([]);
@@ -144,8 +118,8 @@ describe('createBetForCreator', () => {
     test.each([
       ['live Pro', PRO],
       ['a legacy founder', FOUNDER],
-    ])('%s runs it back, link and all, past the free limit', async (_name, entitlement) => {
-      const db = seeded({ count: FREE_BETS + 1, entitlement });
+    ])('%s runs it back, link and all', async (_name, entitlement) => {
+      const db = seeded({ count: MANY, entitlement });
       await expect(create(db, { fields: rematch })).resolves.toEqual({ code: 'new001' });
       expect(db.data('bets/new001').rematchOf).toEqual({ code: 'old123' });
     });
@@ -193,16 +167,5 @@ describe('createBetForCreator', () => {
     const db = seeded({ entitlement: PRO });
     db.store.set('bets/same', { data: {}, version: 99 });
     await expect(create(db, { newCode: () => 'same' })).rejects.toMatchObject({ code: 'collision' });
-  });
-
-  test('two creates at once can\'t both take the last free bet', async () => {
-    const db = seeded({ count: FREE_BETS - 1 });
-    const results = await Promise.allSettled([
-      create(db, { newCode: codes('race1') }),
-      create(db, { newCode: codes('race2') }),
-    ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')[0].reason.code).toBe('free-bet-limit');
-    expect(db.paths('bets/race')).toHaveLength(1);
   });
 });

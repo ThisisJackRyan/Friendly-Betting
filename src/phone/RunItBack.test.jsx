@@ -203,11 +203,12 @@ test('a double tap makes one bet', async () => {
   expect(navigation.push).toHaveBeenCalledTimes(1);
 });
 
-test('a failed save shows Create’s error and lets the creator try again', async () => {
+test('a failed save shows the shared fallback and lets the creator try again', async () => {
   saveBet.mockRejectedValueOnce({});
   await renderTally(creator);
   await userEvent.click(runItBack());
-  expect(screen.getByRole('alert')).toHaveTextContent('Could not save this bet.');
+  expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByRole('button', { name: /^(Go Pro|Try again)$/ })).toBeNull();
   expect(runItBack()).toBeEnabled();
   expect(runItBack()).toHaveTextContent('Run it back');
   expect(navigation.push).not.toHaveBeenCalled();
