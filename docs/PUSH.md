@@ -35,7 +35,7 @@ To stop server sends, set the flag off and redeploy the server: the send helper 
 | Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, channelId, code })` |
 | Settle and call-off send | `src/server/pushEvents.js` (`deliverBetPush`), `app/api/bets/[code]/push/route.js`, client `src/phone/betPush.js` (`requestBetPush`) |
 | First-pick send | `src/server/pushEvents.js` (`deliverPickPush`), `app/api/bets/[code]/push/pick/route.js`, client `src/phone/betPush.js` (`requestPickPush`), called from `castVote` in `src/phone/api.js` |
-| Closing-soon reminder | `src/server/pushEvents.js` (`deliverClosingSoon`, `deliverClosingPush`, `buildClosingPush`, `closingRecipients`, `closingEventId`, `inClosingWindow`, `CLOSING_WINDOW_MS`, `CLOSING_PUSH_MAX_BETS`), `app/api/cron/push-closing/route.js` (`GET`). How the route is called is a Jack decision; there is no schedule in the repo. |
+| Closing-soon reminder | `src/server/pushEvents.js` (`deliverClosingSoon`, `deliverClosingPush`, `buildClosingPush`, `closingRecipients`, `closingEventId`, `inClosingWindow`, `CLOSING_WINDOW_MS`, `CLOSING_PUSH_MAX_BETS`), `app/api/cron/push-closing/route.js` (`GET`), workflow in `ci/push-closing.yml` (Jack moves it to `.github/workflows/push-closing.yml`) |
 | Android channel | `src/phone/pushChannel.js` (`ensurePushChannel`, called by `PushSync`); id `PUSH_CHANNEL_ID` in `pushConfig.js` |
 | Admin Messaging | `adminMessaging()` in `src/server/firebaseAdmin.js`, lazy like `adminDb()` / `adminAuth()` |
 | Device owners | `privatePushDevices/{deviceId}` (`{ uid, updatedAt }`), written by `saveDeviceToken` / `removeDeviceToken` |
@@ -268,37 +268,36 @@ The approved plan also named friends who are part of the bet but have not picked
 - Votes exist only after a pick: the legacy `votes` array and `bets/{code}/votes/{uid}`. A uid there has already picked, so it is not a "not picked yet" friend; voters who picked are never sent the reminder.
 - `subscribeMyBets` queries only `createdByID`. There is no participants list.
 
-This PR adds no new tracking (no viewers, joined or invitees collection). Recipients are creator-only for now. The not-yet-picked body and its payload (`buildClosingPush(bet, code, 'pending')`) exist and are tested, but they stay unused until a product decision to record who joined a bet.
+This PR adds no new tracking (no viewers, joined or invitees collection). Creator-only reminders are final for v1; no join tracking is planned. The not-yet-picked body and its payload (`buildClosingPush(bet, code, 'pending')`) are kept as approved copy and tests, but production never sends them.
 
 Prefs are honored the same way as settle and first pick: `sendToUser` only delivers to registered device tokens, and the app unregisters its token when the in-app choice is off. No server-side pref document, no new Firestore field. A creator with no registered device gets nothing, and that is not a failure.
 
-### Trigger: Jack decides how the route is called
+### Trigger: a GitHub Actions workflow every 15 minutes
 
-The route is `GET /api/cron/push-closing`, protected by `Authorization: Bearer ${CRON_SECRET}`. This PR does not schedule it. The first preview of this branch failed because the account is on Hobby and a 15-minute Vercel cron cannot deploy ("Hobby accounts are limited to daily cron jobs. This cron expression (`*/15 * * * *`) would run more than once per day."). There is no `vercel.json` in this PR (none existed before it), so a PR must not break deploys.
+The route is `GET /api/cron/push-closing`, protected by `Authorization: Bearer ${CRON_SECRET}`. A 15-minute Vercel cron cannot deploy on the Hobby plan (the first preview of this branch failed with "Hobby accounts are limited to daily cron jobs"), and there is no `vercel.json` in this PR (none existed before it).
 
-How the route gets called about every 15 minutes is a Jack decision. Either:
+Captain's call: call the route from a GitHub Actions scheduled workflow every 15 minutes (`cron: "*/15 * * * *"`, plus `workflow_dispatch`). The workflow lives at `ci/push-closing.yml` because the token that opened this PR lacks GitHub's `workflow` scope, which is required to create files under `.github/workflows/`. Jack moves it to `.github/workflows/push-closing.yml` (or grants `workflow` scope) when he adds the repo secret. Until then, GitHub will not run it. Scheduled workflows also run only from the default branch once the file is in place.
 
-- **(a) Upgrade Vercel to Pro** for the `thisisjackryans-projects` team, then add this entry to a `vercel.json` `crons` array: `{"path":"/api/cron/push-closing","schedule":"*/15 * * * *"}`. Once `CRON_SECRET` is set, Vercel sends `Authorization: Bearer ${CRON_SECRET}` on production deployments only (not previews).
-- **(b) An external scheduler**, for example a GitHub Actions scheduled workflow or cron-job.org, calling `GET /api/cron/push-closing` every 15 minutes with `Authorization: Bearer $CRON_SECRET`. This PR does not add a GitHub workflow file.
+The workflow sends `Authorization: Bearer ${{ secrets.CRON_SECRET }}` to `https://www.friendly-bets.com/api/cron/push-closing` (or `vars.PUSH_CRON_URL` if that repo variable is set). It uses `curl --fail-with-body --max-time 60`. If the secret is missing or blank, it prints a short notice and exits 0, so the schedule does not fail every 15 minutes before the secret is added. A 404 (the flag is off) is also a quiet exit 0. It fails only when the secret is set and the call gets a 401, a 5xx, or a network error. It never echoes the secret.
 
-The route is safe to call at any frequency: the per-bet claim `privatePushSends/closing:{code}` makes the reminder send at most once, even if two callers overlap or a scheduler retries.
+The route is safe to call at any frequency: the per-bet claim `privatePushSends/closing:{code}` makes the reminder send at most once, even if two callers overlap or a run retries.
 
 The route (`runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 60`; not a browser or app route, so no CORS and no `OPTIONS`) checks, in order:
 
 1. Flag off: a plain 404 `{ error: 'not-found' }`, before auth, the database or Messaging.
-2. `Authorization: Bearer ${CRON_SECRET}`, compared in constant time (`crypto.timingSafeEqual` when the lengths match). A missing header, a wrong secret, or a missing or blank `CRON_SECRET` is a 401 `{ error: 'unauthorized' }`. The secret and the header are never logged. Vercel sends this header automatically when a Vercel cron is configured and `CRON_SECRET` is set; an external scheduler must send the same header.
+2. `Authorization: Bearer ${CRON_SECRET}`, compared in constant time (`crypto.timingSafeEqual` when the lengths match). A missing header, a wrong secret, or a missing or blank `CRON_SECRET` is a 401 `{ error: 'unauthorized' }`. The secret and the header are never logged. The GitHub Actions workflow sends this header; a manual call must send the same one.
 3. Runs `deliverClosingSoon` and answers 200 with counts only: `{ processed, notified, sent, failed, skips: { reason: count } }`. 503 `{ error: 'not-configured' }` when `FIREBASE_SERVICE_ACCOUNT` is missing, 500 `{ error: 'server' }` on any other failure; logs at most an error code.
 
 `deliverClosingSoon`:
 
 1. Flag off: `{ skipped: 'disabled' }` before the database.
-2. One query: `bets` where `closesAt > now` and `closesAt < now + 1h`, `orderBy('closesAt', 'asc')`, `.limit(CLOSING_PUSH_MAX_BETS)` (50). Soonest-closing bets go first; the bound keeps one run inside `maxDuration`. Status is not filtered in the query (legacy open bets have none, and called-off can be a boolean); that is checked per bet after the read.
+2. One query: `bets` where `closesAt > now` and `closesAt < now + 1h`, `orderBy('closesAt', 'asc')`, `.limit(CLOSING_PUSH_MAX_SCAN)` (200). Soonest-closing bets go first. Already-claimed bets (a cheap read of `privatePushSends/closing:{code}`) are skipped and do not count toward `CLOSING_PUSH_MAX_BETS` (50 unclaimed bets processed per run). Status is not filtered in the query (legacy open bets have none, and called-off can be a boolean); that is checked per unclaimed bet after a `bets/{code}` read.
 3. For each result, `deliverClosingPush`, one at a time. A throw for one bet (a read or claim failure) is counted as a failure, logged with the bet code and an error code, and the rest still run.
 
 `deliverClosingPush` (one bet):
 
 1. Flag off: `{ skipped: 'disabled' }` before the database.
-2. Re-reads the bet with its votes (`readBetWithVotes`). Missing: `not-found`. Then the skip rules above.
+2. If the claim already exists, `{ skipped: 'already-sent' }` and the bet is not read. Otherwise reads only `bets/{code}` (votes are unused, because recipients are creator-only). Missing: `not-found`. Then the skip rules above.
 3. Claims `privatePushSends/closing:{code}` in a transaction (the existing deny-all collection; no rules change). No timestamp in the id, so a creator who moves the deadline later does not get a second reminder. An existing claim means already sent: `{ skipped: 'already-sent' }`. The claim holds only `{ code, at }`.
 4. Sends to the creator through `sendToUser` with `betPushOptions(code)`. If nothing reached a device and it failed, threw, or the Admin SDK was not set up or could not read devices (`admin-not-configured`, `read-failed`), the claim is deleted so a later call can try again while the bet is still in the window. No registered device (`no-devices`) keeps the claim.
 
@@ -308,7 +307,7 @@ A range plus `orderBy` on the single field `closesAt` is served by Firestore's a
 
 ### `CRON_SECRET`
 
-Jack sets `CRON_SECRET` on Vercel himself (Production at least; a long random value). It is not in the repo, not in any `.env` file, and this PR does not set it. Until it is set, every call to the route is a 401 and nothing is sent, even with the flag on.
+Leave `CRON_SECRET` unset for now. Push stays flag-off until after the Apple signup and the first native build. Setting it is bundled with Jack's later push setup list (the APNs key and Xcode capabilities), not asked for today. When it is set, it is one long random value used both as a Vercel Production env and as a GitHub repo secret of the same name. It is not in the repo, not in any `.env` file, and this PR does not set it. Until it is set, the workflow prints a short notice and exits 0, and a manual call without the secret is a 401 and sends nothing.
 
 ### Vercel plan limits (Jack decision)
 
@@ -318,14 +317,15 @@ From Vercel's Cron Jobs usage and pricing page (checked Nov 16 2026):
 - **Pro and Enterprise:** 100 cron jobs, down to once per minute, per-minute precision.
 - Vercel crons run on **production deployments only**, never on previews. A preview can only be tested by calling the route by hand, with a `CRON_SECRET` set for Preview.
 
-The `friendly-betting` project (team `thisisjackryans-projects`) is **on Hobby**. That was confirmed when the first preview of this branch failed at 11:46 AM CST on Nov 16 2026 (`dpl_6MbmGe3Xpiq68imhiPaTTjNJCXmZ`) with the Hobby daily-cron error above. A 15-minute Vercel cron is therefore not in the repo. Jack chooses (a) or (b) under "Trigger" above. A daily Vercel cron on Hobby cannot reliably hit an under-an-hour window (it would miss most bets).
+The `friendly-betting` project (team `thisisjackryans-projects`) is **on Hobby**. That was confirmed when the first preview of this branch failed at 11:46 AM CST on Nov 16 2026 (`dpl_6MbmGe3Xpiq68imhiPaTTjNJCXmZ`) with the Hobby daily-cron error above. A 15-minute Vercel cron is therefore not in the repo. The route is triggered by the GitHub Actions workflow instead, so no Vercel Pro upgrade is required for this reminder.
 
 ### Tradeoffs
 
 - If the route is called every 15 minutes, the reminder arrives with anywhere from about 45 to just under 60 minutes left (less if a run fails and the next one retries). A bet created or edited to close in under 15 minutes may be missed between calls.
-- At most 50 bets per run. Claimed bets stay in the query until they close, so if more than 50 bets close within the same hour, the ones beyond the 50 soonest wait for earlier ones to close and may be missed.
-- Each run re-reads every bet in the window (up to 50 bet reads plus their vote lists), even ones already claimed.
-- The "not picked yet" friends get nothing until the app records who is in a bet (see "Who gets it").
+- At most 50 unclaimed bets are processed per run (the query may inspect up to 200). Already-claimed bets are skipped from the claim doc and do not use those slots, so they cannot hide later unclaimed bets in the same window. If more than 50 unclaimed bets close within the same hour, the ones past the 50 soonest wait for a later call.
+- Each unclaimed candidate is a single `bets/{code}` read, not a vote-list read. Already-claimed bets are not re-read.
+- If the function dies after the claim is written and before the send finishes, that reminder is lost: the claim stays, and a later call treats it as already sent.
+- Friends who have not picked are not notified. That is final for v1; no join tracking is planned. The unused not-yet-picked body stays in copy and tests and is never sent.
 
 ## Android notification channel
 
@@ -340,7 +340,7 @@ UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
 
 ## Later PRs
 
-None planned. The closing-soon reminder was the last of the five push PRs (#96 infra, #97 opt-in, #98 settle and call-off, #99 first pick, then this one). Sending the not-yet-picked body would need a record of who joined a bet, which does not exist; that is a product decision, not a planned PR.
+None planned. The closing-soon reminder was the last of the five push PRs (#96 infra, #97 opt-in, #98 settle and call-off, #99 first pick, then this one). Creator-only reminders are final for v1; no join tracking is planned.
 
 ## What Jack must do himself
 
@@ -352,6 +352,6 @@ None of this is in the repo, and none of it goes in a PR.
 4. Confirm both native apps (`com.friendlybetting.app` on iOS and Android) are registered in `friendly-betting-fb47e` and that Cloud Messaging is enabled (Firebase Cloud Messaging API (V1) on).
 5. Android SHA-1 / SHA-256 fingerprints stay a Jack-only console step.
 6. Nothing merges to `main`, and no rules deploy, without Jack's own go. `firestore.rules` is not auto-deployed: review it line by line against the live console rules before anyone runs `firebase deploy --only firestore:rules`.
-7. Set `CRON_SECRET` on Vercel (Production at least; Preview too if you will call the route there by hand) to a long random value. Never commit it. Until it is set, the closing-soon route answers 401 and sends nothing. If you use an external scheduler, that caller needs the same secret.
-8. Decide how `GET /api/cron/push-closing` gets called about every 15 minutes. The account is Hobby, so a 15-minute Vercel cron cannot deploy. Either (a) upgrade `thisisjackryans-projects` to Pro and add `{"path":"/api/cron/push-closing","schedule":"*/15 * * * *"}` to a `vercel.json` `crons` array, or (b) call the route from an external scheduler (for example a GitHub Actions scheduled workflow or cron-job.org) with `Authorization: Bearer $CRON_SECRET`. This PR does not add a workflow file. The route is safe to call at any frequency because of the per-bet claim.
-9. Turn the flag on in a preview first (Vercel env plus the native build env, then redeploy and rebuild: the flag is build-time), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds. Vercel crons, if you later add one, run only on production. To try the closing-soon route on a preview, set a `CRON_SECRET` for Preview too and call `/api/cron/push-closing` by hand with it.
+7. After the Apple signup and the first native build, as part of the push setup list (with the APNs key and Xcode capabilities), set `CRON_SECRET` to a long random value as a Vercel Production env and as a GitHub repo secret of the same value. Never commit it. Leave it unset until then. Until it is set, the workflow prints a short notice and exits 0, and the route answers 401 if called with no secret.
+8. Move `ci/push-closing.yml` to `.github/workflows/push-closing.yml` (or grant a token the `workflow` scope and move it in a later commit), and delete `ci/README.md`. GitHub only runs scheduled workflows from the default branch once the file is under `.github/workflows/`. Optional: set repo variable `PUSH_CRON_URL` if the route is not at `https://www.friendly-bets.com/api/cron/push-closing`.
+9. Turn the flag on in a preview first (Vercel env plus the native build env, then redeploy and rebuild: the flag is build-time), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds. The Actions workflow calls production. To try the route on a preview, set a Preview `CRON_SECRET` and call `/api/cron/push-closing` by hand, or point `PUSH_CRON_URL` at that preview and run `workflow_dispatch` once the workflow file is in place.

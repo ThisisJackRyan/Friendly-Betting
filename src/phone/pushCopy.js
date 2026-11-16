@@ -19,9 +19,9 @@ export const PUSH_COPY = Object.freeze({
 export const PUSH_NOTIFICATION_COPY = Object.freeze({
   // To the creator, once per bet, when under an hour is left before closesAt.
   closingCreator: 'Under an hour left. Nudge anyone who hasn’t picked.',
-  // To friends in the bet who have not picked yet, same window. Approved, but
-  // nothing records who those friends are, so the cron sends only the
-  // creator body today (docs/PUSH.md).
+  // Approved copy for friends in the bet who have not picked, same window.
+  // v1 is creator-only and no join tracking is planned, so this body is
+  // unused (docs/PUSH.md).
   closingPending: 'Under an hour left to pick a side.',
   // To the creator, on a friend's first pick. {name} is the voter's cleaned
   // name, {side} the picked option's vote label.

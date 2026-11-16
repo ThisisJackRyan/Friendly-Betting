@@ -9,11 +9,10 @@ export const dynamic = 'force-dynamic';
 // One run reads and sends for up to CLOSING_PUSH_MAX_BETS bets, one at a time.
 export const maxDuration = 60;
 
-// Closing-soon reminder route (docs/PUSH.md). Not scheduled in this PR: a
-// 15-minute Vercel cron fails to deploy on Hobby, so how it gets called is a
-// Jack decision (upgrade to Pro and add the vercel.json cron, or an external
-// scheduler). Protected by Authorization: Bearer ${CRON_SECRET}. Not a browser
-// or app route, so no CORS. With the flag off it looks like it does not exist:
+// Closing-soon reminder route (docs/PUSH.md). Called by the GitHub Actions
+// workflow in ci/push-closing.yml (Jack moves it to .github/workflows/).
+// Protected by Authorization: Bearer ${CRON_SECRET}. Not a browser or app
+// route, so no CORS. With the flag off it looks like it does not exist:
 // no auth check, no database, no Messaging.
 const NOT_FOUND = () => json({ error: 'not-found' }, 404);
 

@@ -322,18 +322,25 @@ export async function deliverPickPush({ db, code, actorUid, bet: given, now = Da
   return { sent, failed };
 }
 
-// Closing-soon reminder (docs/PUSH.md). A Vercel cron calls
-// GET /api/cron/push-closing every 15 minutes; deliverClosingSoon finds the
-// bets whose closesAt is under an hour away and runs deliverClosingPush for
-// each. Once per bet, ever, to the creator only.
+// Closing-soon reminder (docs/PUSH.md). A scheduled caller (the GitHub
+// Actions workflow in ci/push-closing.yml) hits GET /api/cron/push-closing
+// every 15 minutes; deliverClosingSoon finds the bets whose closesAt is under
+// an hour away and runs deliverClosingPush for each. Once per bet, ever, to
+// the creator only.
 
 // "Under an hour left": 0 < closesAt - now < CLOSING_WINDOW_MS. Exactly an
 // hour left is outside; at or past closesAt the bet is already closed.
 export const CLOSING_WINDOW_MS = 60 * 60 * 1000;
 
-// Bets handled per cron run, soonest closing first. The next run (15 minutes
-// later) picks up any unclaimed bet still in the window.
+// Unclaimed bets handled per run, soonest closing first. Already-claimed
+// bets are skipped cheaply and do not use these slots. A later call picks
+// up any unclaimed bet still in the window.
 export const CLOSING_PUSH_MAX_BETS = 50;
+
+// Docs inspected per run (the Firestore query limit). Larger than
+// CLOSING_PUSH_MAX_BETS so a window full of already-claimed bets does not
+// hide unclaimed ones behind the first 50.
+export const CLOSING_PUSH_MAX_SCAN = 200;
 
 // closing:{code}. No timestamp: a creator who later moves the deadline does
 // not get a second reminder.
@@ -363,9 +370,10 @@ export function closingRecipients(bet) {
   return typeof creator === 'string' && creator ? [creator] : [];
 }
 
-// kind 'creator' or 'pending' (a friend in the bet who has not picked; the
-// cron has no such uids to send it to today). Title is the bet question; data
-// opens /b/{code}. No phone, token, uid or name.
+// kind 'creator' or 'pending' (a friend in the bet who has not picked).
+// v1 is creator-only and no join tracking is planned, so 'pending' is
+// unused. Title is the bet question; data opens /b/{code}. No phone, token,
+// uid or name.
 export function buildClosingPush(bet, code, kind = 'creator') {
   return {
     title: String(questionOf(bet)),
@@ -386,15 +394,20 @@ function closingSkip(bet, now) {
 }
 
 // One bet. Safe to run any number of times: the claim makes it once per bet.
+// Votes are unused (recipients are creator-only), so this reads only
+// bets/{code}. An existing claim is checked first, so a rerun does not
+// read the bet at all.
 export async function deliverClosingPush({ db, code, now = Date.now, send = sendToUser }) {
   if (!pushEnabled()) return { sent: 0, failed: 0, skipped: 'disabled' };
-  const bet = await readBetWithVotes(db, code);
-  if (!bet) return { sent: 0, failed: 0, skipped: 'not-found' };
+  const claimRef = db.doc(sendsPath(closingEventId(code)));
+  if ((await claimRef.get()).exists) return { sent: 0, failed: 0, skipped: 'already-sent' };
+  const snap = await db.doc(`bets/${code}`).get();
+  if (!snap.exists) return { sent: 0, failed: 0, skipped: 'not-found' };
+  const bet = snap.data();
   const skip = closingSkip(bet, now());
   if (skip) return { sent: 0, failed: 0, skipped: skip };
 
   // Claim before the send; another run that already claimed it wins.
-  const claimRef = db.doc(sendsPath(closingEventId(code)));
   const claimed = await db.runTransaction(async (tx) => {
     const current = await tx.get(claimRef);
     if (current.exists) return false;
@@ -434,27 +447,41 @@ export async function deliverClosingPush({ db, code, now = Date.now, send = send
   return !sent && !failed && sendSkip ? { sent, failed, skipped: sendSkip } : { sent, failed };
 }
 
-// The one hook the cron route calls. One indexed range query on closesAt
-// (Firestore's automatic single-field index; no composite index), soonest
-// first, at most CLOSING_PUSH_MAX_BETS. Status is not filtered in the query
-// (legacy open bets have none, and called-off can be a boolean);
-// deliverClosingPush re-reads each bet and skips the ones that are done.
-// Returns counts only, never a uid.
-export async function deliverClosingSoon({ db, now = Date.now, send = sendToUser, limit = CLOSING_PUSH_MAX_BETS }) {
+// The one hook the scheduled route calls. One indexed range query on
+// closesAt (Firestore's automatic single-field index; no composite index),
+// soonest first, at most CLOSING_PUSH_MAX_SCAN docs. Status is not filtered
+// in the query (legacy open bets have none, and called-off can be a
+// boolean); deliverClosingPush reads only the bet doc and skips the ones
+// that are done. Already-claimed bets are detected from the claim doc and
+// do not count toward CLOSING_PUSH_MAX_BETS, so they cannot starve later
+// unclaimed bets in the same window. Returns counts only, never a uid.
+export async function deliverClosingSoon({
+  db, now = Date.now, send = sendToUser,
+  limit = CLOSING_PUSH_MAX_BETS, scan = CLOSING_PUSH_MAX_SCAN,
+}) {
   if (!pushEnabled()) return { processed: 0, sent: 0, failed: 0, skipped: 'disabled' };
   const start = now();
   const { docs } = await db.collection('bets')
     .where('closesAt', '>', start)
     .where('closesAt', '<', start + CLOSING_WINDOW_MS)
     .orderBy('closesAt', 'asc')
-    .limit(limit)
+    .limit(scan)
     .get();
   const totals = { processed: 0, notified: 0, sent: 0, failed: 0, skips: {} };
   const skipped = (reason) => {
     totals.skips[reason] = (totals.skips[reason] || 0) + 1;
   };
+  let attempted = 0;
   for (const snap of docs) {
     const code = snap.id;
+    const claimRef = validCode(code) ? db.doc(sendsPath(closingEventId(code))) : null;
+    if (claimRef && (await claimRef.get()).exists) {
+      totals.processed += 1;
+      skipped('already-sent');
+      continue;
+    }
+    if (attempted >= limit) break;
+    attempted += 1;
     totals.processed += 1;
     if (!validCode(code)) {
       skipped('bad-code');

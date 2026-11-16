@@ -2,8 +2,8 @@
 import { adminDb, adminMessaging } from './firebaseAdmin';
 import { PUSH_NOTIFICATION_COPY } from '../phone/pushCopy';
 import {
-  betPushOptions, buildClosingPush, CLOSING_PUSH_MAX_BETS, CLOSING_WINDOW_MS, closingEventId, closingRecipients,
-  deliverClosingPush, deliverClosingSoon, inClosingWindow,
+  betPushOptions, buildClosingPush, CLOSING_PUSH_MAX_BETS, CLOSING_PUSH_MAX_SCAN, CLOSING_WINDOW_MS, closingEventId,
+  closingRecipients, deliverClosingPush, deliverClosingSoon, inClosingWindow,
 } from './pushEvents';
 import { sendToUser } from './pushSend';
 import { fakeDb } from './testing/fakeDb';
@@ -170,6 +170,34 @@ describe('deliverClosingPush', () => {
     expect(claims(db)).toEqual([claimPath()]);
   });
 
+  test('an already-claimed bet is detected from the claim; the bet doc is not read', async () => {
+    const db = seeded(openBet(), { [claimPath()]: { code: CODE, at: NOW } });
+    const read = [];
+    const original = db.doc;
+    db.doc = (path) => {
+      const ref = original(path);
+      return { ...ref, get: async () => { read.push(path); return ref.get(); } };
+    };
+    const send = ok();
+    expect(await deliver(db, { send })).toEqual({ sent: 0, failed: 0, skipped: 'already-sent' });
+    expect(read).toEqual([claimPath()]);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('reads only the bet doc, never the votes collection', async () => {
+    const db = seeded(openBet(), { [`bets/${CODE}/votes/maya`]: { voterId: 'maya', name: 'Maya', optionId: 'a' } });
+    const collections = [];
+    const original = db.collection.bind(db);
+    db.collection = (path) => {
+      collections.push(path);
+      return original(path);
+    };
+    const send = ok();
+    expect(await deliver(db, { send })).toEqual({ sent: 1, failed: 0 });
+    expect(collections).toEqual([]);
+    expect(send.mock.calls.map(([uid]) => uid)).toEqual(['creator']);
+  });
+
   test('concurrent runs send once', async () => {
     const db = seeded(openBet());
     const send = ok();
@@ -319,8 +347,10 @@ describe('deliverClosingSoon (the cron batch)', () => {
     expect(calls).toEqual(['bets']);
     expect(chain.where.mock.calls).toEqual([['closesAt', '>', NOW], ['closesAt', '<', NOW + CLOSING_WINDOW_MS]]);
     expect(chain.orderBy.mock.calls).toEqual([['closesAt', 'asc']]);
-    expect(chain.limit.mock.calls).toEqual([[CLOSING_PUSH_MAX_BETS]]);
+    expect(chain.limit.mock.calls).toEqual([[CLOSING_PUSH_MAX_SCAN]]);
     expect(CLOSING_PUSH_MAX_BETS).toBe(50);
+    expect(CLOSING_PUSH_MAX_SCAN).toBe(200);
+    expect(CLOSING_PUSH_MAX_SCAN).toBeGreaterThan(CLOSING_PUSH_MAX_BETS);
   });
 
   test('sends only bets in the window; skips settled, called-off and closed ones; counts only, no uids', async () => {
@@ -384,7 +414,26 @@ describe('deliverClosingSoon (the cron batch)', () => {
     expect(codes[0]).toBe('bet054');
     expect(codes).not.toContain('bet000');
     expect(codes).not.toContain('bet004');
-    expect(await run(db, { send, limit: 2 })).toMatchObject({ processed: 2, sent: 0 });
+    const later = await run(db, { send, limit: 2 });
+    expect(later).toMatchObject({ sent: 2, notified: 2 });
+    expect(later.skips['already-sent']).toBe(CLOSING_PUSH_MAX_BETS);
+    expect(send.mock.calls.map(([, , options]) => options.code).slice(-2)).toEqual(['bet004', 'bet003']);
+  });
+
+  test('already-claimed bets do not use up the per-run slots; later unclaimed bets still send', async () => {
+    const claimed = Array.from({ length: CLOSING_PUSH_MAX_BETS }, (_, i) => bet(`old${String(i).padStart(3, '0')}`, 10 + i * 0.1));
+    const claimsFor = claimed.map(([path]) => {
+      const code = path.slice('bets/'.length);
+      return [`privatePushSends/closing:${code}`, { code, at: NOW }];
+    });
+    const fresh = [bet('new001', 50), bet('new002', 51)];
+    const db = fakeDb(Object.fromEntries([...claimed, ...claimsFor, ...fresh]));
+    const send = ok();
+    const result = await run(db, { send });
+    expect(result.skips['already-sent']).toBe(CLOSING_PUSH_MAX_BETS);
+    expect(result.sent).toBe(2);
+    expect(result.notified).toBe(2);
+    expect(send.mock.calls.map(([, , options]) => options.code)).toEqual(['new001', 'new002']);
   });
 
   test('one bad bet does not stop the rest; logs hold only codes and error codes', async () => {
