@@ -8,6 +8,8 @@ import { CodeBody, useCreatorPhone } from './AuthSlides';
 import CreateForm from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
+import { isOnlyBetBy } from './firstBet';
+import { checkFirstBet, firstBetCheckPossible } from './pushOptIn';
 import { sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { AUTH_COPY, codeSentCopy, PERSON_CHECK_CANCELLED } from './creatorSession';
 import { shareMessage } from './share';
@@ -28,6 +30,14 @@ jest.mock('next/link');
 
 jest.mock('./api', () => ({
   saveBet: jest.fn(),
+}));
+
+jest.mock('./firstBet', () => ({ isOnlyBetBy: jest.fn() }));
+
+// Push off (the default): no first-bet lookup at all.
+jest.mock('./pushOptIn', () => ({
+  firstBetCheckPossible: jest.fn(() => false),
+  checkFirstBet: jest.fn(async () => false),
 }));
 
 jest.mock('./creatorAuth', () => ({
@@ -65,6 +75,10 @@ beforeEach(() => {
   navigation.back.mockImplementation(() => window.history.back());
   saveBet.mockReset();
   saveBet.mockResolvedValue('abc123');
+  firstBetCheckPossible.mockReset();
+  firstBetCheckPossible.mockReturnValue(false);
+  checkFirstBet.mockReset();
+  checkFirstBet.mockResolvedValue(false);
   shareMessage.mockReset();
   shareMessage.mockResolvedValue('copied');
   window.sessionStorage.clear();
@@ -1475,5 +1489,40 @@ describe('create steps are history entries', () => {
       if (previous) window.matchMedia = previous;
       else delete window.matchMedia;
     }
+  });
+});
+
+describe('the first-bet note for the push opt-in', () => {
+  async function send() {
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  }
+
+  test('push off: no lookup, and the tally gets the plain fresh-bet note as today', async () => {
+    await send();
+    expect(checkFirstBet).not.toHaveBeenCalled();
+    expect(isOnlyBetBy).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('friendly.freshBet')).toBe('abc123');
+    expect(window.sessionStorage.getItem('friendly.freshBetFirst')).toBeNull();
+  });
+
+  test('push on and the creator\u2019s first bet: the tally is told', async () => {
+    firstBetCheckPossible.mockReturnValue(true);
+    checkFirstBet.mockResolvedValue(true);
+    await send();
+    expect(checkFirstBet).toHaveBeenCalledWith(isOnlyBetBy, 'user-1', 'abc123');
+    expect(window.sessionStorage.getItem('friendly.freshBet')).toBe('abc123');
+    expect(window.sessionStorage.getItem('friendly.freshBetFirst')).toBe('abc123');
+  });
+
+  test('push on, a later bet (or a failed lookup): only the fresh-bet note', async () => {
+    firstBetCheckPossible.mockReturnValue(true);
+    window.sessionStorage.setItem('friendly.freshBetFirst', 'old111');
+    await send();
+    expect(checkFirstBet).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('friendly.freshBet')).toBe('abc123');
+    expect(window.sessionStorage.getItem('friendly.freshBetFirst')).toBeNull();
   });
 });

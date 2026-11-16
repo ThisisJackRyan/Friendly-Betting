@@ -2,6 +2,22 @@ import { Capacitor } from '@capacitor/core';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { Preferences } from '@capacitor/preferences';
 import { auth } from '../Config/firebase-config';
+import { NativeSettings } from 'capacitor-native-settings';
+import {
+  acceptPushOptIn,
+  checkFirstBet,
+  checkPushPermission,
+  declinePushOptIn,
+  firstBetCheckPossible,
+  openPushSettings,
+  readPushSettings,
+  resetPushOptInForTests,
+  resyncAfterResume,
+  setPushOn,
+  shouldOfferPushOptIn,
+  syncPushForUser,
+  unregisterBeforeSignOut,
+} from './pushOptIn';
 import {
   getPushDeviceId,
   getPushToken,
@@ -33,6 +49,11 @@ jest.mock('@capacitor/preferences', () => {
     },
   };
 });
+jest.mock('capacitor-native-settings', () => ({
+  NativeSettings: { open: jest.fn(async () => ({ status: true })) },
+  AndroidSettings: { AppNotification: 'app_notification' },
+  IOSSettings: { App: 'app' },
+}));
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('../platform/runtime', () => ({
   isNativeApp: () => jest.requireMock('@capacitor/core').Capacitor.isNativePlatform(),
@@ -51,6 +72,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   Preferences.store.clear();
   resetPushDeviceIdForTests();
+  resetPushOptInForTests();
   Capacitor.isNativePlatform.mockReturnValue(false);
   Capacitor.getPlatform.mockReturnValue('web');
   auth.currentUser = user();
@@ -72,7 +94,45 @@ function expectNothingTouched() {
   expect(Preferences.get).not.toHaveBeenCalled();
   expect(Preferences.set).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
+  expect(NativeSettings.open).not.toHaveBeenCalled();
 }
+
+// Every entry point of the opt-in module (pushOptIn.js), with push off.
+async function runOptIn() {
+  const lookup = jest.fn(async () => true);
+  const out = {
+    possible: firstBetCheckPossible(),
+    first: await checkFirstBet(lookup, 'creator-1', 'abc123'),
+    offer: await shouldOfferPushOptIn({ firstBet: true }),
+    permission: await checkPushPermission(),
+    accept: await acceptPushOptIn(),
+    settings: await readPushSettings('creator-1'),
+    on: await setPushOn('creator-1', true),
+    off: await setPushOn('creator-1', false),
+    resume: await resyncAfterResume('creator-1', { wantOn: true }),
+    sync: await syncPushForUser('creator-1'),
+    signOut: await unregisterBeforeSignOut(),
+    open: await openPushSettings(),
+  };
+  declinePushOptIn();
+  expect(lookup).not.toHaveBeenCalled();
+  return out;
+}
+
+const OPT_IN_OFF = {
+  possible: false,
+  first: false,
+  offer: false,
+  permission: '',
+  accept: '',
+  settings: null,
+  on: null,
+  off: null,
+  resume: null,
+  sync: false,
+  signOut: undefined,
+  open: false,
+};
 
 async function runAll() {
   return {
@@ -95,6 +155,21 @@ test.each([undefined, '', '0', 'true'])('flag %p: a native app does nothing at a
   });
   expectNothingTouched();
   expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
+});
+
+test.each([undefined, '', '0', 'true'])('flag %p: the opt-in module does nothing at all in the native app', async (value) => {
+  if (value === undefined) delete process.env.NEXT_PUBLIC_PUSH_ENABLED;
+  else process.env.NEXT_PUBLIC_PUSH_ENABLED = value;
+  native();
+  expect(await runOptIn()).toEqual(OPT_IN_OFF);
+  expectNothingTouched();
+  expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
+});
+
+test('on the web the opt-in module does nothing, even with the flag on', async () => {
+  process.env.NEXT_PUBLIC_PUSH_ENABLED = '1';
+  expect(await runOptIn()).toEqual(OPT_IN_OFF);
+  expectNothingTouched();
 });
 
 test('on the web the flag changes nothing: no plugin calls, no fetch', async () => {
@@ -176,7 +251,7 @@ test('failures resolve with an error code and never throw', async () => {
   expect(await registerPushToken()).toEqual({ ok: false, error: 'no-token' });
 });
 
-test('nothing in the app calls the push plumbing or the messaging plugin yet', () => {
+function appSources() {
   const fs = require('fs');
   const path = require('path');
   const repo = path.join(__dirname, '..', '..');
@@ -192,8 +267,30 @@ test('nothing in the app calls the push plumbing or the messaging plugin yet', (
     });
   };
   ['src', 'mobile'].forEach((dir) => walk(path.join(repo, dir)));
-  const hits = files
-    .filter((file) => /pushTokens['"]|@capacitor-firebase\/messaging/.test(fs.readFileSync(file, 'utf8')))
-    .map((file) => path.relative(repo, file));
-  expect(hits).toEqual(['src/phone/pushTokens.js']);
+  return files.map((file) => ({ file: path.relative(repo, file), text: fs.readFileSync(file, 'utf8') }));
+}
+
+const hitsFor = (pattern) => appSources().filter(({ text }) => pattern.test(text)).map(({ file }) => file).sort();
+
+test('only the opt-in modules reach the push plumbing, the messaging plugin or the settings plugin', () => {
+  expect(hitsFor(/pushTokens['"]|@capacitor-firebase\/messaging|capacitor-native-settings/)).toEqual([
+    'src/phone/PushSettingsRow.jsx',
+    'src/phone/PushSync.jsx',
+    'src/phone/pushOptIn.js',
+    'src/phone/pushTokens.js',
+  ]);
+});
+
+test('the opt-in module is only used by the first-bet path, the row, the auth sync and log out', () => {
+  expect(hitsFor(/from '\.\/pushOptIn'/)).toEqual([
+    'src/phone/CreateForm.jsx',
+    'src/phone/PushOptInSheet.jsx',
+    'src/phone/PushSettingsRow.jsx',
+    'src/phone/PushSync.jsx',
+    'src/phone/TallyScreen.jsx',
+    'src/phone/creatorAuth.js',
+  ]);
+  // Never the vote page.
+  const vote = appSources().find(({ file }) => file === 'src/phone/VoteScreen.jsx');
+  expect(vote.text).not.toMatch(/push/i);
 });

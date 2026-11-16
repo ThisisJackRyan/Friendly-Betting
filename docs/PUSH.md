@@ -1,14 +1,15 @@
 # Push notifications
 
-Status: **infra only, behind a flag that is off.** There is no UI, no permission prompt and no send wired to any bet event. Nothing in the app calls this code yet.
+Status: **infra plus opt-in UX, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. There is still no send wired to any bet event: settle, call-off, vote and closing-soon sends are later PRs, so a granted permission and a registered token do nothing yet.
 
 ## The flag
 
 `NEXT_PUBLIC_PUSH_ENABLED`. Only the exact value `1` turns it on; unset, empty, `0`, `true` and anything else are off. It is read by both builds: Next inlines it for the web and API routes, and `mobile/vite.config.mjs` defines it for the app from the shell or the repo-root `.env*` files (the shell wins). It is unset in the repo. Helper: `pushEnabled()` in `src/phone/pushConfig.js`.
 
-With the flag off:
+With the flag off (and always on the web):
 
 - the client plumbing does nothing (no permission, no token read, no Preferences read, no fetch);
+- the opt-in sheet and the Notifications row never render, and the opt-in module (`src/phone/pushOptIn.js`) makes no plugin, Preferences or register calls; Create does no first-bet lookup, and the tally's share sheet opens after Create exactly as before;
 - `POST`, `DELETE` and `OPTIONS /api/push/tokens` answer a plain 404 with no CORS headers, as if the route did not exist;
 - `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM. Turning the Vercel env off stops delivery without an app update.
 
@@ -17,18 +18,21 @@ With the flag off:
 | Piece | Where |
 | --- | --- |
 | Flag and validators | `src/phone/pushConfig.js` (`pushEnabled`, `MAX_PUSH_DEVICES`, `validDeviceId`, `validPushToken`, `validPushPlatform`) |
-| Client plumbing (no UI) | `src/phone/pushTokens.js`: `getPushDeviceId`, `getPushToken`, `registerPushToken`, `unregisterPushToken` |
+| Client plumbing | `src/phone/pushTokens.js`: `getPushDeviceId`, `getPushToken`, `registerPushToken`, `unregisterPushToken` |
+| Opt-in logic | `src/phone/pushOptIn.js`: when the sheet shows, what its buttons do, the row's state, re-register on auth changes, unregister before log out |
+| Opt-in copy | `src/phone/pushCopy.js` (UX final, Nov 16 2026; asserted verbatim in `pushCopy.test.js`) |
+| Opt-in UI | `src/phone/PushOptInSheet.jsx` (on the tally), `src/phone/PushSettingsRow.jsx` (on My bets), `src/phone/PushSync.jsx` (mounted in `mobile/App.jsx`) |
 | Token route | `app/api/push/tokens/route.js` (`POST` and `DELETE /api/push/tokens`) |
 | Token storage | `src/server/pushTokens.js` (`saveDeviceToken`, `removeDeviceToken`) |
 | Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, code })` |
 | Admin Messaging | `adminMessaging()` in `src/server/firebaseAdmin.js`, lazy like `adminDb()` / `adminAuth()` |
 | Rules | `privatePushTokens` and `privatePushSends` deny all client access in `firestore.rules` |
-| Plugins | `@capacitor-firebase/messaging` v8 and `@capacitor/preferences` (per-install device id) |
+| Plugins | `@capacitor-firebase/messaging` v8, `@capacitor/preferences` (per-install device id, opt-in state) and `capacitor-native-settings` v8 (Open Settings) |
 | Native | Android `POST_NOTIFICATIONS`; iOS `UIBackgroundModes: remote-notification`; FCM auto-init off on both; `AppDelegate.swift` forwards the APNs token to the plugin |
 
 ### Client plumbing
 
-Every function is a no-op unless the flag is on **and** `Capacitor.isNativePlatform()`. Register and unregister also need a real Firebase user (anonymous counts); the local fallback uid cannot register. None of them asks for notification permission: the opt-in PR asks first, in context, then calls `registerPushToken()`. They never throw; they return `{ ok: true }` or `{ ok: false, skipped | error }`. They never log the token, uid or a phone number.
+Every function is a no-op unless the flag is on **and** `Capacitor.isNativePlatform()`. Register and unregister also need a real Firebase user (anonymous counts); the local fallback uid cannot register. None of them asks for notification permission: the opt-in sheet or the Notifications row asks first, in context, then calls `registerPushToken()`. They never throw; they return `{ ok: true }` or `{ ok: false, skipped | error }`. They never log the token, uid or a phone number.
 
 - `getPushDeviceId()`: a UUID kept in Preferences under `fb.pushDeviceId`. Stable per install, never the raw token.
 - `getPushToken()`: `FirebaseMessaging.getToken()`.
@@ -53,7 +57,7 @@ Writes (one Admin transaction each):
 - `privatePushTokens/{uid}/devices/{deviceId}`: `token`, `platform`, `createdAt`, `updatedAt` (epoch ms). Re-posting the same device keeps `createdAt` and moves `updatedAt` (a refreshed token replaces the old one). The same token under another device id of that uid is dropped (a reinstall). At most 10 devices per uid; the oldest `updatedAt` is evicted.
 - `DELETE` removes that device doc. A missing doc is still a 200.
 
-Known gap for the opt-in PR: if a device signs out and a different uid registers the same token, the old uid's doc keeps it until a send gets an unregistered error or the app calls `unregisterPushToken()` before the switch. Re-register on auth changes, and unregister before sign-out.
+Auth changes (handled in the opt-in UX below): Log out unregisters this install from the signed-in uid before signing out, and `PushSync` re-registers on each auth change for a uid whose in-app choice is on. If a device switches uid some other way (an anonymous session signing in to an existing phone account), the old uid's doc can keep the token until a send gets an unregistered error; anonymous uids never reach the sheet or the row, so in practice they hold no token.
 
 ### Server send helper
 
@@ -74,16 +78,50 @@ Known gap for the opt-in PR: if a device signs out and a different uid registers
 - Android: `POST_NOTIFICATIONS` in `AndroidManifest.xml` (Android 13+ asks only when the app requests it). `firebase_messaging_auto_init_enabled` is `false`, so no FCM token is created until the app asks for one.
 - iOS: `UIBackgroundModes` → `remote-notification` and `FirebaseMessagingAutoInitEnabled` = `NO` in `Info.plist`. `AppDelegate.swift` forwards `didRegisterForRemoteNotificationsWithDeviceToken`, the failure callback and `didReceiveRemoteNotification` to the plugin. `App.entitlements` is unchanged: the Push Notifications entitlement is added in Xcode (below).
 - SPM: the messaging plugin uses `packageOptions.symlink` in `capacitor.config.json`, like the authentication plugin, to avoid a package identity collision. `npx cap sync` regenerates `Package.swift` and the Gradle includes.
-- No Android notification channel is created, so there are no `TODO_UX_` strings in this PR. FCM's default channel applies until a later PR adds one with approved copy.
+- No Android notification channel is created yet; FCM's default channel applies until a later PR adds one with approved copy.
+
+## Opt-in UX
+
+Copy is UX final (Nov 16 2026) and lives in `src/phone/pushCopy.js`. Native only, flag on only, and only for a real Firebase user.
+
+### The sheet (after the creator's first send)
+
+"Want to know when friends pick?" / "We’ll ping you when picks come in and when it’s settled." / **Turn on notifications** (the green 56px `.cta`) / Not now (a muted text button).
+
+- **When.** Only on the live tally right after Create sent the creator's first bet. After the save, and only with push on, Create asks `isOnlyBetBy(uid, code)` in `src/phone/firstBet.js` (a two-doc `createdByID` query) whether the new bet is their only one, waiting at most 1.5 s. It writes a sibling of the fresh-bet note (`friendly.freshBetFirst` in `freshBet.js`) only on a yes; an error or timeout means no sheet. The tally takes both notes on its first mount.
+- **Never** at launch, on a reload, on a tally opened any other way, on the vote page or an invite link (`/b/{code}`), after a voter's pick, after a second or later create, on the web, with the flag off, without a real Firebase user, when the OS permission is already granted or denied (`FirebaseMessaging.checkPermissions()`), when a grant or a denial is saved for this uid, or once it has shown this session.
+- **Order.** The sheet shows first; the share sheet that opens itself after Create waits until the sheet closes, then opens as before. With no sheet the share opens exactly as it always has.
+- **Not now** (also Escape and the scrim): closes the sheet, never calls the OS, and suppresses the sheet for the rest of the session (in memory). Not saved, so a later session can still use the Notifications row.
+- **Turn on notifications**: `FirebaseMessaging.requestPermissions()`. On `granted` it saves the grant, turns the in-app choice on and calls `registerPushToken()`. On `denied` it saves the denial and closes; there is no follow-up dialog (the Notifications row is the way to Settings). If the call throws, nothing is saved, the sheet closes, and the share follows.
+
+State is kept per uid in Preferences: `fb.pushAsked.{uid}` (`granted` or `denied`, the OS answer) and `fb.pushPref.{uid}` (`on` or `off`, the in-app choice). Another account signing in on the same install does not inherit either.
+
+### The Notifications row (My bets, above Log out)
+
+"Notifications" / "Picks, results, and closing reminders." and a switch. Only on the signed-in My bets list, never on the phone gate.
+
+- **Permission granted:** the switch registers (on) or unregisters (off) and saves the in-app choice.
+- **Still promptable** (the user never saw the sheet, for example they already had bets): turning it on asks the OS from that tap, then registers on a grant. Loading the row never asks.
+- **Otherwise (denied):** the helper becomes "Turned off in your phone’s settings." with a muted **Open Settings** link, and the switch is off and disabled; it never asks again (iOS and Android 13+ will not). Open Settings uses `capacitor-native-settings`: the app's notification settings on Android, the app's own Settings page on iOS (the only one Apple allows).
+- **On App resume** the row reads the permission again. If it is now granted and the in-app choice is on, or the user went to Settings from this row, it turns on and registers.
+
+### Register and unregister
+
+- After a grant (sheet or row): `registerPushToken()`.
+- `PushSync` (mounted once in `mobile/App.jsx`) re-registers on each auth change when that uid's in-app choice is on and the OS permission is already granted. It never asks.
+- Log out (`signOutCreator`) calls `unregisterPushToken()` first, while the user's ID token still works, for a uid whose choice is on. It waits at most 3 s and never blocks the logout. The in-app choice stays, so signing back in registers again.
+
+### Notification copy
+
+Titles and bodies for the pick, settle, call-off and closing-soon sends are approved by UX (Nov 16 2026) but are not in the app yet; each lands with its send PR below.
 
 ## Later PRs
 
-1. **Opt-in UX** (copy first, then review): soft sheet right after the creator's first send only, never at launch or on the web; system prompt only after "Notify me"; no re-ask in the same session after a decline; a quiet Notifications row; register only after a grant; re-register on auth changes.
-2. **Settle and call-off send**: `POST /api/bets/{code}/push`, server-chosen recipients, `privatePushSends/{eventId}` claims, after the 35s undo window for settle.
-3. **First-pick vote send** to the creator, collapsed per bet (`collapseKey` / `threadId` = bet code).
-4. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
+1. **Settle and call-off send**: `POST /api/bets/{code}/push`, server-chosen recipients, `privatePushSends/{eventId}` claims, after the 35s undo window for settle.
+2. **First-pick vote send** to the creator, collapsed per bet (`collapseKey` / `threadId` = bet code).
+3. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
 
-All of these ship with the flag off. Notification titles and bodies arrive with those PRs, after UX approval.
+All of these ship with the flag off. Their notification titles and bodies (already approved, see above) arrive with those PRs.
 
 ## What Jack must do himself
 

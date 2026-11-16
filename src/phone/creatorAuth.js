@@ -9,6 +9,7 @@ import { auth } from '../Config/firebase-config';
 import { isNativeApp } from '../platform/runtime';
 import { cancelNativePhoneCode, sendNativePhoneCode } from '../platform/nativePhone';
 import { PERSON_CHECK_CANCELLED, showsRawCodes } from './creatorSession';
+import { unregisterBeforeSignOut } from './pushOptIn';
 
 const ALREADY_IN_USE = new Set([
   'auth/credential-already-in-use',
@@ -232,9 +233,12 @@ async function signInWithPhone(credential) {
   return result.user;
 }
 
-export function signOutCreator() {
-  if (!auth) return Promise.resolve();
-  return signOut(auth);
+// Drops this install's push token first, while the user's ID token still
+// works (a no-op with push off; bounded, and never blocks the logout).
+export async function signOutCreator() {
+  if (!auth) return;
+  await unregisterBeforeSignOut().catch(() => {});
+  await signOut(auth);
 }
 
 export async function verifyPhoneCode(verificationId, code) {
