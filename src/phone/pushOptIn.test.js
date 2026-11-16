@@ -102,6 +102,10 @@ describe('decideOptIn (the whole rule, from gathered facts)', () => {
     expect(decideOptIn({ ...yes, permission: 'prompt-with-rationale' })).toBe(true);
   });
 
+  test('shows when the OS already granted and nothing is saved for this uid (Android 7 to 12)', () => {
+    expect(decideOptIn({ ...yes, permission: 'granted', persisted: '' })).toBe(true);
+  });
+
   test.each([
     ['the flag is off', { enabled: false }],
     ['on the web', { native: false }],
@@ -110,7 +114,8 @@ describe('decideOptIn (the whole rule, from gathered facts)', () => {
     ['already asked or declined this session', { askedThisSession: true }],
     ['a persisted grant', { persisted: 'granted' }],
     ['a persisted denial', { persisted: 'denied' }],
-    ['the OS already granted', { permission: 'granted' }],
+    ['the OS already granted, with a persisted grant', { permission: 'granted', persisted: 'granted' }],
+    ['the OS already granted, with a persisted denial', { permission: 'granted', persisted: 'denied' }],
     ['the OS denied', { permission: 'denied' }],
     ['the permission could not be read', { permission: '' }],
   ])('does not show when %s', (_name, change) => {
@@ -160,8 +165,20 @@ describe('shouldOfferPushOptIn', () => {
     expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(true);
   });
 
-  test.each(['granted', 'denied'])('the OS already says %s: no sheet', async (receive) => {
-    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive });
+  test('the OS already says granted and nothing is saved (Android 7 to 12): the sheet shows', async () => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+    expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(true);
+    expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+  });
+
+  test.each(['granted', 'denied'])('the OS already granted but a %s is saved: no sheet', async (value) => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+    Preferences.store.set(`fb.pushAsked.${UID}`, value);
+    expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(false);
+  });
+
+  test('the OS already says denied: no sheet', async () => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'denied' });
     expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(false);
   });
 
@@ -225,6 +242,26 @@ describe('the sheet’s answers', () => {
     expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(false);
   });
 
+  test.each(['prompt', 'prompt-with-rationale'])('still %s: "Turn on notifications" asks the OS first', async (receive) => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive });
+    expect(await acceptPushOptIn()).toBe('granted');
+    expect(FirebaseMessaging.requestPermissions).toHaveBeenCalledTimes(1);
+    expect(FirebaseMessaging.requestPermissions.mock.invocationCallOrder[0])
+      .toBeLessThan(registerPushToken.mock.invocationCallOrder[0]);
+    expect(registerPushToken).toHaveBeenCalledTimes(1);
+  });
+
+  test('already granted by the OS: "Turn on notifications" registers and saves without asking', async () => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+    expect(await acceptPushOptIn()).toBe('granted');
+    expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+    expect(registerPushToken).toHaveBeenCalledTimes(1);
+    expect(Preferences.store.get(`fb.pushAsked.${UID}`)).toBe('granted');
+    expect(Preferences.store.get(`fb.pushPref.${UID}`)).toBe('on');
+    resetPushOptInForTests();
+    expect(await shouldOfferPushOptIn({ firstBet: true })).toBe(false);
+  });
+
   test('a system denial saves denied, registers nothing, and the sheet never shows again', async () => {
     FirebaseMessaging.requestPermissions.mockResolvedValue({ receive: 'denied' });
     expect(await acceptPushOptIn()).toBe('denied');
@@ -256,6 +293,14 @@ describe('the Notifications row', () => {
     Preferences.store.set(`fb.pushPref.${UID}`, 'on');
     expect(await readPushSettings(UID)).toEqual({ permission: 'granted', on: true });
     expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+  });
+
+  test('an unreadable permission gives null, so the row renders nothing', async () => {
+    FirebaseMessaging.checkPermissions.mockRejectedValue(new Error('nope'));
+    Preferences.store.set(`fb.pushPref.${UID}`, 'on');
+    expect(await readPushSettings(UID)).toBeNull();
+    FirebaseMessaging.checkPermissions.mockResolvedValue({});
+    expect(await readPushSettings(UID)).toBeNull();
   });
 
   test('granted: on registers, off unregisters, and the choice is saved', async () => {

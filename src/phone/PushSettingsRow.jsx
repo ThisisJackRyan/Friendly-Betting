@@ -18,6 +18,7 @@ import { PUSH_COPY } from './pushCopy';
 // - Permission granted: the toggle registers (on) or unregisters (off).
 // - Still promptable (the first-bet sheet never showed): turning it on asks
 //   the OS, from that tap only. Never on load.
+// - Permission unreadable: renders nothing.
 // - Anything else (denied): "Turned off in your phone’s settings." and Open
 //   Settings. The toggle stays off and never asks: iOS and Android 13+ will
 //   not ask again after a denial.
@@ -74,7 +75,9 @@ function PushSettingsRowInner({ uid }) {
     };
   }, [uid]);
 
-  if (!state) return null;
+  // No state yet, or the permission could not be read: render nothing rather
+  // than a misleading "turned off" row.
+  if (!state || !state.permission) return null;
 
   const off = !isGranted(state.permission) && !isPromptable(state.permission);
   const checked = !off && state.on && isGranted(state.permission);

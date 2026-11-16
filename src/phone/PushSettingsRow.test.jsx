@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
@@ -208,4 +208,20 @@ test('still promptable, then denied at the prompt: the off state, nothing regist
   expect(registerPushToken).not.toHaveBeenCalled();
   expect(screen.getByText('Turned off in your phone’s settings.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+});
+
+test.each([
+  ['the permission check throws', () => FirebaseMessaging.checkPermissions.mockRejectedValue(new Error('nope'))],
+  ['the permission check returns nothing', () => FirebaseMessaging.checkPermissions.mockResolvedValue({})],
+])('renders nothing when %s: no "turned off" helper, no Open Settings', async (_name, setup) => {
+  setup();
+  Preferences.store.set(`fb.pushPref.${UID}`, 'on');
+  const { container } = await renderRow();
+  await waitFor(() => expect(FirebaseMessaging.checkPermissions).toHaveBeenCalled());
+  await settle();
+  expect(container).toBeEmptyDOMElement();
+  expect(screen.queryByText('Turned off in your phone’s settings.')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+  expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+  expect(registerPushToken).not.toHaveBeenCalled();
 });
