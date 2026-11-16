@@ -129,6 +129,7 @@ State is kept per uid in Preferences: `fb.pushAsked.{uid}` (`granted` or `denied
 
 - After a grant (sheet or row): `registerPushToken()`.
 - `PushSync` (mounted once in `mobile/App.jsx`) re-registers on each auth change when that uid's in-app choice is on and the OS permission is already granted. It never asks.
+- On an FCM token refresh (`FirebaseMessaging` `tokenReceived`), `PushSync` re-registers the new token for the signed-in user through the same `syncPushForUser(uid)` checks (in-app choice on, permission already granted), so the server never keeps a stale token. Nothing when signed out or on the local fallback. It never asks, swallows every error, never blocks the channel or the auth sync, never logs the token, and removes the listener on unmount. With the flag off or on the web the listener is never added.
 - Log out (`signOutCreator`) calls `unregisterPushToken()` first, while the user's ID token still works, for a uid whose choice is on. It waits at most 3 s and never blocks the logout. The in-app choice stays, so signing back in registers again.
 
 ## Settle and call-off send
