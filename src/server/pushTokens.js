@@ -3,6 +3,7 @@ import { MAX_PUSH_DEVICES, validDeviceId, validPushPlatform, validPushToken } fr
 // Push tokens (docs/PUSH.md), Admin SDK only. Layout:
 //   privatePushTokens/{uid}                     rate window for that uid
 //   privatePushTokens/{uid}/devices/{deviceId}  { token, platform, createdAt, updatedAt }
+//   privatePushDevices/{deviceId}               { uid, updatedAt } (which uid owns that install now)
 // Clients never read or write these (firestore.rules denies them). Never log
 // or return a token, a uid or a phone number.
 
@@ -13,7 +14,10 @@ export const PUSH_RATE_WINDOW_MS = 10 * 60 * 1000;
 
 export const PUSH_ROOT = 'privatePushTokens';
 
+export const OWNER_ROOT = 'privatePushDevices';
+
 export const devicesPath = (uid) => `${PUSH_ROOT}/${uid}/devices`;
+export const ownerPath = (deviceId) => `${OWNER_ROOT}/${deviceId}`;
 
 function fail(code) {
   const err = new Error(code);
@@ -36,16 +40,24 @@ export function validRegistration(body) {
 
 // Saves (or refreshes) one device's token. The same deviceId only updates it.
 // The same token under another deviceId of this uid is dropped (a reinstall).
-// Past MAX_PUSH_DEVICES, the oldest updatedAt goes.
+// Past MAX_PUSH_DEVICES, the oldest updatedAt goes. If another uid owned this
+// deviceId (an account switch whose unregister never landed), that uid's doc
+// for it is deleted and the owner record moves to this uid.
 export async function saveDeviceToken({ db, uid, deviceId, token, platform, now = Date.now() }) {
   if (!uid) throw fail('unauthorized');
   if (!validRegistration({ deviceId, token, platform })) throw fail('invalid');
   const rootRef = db.doc(`${PUSH_ROOT}/${uid}`);
   const deviceRef = db.doc(`${devicesPath(uid)}/${deviceId}`);
+  const ownerRef = db.doc(ownerPath(deviceId));
   return db.runTransaction(async (tx) => {
     const rootSnap = await tx.get(rootRef);
     const devices = await tx.get(db.collection(devicesPath(uid)));
+    const ownerSnap = await tx.get(ownerRef);
     chargeRate(tx, rootRef, rootSnap.exists ? rootSnap.data() : null, now);
+
+    const priorUid = ownerSnap.exists ? ownerSnap.data()?.uid : null;
+    const switched = typeof priorUid === 'string' && priorUid !== '' && priorUid !== uid;
+    if (switched) tx.delete(db.doc(`${devicesPath(priorUid)}/${deviceId}`));
 
     const others = [];
     let existing = null;
@@ -65,21 +77,27 @@ export async function saveDeviceToken({ db, uid, deviceId, token, platform, now 
       createdAt: typeof existing?.createdAt === 'number' ? existing.createdAt : now,
       updatedAt: now,
     });
-    return { created: !existing, evicted: evict };
+    tx.set(ownerRef, { uid, updatedAt: now });
+    return { created: !existing, evicted: evict, switched };
   });
 }
 
-// Removes one device. A missing doc is fine (idempotent).
+// Removes one device. A missing doc is fine (idempotent). The owner record is
+// cleared only if it still names this uid, so a late unregister from an old
+// account never wipes the new owner's mapping.
 export async function removeDeviceToken({ db, uid, deviceId, now = Date.now() }) {
   if (!uid) throw fail('unauthorized');
   if (!validDeviceId(deviceId)) throw fail('invalid');
   const rootRef = db.doc(`${PUSH_ROOT}/${uid}`);
   const deviceRef = db.doc(`${devicesPath(uid)}/${deviceId}`);
+  const ownerRef = db.doc(ownerPath(deviceId));
   return db.runTransaction(async (tx) => {
     const rootSnap = await tx.get(rootRef);
     const deviceSnap = await tx.get(deviceRef);
+    const ownerSnap = await tx.get(ownerRef);
     chargeRate(tx, rootRef, rootSnap.exists ? rootSnap.data() : null, now);
     if (deviceSnap.exists) tx.delete(deviceRef);
+    if (ownerSnap.exists && ownerSnap.data()?.uid === uid) tx.delete(ownerRef);
     return { removed: deviceSnap.exists };
   });
 }

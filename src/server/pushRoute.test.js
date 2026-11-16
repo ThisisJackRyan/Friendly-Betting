@@ -2,7 +2,7 @@
 import { adminAuth, adminDb } from './firebaseAdmin';
 import * as tokensModule from '../../app/api/push/tokens/route';
 import { MAX_PUSH_DEVICES } from '../phone/pushConfig';
-import { PUSH_RATE_LIMIT, PUSH_RATE_WINDOW_MS, saveDeviceToken } from './pushTokens';
+import { PUSH_RATE_LIMIT, PUSH_RATE_WINDOW_MS, removeDeviceToken, saveDeviceToken } from './pushTokens';
 import { fakeDb } from './testing/fakeDb';
 
 jest.mock('firebase-admin/app', () => ({}));
@@ -209,11 +209,13 @@ describe('register', () => {
     expect(store.paths('privatePushTokens/user-1/devices/')).toHaveLength(MAX_PUSH_DEVICES);
   });
 
-  test('another user’s devices are untouched', async () => {
-    await register({}, { token: 'other' });
+  test('another user’s other devices are untouched', async () => {
+    await register({ deviceId: 'user-2-own-phone', token: 'fcm-user-2-EEEE' }, { token: 'other' });
     await register();
-    expect(store.paths('privatePushTokens/user-2/devices/')).toHaveLength(1);
+    expect(store.paths('privatePushTokens/user-2/devices/')).toEqual(['privatePushTokens/user-2/devices/user-2-own-phone']);
     expect(store.paths('privatePushTokens/user-1/devices/')).toHaveLength(1);
+    expect(store.data('privatePushDevices/user-2-own-phone')).toMatchObject({ uid: 'user-2' });
+    expect(store.data(`privatePushDevices/${DEVICE}`)).toMatchObject({ uid: 'user-1' });
   });
 });
 
@@ -244,6 +246,101 @@ describe('unregister', () => {
     await register();
     await unregister({}, { token: 'other' });
     expect(store.data(`privatePushTokens/user-1/devices/${DEVICE}`)).toBeTruthy();
+    expect(store.data(`privatePushDevices/${DEVICE}`)).toMatchObject({ uid: 'user-1' });
+  });
+});
+
+describe('account switch on one device', () => {
+  const A = 'uid-a';
+  const B = 'uid-b';
+  const devA = `privatePushTokens/${A}/devices/${DEVICE}`;
+  const devB = `privatePushTokens/${B}/devices/${DEVICE}`;
+  const owner = `privatePushDevices/${DEVICE}`;
+  const save = (uid, now, extra = {}) =>
+    saveDeviceToken({ db: store, uid, deviceId: DEVICE, token: FCM, platform: 'ios', now, ...extra });
+  const remove = (uid, now) => removeDeviceToken({ db: store, uid, deviceId: DEVICE, now });
+
+  afterEach(() => {
+    [FCM, PHONE, A, B, 'user-1', 'user-2'].forEach((secret) => expect(logged()).not.toContain(secret));
+  });
+
+  test('a new uid on the same device takes it over: the old uid’s doc goes, the owner moves', async () => {
+    await save(A, 1000);
+    expect(store.data(owner)).toEqual({ uid: A, updatedAt: 1000 });
+    store.store.set(`privatePushTokens/${A}/devices/a-other-phone`, {
+      data: { token: 'fcm-a-other', platform: 'android', createdAt: 1, updatedAt: 1 },
+      version: 1,
+    });
+    const aWindow = store.data(`privatePushTokens/${A}`);
+
+    const result = await save(B, 2000);
+    expect(result).toMatchObject({ created: true, switched: true });
+    expect(store.data(devA)).toBeUndefined();
+    expect(store.data(devB)).toMatchObject({ token: FCM, createdAt: 2000, updatedAt: 2000 });
+    expect(store.data(owner)).toEqual({ uid: B, updatedAt: 2000 });
+    // A's other device and A's rate window are left alone.
+    expect(store.data(`privatePushTokens/${A}/devices/a-other-phone`)).toBeTruthy();
+    expect(store.data(`privatePushTokens/${A}`)).toEqual(aWindow);
+  });
+
+  test('the same uid re-registering keeps the owner and only moves updatedAt', async () => {
+    await save(A, 1000);
+    store.store.set(`privatePushTokens/${B}/devices/b-phone`, {
+      data: { token: 'fcm-b', platform: 'ios', createdAt: 1, updatedAt: 1 },
+      version: 1,
+    });
+    const before = store.paths('privatePushTokens/').filter((p) => !p.startsWith(`privatePushTokens/${A}`));
+    const result = await save(A, 3000);
+    expect(result).toMatchObject({ created: false, switched: false });
+    expect(store.data(owner)).toEqual({ uid: A, updatedAt: 3000 });
+    expect(store.data(devA)).toMatchObject({ createdAt: 1000, updatedAt: 3000 });
+    expect(store.paths('privatePushTokens/').filter((p) => !p.startsWith(`privatePushTokens/${A}`))).toEqual(before);
+  });
+
+  test('a registration with no owner record writes one for this uid', async () => {
+    store.store.set(devA, { data: { token: FCM, platform: 'ios', createdAt: 5, updatedAt: 5 }, version: 1 });
+    await save(A, 6000);
+    expect(store.data(owner)).toEqual({ uid: A, updatedAt: 6000 });
+    expect(store.data(devA)).toMatchObject({ createdAt: 5, updatedAt: 6000 });
+  });
+
+  test('the current owner unregistering clears both the device doc and the owner record', async () => {
+    await save(A, 1000);
+    expect(await remove(A, 2000)).toEqual({ removed: true });
+    expect(store.data(devA)).toBeUndefined();
+    expect(store.data(owner)).toBeUndefined();
+  });
+
+  test('a late unregister from the old uid leaves the new owner alone', async () => {
+    await save(A, 1000);
+    await save(B, 2000);
+    // A leftover A doc (say from before owner records) still goes.
+    store.store.set(devA, { data: { token: 'fcm-stale', platform: 'ios', createdAt: 1, updatedAt: 1 }, version: 1 });
+    expect(await remove(A, 3000)).toEqual({ removed: true });
+    expect(store.data(devA)).toBeUndefined();
+    expect(store.data(devB)).toMatchObject({ token: FCM });
+    expect(store.data(owner)).toEqual({ uid: B, updatedAt: 2000 });
+    // Without a leftover it is still fine.
+    expect(await remove(A, 4000)).toEqual({ removed: false });
+    expect(store.data(owner)).toEqual({ uid: B, updatedAt: 2000 });
+  });
+
+  test('unregister with no owner record still removes this uid’s device and invents nothing', async () => {
+    store.store.set(devA, { data: { token: FCM, platform: 'ios', createdAt: 1, updatedAt: 1 }, version: 1 });
+    await expect(remove(A, 2000)).resolves.toEqual({ removed: true });
+    expect(store.data(devA)).toBeUndefined();
+    expect(store.paths('privatePushDevices/')).toEqual([]);
+    expect(store.data(`privatePushTokens/${A}`).count).toBe(1);
+  });
+
+  test('through the route: user-2 then user-1 on one device leaves only user-1', async () => {
+    await register({}, { token: 'other' });
+    const res = await register();
+    expect(res.status).toBe(200);
+    expect(store.paths('privatePushTokens/user-2/devices/')).toEqual([]);
+    expect(store.paths('privatePushTokens/user-1/devices/')).toEqual([`privatePushTokens/user-1/devices/${DEVICE}`]);
+    expect(store.data(owner)).toMatchObject({ uid: 'user-1' });
+    await expectClean(res);
   });
 });
 

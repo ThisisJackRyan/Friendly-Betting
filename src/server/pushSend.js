@@ -54,19 +54,48 @@ function removeDeadDevice(db, ref, token) {
   });
 }
 
+// The admin getters only set up the Admin SDK, so anything they throw is a
+// setup failure (no or bad service account, app not initialised). A caller
+// such as settle must never break on that, so sendToUser skips instead. Only
+// these known codes are logged; anything else logs as setup-error.
+const SETUP_ERROR_CODES = new Set(['admin-not-configured', 'app/invalid-credential', 'app/no-app', 'app/invalid-app-options', 'app/duplicate-app']);
+
+function setupErrorCode(err) {
+  return typeof err?.code === 'string' && SETUP_ERROR_CODES.has(err.code) ? err.code : 'setup-error';
+}
+
 // payload: { title, body, data }. options: { collapseKey, threadId, code }.
-// Returns counts only: { sent, failed, removed } (plus skipped when it did nothing).
+// Returns counts only: { sent, failed, removed } (plus skipped when it did nothing,
+// including skipped: 'admin-not-configured' when the Admin SDK is not set up).
 export async function sendToUser(uid, payload = {}, options = {}) {
   if (!pushEnabled()) return { sent: 0, failed: 0, removed: 0, skipped: 'disabled' };
   if (!uid || typeof uid !== 'string') return { sent: 0, failed: 0, removed: 0, skipped: 'no-user' };
-  const { collapseKey, threadId, code, db = adminDb(), messaging = adminMessaging() } = options;
-  const devices = (await db.collection(devicesPath(uid)).get()).docs
+  const { collapseKey, threadId, code } = options;
+  const where = validCode(code) ? ` for bet ${code}` : '';
+  let db;
+  let messaging;
+  try {
+    db = options.db || adminDb();
+    messaging = options.messaging || adminMessaging();
+  } catch (err) {
+    console.warn(`push send skipped${where}: ${setupErrorCode(err)}`);
+    return { sent: 0, failed: 0, removed: 0, skipped: 'admin-not-configured' };
+  }
+  let docs;
+  try {
+    ({ docs } = await db.collection(devicesPath(uid)).get());
+  } catch (err) {
+    // A bad credential often only shows up on the first call. Skip, never throw.
+    const setup = SETUP_ERROR_CODES.has(err?.code);
+    console.warn(`push send skipped${where}: ${setup ? err.code : 'read-failed'}`);
+    return { sent: 0, failed: 0, removed: 0, skipped: setup ? 'admin-not-configured' : 'read-failed' };
+  }
+  const devices = docs
     .map((snap) => ({ ref: snap.ref, token: snap.data()?.token }))
     .filter((device) => typeof device.token === 'string' && device.token);
   if (!devices.length) return { sent: 0, failed: 0, removed: 0, skipped: 'no-devices' };
 
   const messages = devices.map((device) => buildMessage(device.token, payload, { collapseKey, threadId }));
-  const where = validCode(code) ? ` for bet ${code}` : '';
   let responses;
   try {
     ({ responses } = await messaging.sendEach(messages));

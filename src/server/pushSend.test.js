@@ -142,3 +142,56 @@ test('an unsafe bet code is left out of the logs', async () => {
   await sendToUser(UID, payload, { code: `${PHONE} ${UID}` });
   expectNoSecretsLogged();
 });
+
+describe('admin setup failures never throw', () => {
+  const setupError = (code) => Object.assign(new Error(`setup failed for ${UID} tok-ios-AAAA ${PHONE}`), { code });
+  const SKIPPED = { sent: 0, failed: 0, removed: 0, skipped: 'admin-not-configured' };
+
+  test.each([
+    ['adminDb throws admin-not-configured', 'db', 'admin-not-configured'],
+    ['adminMessaging throws admin-not-configured', 'messaging', 'admin-not-configured'],
+    ['adminDb throws app/invalid-credential', 'db', 'app/invalid-credential'],
+    ['adminMessaging throws app/no-app', 'messaging', 'app/no-app'],
+  ])('%s: resolves skipped without FCM or token writes', async (_name, which, code) => {
+    (which === 'db' ? adminDb : adminMessaging).mockImplementation(() => {
+      throw setupError(code);
+    });
+    const writes = store.writes.length;
+    await expect(sendToUser(UID, payload, { code: 'abc123' })).resolves.toEqual(SKIPPED);
+    expect(messaging.sendEach).not.toHaveBeenCalled();
+    expect(store.writes.length).toBe(writes);
+    expect(logged()).toContain(code);
+    expect(logged()).toContain('abc123');
+    expectNoSecretsLogged();
+  });
+
+  test('an unknown getter error still skips and logs no message text', async () => {
+    adminDb.mockImplementation(() => {
+      throw new Error(`weird ${UID} tok-ios-AAAA ${PHONE}`);
+    });
+    await expect(sendToUser(UID, payload)).resolves.toEqual(SKIPPED);
+    expect(messaging.sendEach).not.toHaveBeenCalled();
+    expect(logged()).toContain('setup-error');
+    expectNoSecretsLogged();
+  });
+
+  test('a credential error on the first read skips instead of throwing', async () => {
+    adminDb.mockReturnValue({
+      ...store,
+      collection: () => ({ get: async () => Promise.reject(setupError('app/invalid-credential')) }),
+    });
+    await expect(sendToUser(UID, payload)).resolves.toEqual(SKIPPED);
+    expect(messaging.sendEach).not.toHaveBeenCalled();
+    expectNoSecretsLogged();
+  });
+
+  test('any other read failure skips as read-failed', async () => {
+    adminDb.mockReturnValue({
+      ...store,
+      collection: () => ({ get: async () => Promise.reject(setupError('unavailable')) }),
+    });
+    await expect(sendToUser(UID, payload)).resolves.toEqual({ sent: 0, failed: 0, removed: 0, skipped: 'read-failed' });
+    expect(messaging.sendEach).not.toHaveBeenCalled();
+    expectNoSecretsLogged();
+  });
+});

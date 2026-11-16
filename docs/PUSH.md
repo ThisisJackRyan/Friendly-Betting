@@ -6,12 +6,16 @@ Status: **infra plus opt-in UX, behind a flag that is off.** The app has the sof
 
 `NEXT_PUBLIC_PUSH_ENABLED`. Only the exact value `1` turns it on; unset, empty, `0`, `true` and anything else are off. It is read by both builds: Next inlines it for the web and API routes, and `mobile/vite.config.mjs` defines it for the app from the shell or the repo-root `.env*` files (the shell wins). It is unset in the repo. Helper: `pushEnabled()` in `src/phone/pushConfig.js`.
 
+It is a **build-time** flag. Like every `NEXT_PUBLIC_*` var, its value is inlined when each bundle is built: the Next server and API bundle, the web client, and the mobile Vite build. Changing the Vercel env does nothing until the next build. Turning it on or off takes a redeploy of the server (and web client) and a new native build for the app; an app already installed keeps the value it was built with.
+
 With the flag off (and always on the web):
 
 - the client plumbing does nothing (no permission, no token read, no Preferences read, no fetch);
 - the opt-in sheet and the Notifications row never render, and the opt-in module (`src/phone/pushOptIn.js`) makes no plugin, Preferences or register calls; Create does no first-bet lookup, and the tally's share sheet opens after Create exactly as before;
 - `POST`, `DELETE` and `OPTIONS /api/push/tokens` answer a plain 404 with no CORS headers, as if the route did not exist;
-- `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM. Turning the Vercel env off stops delivery without an app update.
+- `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM.
+
+To stop server sends, set the flag off and redeploy the server: the send helper and the token route then go quiet even for installed apps built with it on (their register calls get a 404). Installed apps still run their own client plumbing until a new native build ships with the flag off.
 
 ## What this infra adds
 
@@ -26,7 +30,8 @@ With the flag off (and always on the web):
 | Token storage | `src/server/pushTokens.js` (`saveDeviceToken`, `removeDeviceToken`) |
 | Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, code })` |
 | Admin Messaging | `adminMessaging()` in `src/server/firebaseAdmin.js`, lazy like `adminDb()` / `adminAuth()` |
-| Rules | `privatePushTokens` and `privatePushSends` deny all client access in `firestore.rules` |
+| Device owners | `privatePushDevices/{deviceId}` (`{ uid, updatedAt }`), written by `saveDeviceToken` / `removeDeviceToken` |
+| Rules | `privatePushTokens`, `privatePushDevices` and `privatePushSends` deny all client access in `firestore.rules` |
 | Plugins | `@capacitor-firebase/messaging` v8, `@capacitor/preferences` (per-install device id, opt-in state) and `capacitor-native-settings` v8 (Open Settings) |
 | Native | Android `POST_NOTIFICATIONS`; iOS `UIBackgroundModes: remote-notification`; FCM auto-init off on both; `AppDelegate.swift` forwards the APNs token to the plugin |
 
@@ -55,9 +60,16 @@ The app calls the production origin (`apiUrl`), so the route uses the existing C
 Writes (one Admin transaction each):
 
 - `privatePushTokens/{uid}/devices/{deviceId}`: `token`, `platform`, `createdAt`, `updatedAt` (epoch ms). Re-posting the same device keeps `createdAt` and moves `updatedAt` (a refreshed token replaces the old one). The same token under another device id of that uid is dropped (a reinstall). At most 10 devices per uid; the oldest `updatedAt` is evicted.
+- `privatePushDevices/{deviceId}`: `uid`, `updatedAt` (epoch ms). Which uid owns that install now. Read and written in the same transaction as the device doc.
 - `DELETE` removes that device doc. A missing doc is still a 200.
 
-Auth changes (handled in the opt-in UX below): Log out unregisters this install from the signed-in uid before signing out, and `PushSync` re-registers on each auth change for a uid whose in-app choice is on. If a device switches uid some other way (an anonymous session signing in to an existing phone account), the old uid's doc can keep the token until a send gets an unregistered error; anonymous uids never reach the sheet or the row, so in practice they hold no token.
+Account switch. An unregister before sign-out can fail (offline, app killed), which would leave the token under the old uid. The owner record fixes that server-side:
+
+- Register: if `privatePushDevices/{deviceId}` names a different uid, that uid's `privatePushTokens/{priorUid}/devices/{deviceId}` is deleted in the same transaction (its other devices and its rate window are left alone). The owner record is then set to the caller's uid. Same uid or no record: the record is just upserted.
+- Unregister: deletes the caller's device doc as before (still charged to the rate window). The owner record is cleared only if it names the caller. A missing record, or one that already names another uid, is left alone, so a late unregister from the old account never wipes the new owner's mapping.
+- There is no backfill: devices registered before owner records existed get one on their next register. Until then a leftover under an old uid is cleaned up by `sendToUser` when FCM reports the token dead, as before.
+
+The opt-in UX still unregisters before log out (`signOutCreator`) and re-registers on auth changes (`PushSync`) for a uid whose in-app choice is on. If an anonymous session signs in to an existing phone account, the old uid's doc can keep the token until the new uid registers (the owner record then drops the old one) or a send gets an unregistered error; anonymous uids never reach the sheet or the row, so in practice they hold no token.
 
 ### Server send helper
 
@@ -66,12 +78,13 @@ Auth changes (handled in the opt-in UX below): Log out unregisters this install 
 - Title and body come from the caller; this module has no user-facing copy. `data` values are sent as strings.
 - `collapseKey` sets Android `collapseKey` and `notification.tag` (a newer notification replaces the shown one) and the iOS `apns-collapse-id` header. `threadId` sets `aps.thread-id`. Later pick sends pass the bet code for both, so a busy bet replaces instead of stacking.
 - On `messaging/registration-token-not-registered` or `messaging/invalid-registration-token`, it deletes that device doc (only if it still holds the dead token).
+- Never throws for setup problems. If `adminDb()` / `adminMessaging()` throw (for example `admin-not-configured` when `FIREBASE_SERVICE_ACCOUNT` is missing or invalid), or the first device read fails on a bad credential, it returns `{ sent: 0, failed: 0, removed: 0, skipped: 'admin-not-configured' }` without calling FCM or writing anything. Any other device read failure returns `skipped: 'read-failed'`. Either way it logs only a safe error code, so a settle caller can ignore the result.
 - Returns counts only: `{ sent, failed, removed }`. Logs at most error codes and, if the caller passes a valid one, the bet code. Never a token, uid or phone number. Payloads must never contain phone numbers.
 - Tests mock Messaging; nothing calls live FCM.
 
 ### Rules
 
-`privatePushTokens/{uid}/**` and `privatePushSends/**` are `allow read, write: if false`, like `privateResultTexts`, including for the owner uid. Only the Admin SDK in the push API routes touches them. Emulator tests: `rules/firestore.rules.test.js` ("push tokens and send claims"). `firestore.rules` is **not auto-deployed**; see the caveat at the top of that file.
+`privatePushTokens/{uid}/**`, `privatePushDevices/**` and `privatePushSends/**` are `allow read, write: if false`, like `privateResultTexts`, including for the owner uid (and for the uid named in an owner record). Only the Admin SDK in the push API routes touches them. Emulator tests: `rules/firestore.rules.test.js` ("push tokens, device owners and send claims"). `firestore.rules` is **not auto-deployed**; see the caveat at the top of that file.
 
 ### Native
 
@@ -133,4 +146,4 @@ None of this is in the repo, and none of it goes in a PR.
 4. Confirm both native apps (`com.friendlybetting.app` on iOS and Android) are registered in `friendly-betting-fb47e` and that Cloud Messaging is enabled (Firebase Cloud Messaging API (V1) on).
 5. Android SHA-1 / SHA-256 fingerprints stay a Jack-only console step.
 6. Nothing merges to `main`, and no rules deploy, without Jack's own go. `firestore.rules` is not auto-deployed: review it line by line against the live console rules before anyone runs `firebase deploy --only firestore:rules`.
-7. Turn the flag on in a preview first (Vercel env plus the native build env), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds.
+7. Turn the flag on in a preview first (Vercel env plus the native build env, then redeploy and rebuild: the flag is build-time), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds.
