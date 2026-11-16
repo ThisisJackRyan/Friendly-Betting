@@ -17,27 +17,53 @@ export function fakeDb(initial = {}) {
   };
   const children = (path) =>
     Array.from(store.keys()).filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'));
-  // A query's matching docs: a collection, optionally filtered with
-  // where(field, '==', value) and capped with limit(n).
-  const matches = (target) => {
-    const keys = children(target.path).filter((key) =>
-      (target.filters || []).every(([field, value]) => store.get(key)?.data?.[field] === value));
-    return target.max === undefined ? keys : keys.slice(0, target.max);
+  // Field filters like Firestore's: a missing or null field never matches an
+  // inequality, and a range only matches values of the same type.
+  const TESTS = {
+    '==': (actual, value) => actual === value,
+    '<': (actual, value) => actual < value,
+    '<=': (actual, value) => actual <= value,
+    '>': (actual, value) => actual > value,
+    '>=': (actual, value) => actual >= value,
   };
-  // A query's "version" is its membership plus each member's version.
-  const queryVersion = (target) => matches(target).map((key) => `${key}@${version(key)}`).join(',');
-  function query(path, filters = [], max = undefined) {
-    const target = { path, query: true, filters, max };
+  const matches = (data, [field, op, value]) => {
+    const actual = data?.[field];
+    if (op === '==') return actual !== undefined && actual === value;
+    return actual !== undefined && actual !== null && typeof actual === typeof value && TESTS[op](actual, value);
+  };
+  // collection(path).where(...).orderBy(...).limit(n): one field per orderBy.
+  // A doc without the orderBy field is left out, like Firestore.
+  function query(path, filters = [], order = null, max = null) {
+    const keys = () => {
+      let found = children(path).filter((key) => filters.every((filter) => matches(store.get(key)?.data, filter)));
+      if (order) {
+        const [field, dir] = order;
+        const sign = dir === 'desc' ? -1 : 1;
+        found = found
+          .filter((key) => store.get(key)?.data?.[field] != null)
+          .sort((a, b) => {
+            const x = store.get(a).data[field];
+            const y = store.get(b).data[field];
+            return x === y ? 0 : (x < y ? -sign : sign);
+          });
+      }
+      return max == null ? found : found.slice(0, max);
+    };
     return {
-      ...target,
+      path,
+      query: true,
+      keys,
       where: (field, op, value) => {
-        if (op !== '==') throw new Error(`fakeDb supports only ==, not ${op}`);
-        return query(path, [...filters, [field, value]], max);
+        if (!TESTS[op]) throw new Error(`fakeDb: unsupported op ${op}`);
+        return query(path, [...filters, [field, op, value]], order, max);
       },
-      limit: (n) => query(path, filters, n),
-      get: async () => ({ docs: matches(target).map(snap) }),
+      orderBy: (field, dir = 'asc') => query(path, filters, [field, dir], max),
+      limit: (n) => query(path, filters, order, n),
+      get: async () => ({ docs: keys().map(snap) }),
     };
   }
+  // A query's "version" is its membership plus each member's version.
+  const queryVersion = (target) => target.keys().map((key) => `${key}@${version(key)}`).join(',');
   function ref(path) {
     return {
       path,
@@ -69,7 +95,7 @@ export function fakeDb(initial = {}) {
             const current = target.query ? () => queryVersion(target) : () => version(target.path);
             reads.push([current, current()]);
             await Promise.resolve();
-            return target.query ? { docs: matches(target).map(snap) } : snap(target.path);
+            return target.query ? { docs: target.keys().map(snap) } : snap(target.path);
           },
           set: (target, data) => ops.push(['set', target.path, clone(data)]),
           delete: (target) => ops.push(['delete', target.path]),

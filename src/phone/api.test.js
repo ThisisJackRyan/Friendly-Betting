@@ -7,7 +7,7 @@ import {
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 import { saveRematch } from './rematch';
-import { requestBetPush } from './betPush';
+import { requestBetPush, requestPickPush } from './betPush';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
@@ -26,7 +26,7 @@ jest.mock('firebase/firestore', () => ({
   deleteField: () => 'DELETE_FIELD',
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
-jest.mock('./betPush', () => ({ requestBetPush: jest.fn() }));
+jest.mock('./betPush', () => ({ requestBetPush: jest.fn(), requestPickPush: jest.fn() }));
 jest.mock('./resultTexts', () => ({
   requestResultTexts: jest.fn(),
   apiUrl: (path) => `https://www.friendly-bets.com${path}`,
@@ -106,6 +106,7 @@ beforeEach(() => {
   rememberBet.mockClear();
   requestResultTexts.mockReset();
   requestBetPush.mockReset();
+  requestPickPush.mockReset();
 });
 
 test('closing writes one atomic result with both winner and loser recipients', async () => {
@@ -916,7 +917,96 @@ describe('a session that learns the rules deny vote docs', () => {
     expect(getDocs).toHaveBeenCalledTimes(2);
     expect(voteDocs.maya).toMatchObject({ voterId: 'maya', name: 'May', optionId: 'b' });
     expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam']);
-    expect(voteReads()).toHaveLength(1);
+    // Each pick reads the voter's own doc (first-pick check), and so does the rename.
+    expect(voteReads()).toHaveLength(3);
+  });
+});
+
+describe('first-pick push', () => {
+  test('a friend\'s first pick (vote doc) requests the pick push once, after the commit', async () => {
+    const committed = [];
+    requestPickPush.mockImplementation(() => { committed.push(Boolean(voteDocs.maya)); });
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    expect(requestPickPush).toHaveBeenCalledWith('abc123');
+    expect(committed).toEqual([true]);
+    expect(requestBetPush).not.toHaveBeenCalled();
+  });
+
+  test('a side change or a re-pick with a vote doc does not request it', async () => {
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    requestPickPush.mockClear();
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a voter with only a legacy array entry writing their first vote doc is a re-pick', async () => {
+    await castVote('abc123', { voterId: 'jack', name: 'Jack', optionId: 'b' });
+    expect(voteDocs.jack).toMatchObject({ optionId: 'b' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('an array entry with no side does not count as a pick', async () => {
+    stored.votes = [...stored.votes, { voterId: 'lee', name: 'Lee' }];
+    await castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+  });
+
+  test('the creator\'s own first pick does not request it', async () => {
+    await castVote('abc123', { voterId: 'creator', name: 'Casey', optionId: 'a' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('legacy array fallback: a first pick requests it; a side change does not', async () => {
+    voteRules = false;
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    // Now the session knows the rules deny vote docs: straight to the array.
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    await castVote('abc123', { voterId: 'jack', name: 'Jack', optionId: 'b' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    await castVote('abc123', { voterId: 'lee', name: '', optionId: 'b' });
+    expect(requestPickPush).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed pick does not request it', async () => {
+    runTransaction.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('offline');
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'zzz' })).rejects.toThrow('Pick one');
+    runTransaction.mockRejectedValue(denied());
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a closed bet refuses the pick and requests nothing', async () => {
+    stored.status = 'closed';
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('closed');
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a throwing request never fails the pick', async () => {
+    requestPickPush.mockImplementation(() => { throw new Error('push broke'); });
+    await expect(castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' })).resolves.toBeUndefined();
+    expect(voteDocs.maya).toMatchObject({ optionId: 'a' });
+    expect(rememberBet).toHaveBeenCalledWith('maya', 'abc123');
+    voteRules = false;
+    __resetVoteRulesForTests();
+    await expect(castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' })).resolves.toBeUndefined();
+    expect(requestPickPush).toHaveBeenCalledTimes(2);
+  });
+
+  test('a rename never requests it', async () => {
+    await renameVote('abc123', 'jack', 'John');
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    requestPickPush.mockClear();
+    await renameVote('abc123', 'maya', 'May');
+    voteRules = false;
+    __resetVoteRulesForTests();
+    await renameVote('abc123', 'sam', 'Sammy');
+    expect(requestPickPush).not.toHaveBeenCalled();
+    expect(requestBetPush).not.toHaveBeenCalled();
   });
 });
 
