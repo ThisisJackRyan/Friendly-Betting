@@ -641,8 +641,12 @@ describe('live tally', () => {
       return feed.unsubscribe;
     });
     await renderTally();
-    // Same as any failed first load: the existing load error, no claim it was deleted.
-    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the crew’s picks. Try again in a bit.');
+    // A cache miss is not an answer: the loader stays up until the server answers.
+    // renderTally only runs the 450ms min-hold, so this covers the server-hit path
+    // before the cache-miss grace period ends. No load error, no claim it was deleted.
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
 
     await push({ ...openBet, votes: [vote('v1', 'a')] });
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
