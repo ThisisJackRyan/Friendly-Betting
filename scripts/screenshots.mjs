@@ -222,7 +222,10 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(plan); return () => {}; };
-      export const requestMockPurchase = async () => ({ ok: true });`,
+      export const fetchEntitlement = async () => plan;
+      export const requestMockPurchase = async () => ({ ok: true });
+      export const requestCheckout = async () => { throw new Error('No Stripe in screenshots.'); };
+      export const requestBillingPortal = async () => { throw new Error('No Stripe in screenshots.'); };`,
   }));
   if (paywall) {
     await page.route('**/src/phone/proConfig.js*', async (route) => {

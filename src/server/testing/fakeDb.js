@@ -1,6 +1,7 @@
 // Test-only in-memory Firestore stand-in for the Admin SDK surface the server
 // modules use. Transactions are optimistic like Firestore: if a doc read in
 // the transaction (or a query's result set) changed before commit, the callback runs again.
+// set(ref, data, { merge: true }) merges top-level fields only (enough for the flat docs here).
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
 export function fakeDb(initial = {}) {
@@ -9,6 +10,7 @@ export function fakeDb(initial = {}) {
   let clock = 0;
   const version = (path) => store.get(path)?.version ?? 0;
   const put = (path, data) => store.set(path, { data: clone(data), version: (clock += 1) });
+  const write = (path, data, options) => put(path, options?.merge ? { ...(store.get(path)?.data || {}), ...data } : data);
   Object.entries(initial).forEach(([path, data]) => put(path, data));
 
   const snap = (path) => {
@@ -23,9 +25,9 @@ export function fakeDb(initial = {}) {
     return {
       path,
       get: async () => snap(path),
-      set: async (data) => {
+      set: async (data, options) => {
         writes.push(['set', path]);
-        put(path, data);
+        write(path, data, options);
       },
       delete: async () => {
         writes.push(['delete', path]);
@@ -52,14 +54,14 @@ export function fakeDb(initial = {}) {
             await Promise.resolve();
             return target.query ? { docs: children(target.path).map(snap) } : snap(target.path);
           },
-          set: (target, data) => ops.push(['set', target.path, clone(data)]),
+          set: (target, data, options) => ops.push(['set', target.path, clone(data), options]),
           delete: (target) => ops.push(['delete', target.path]),
         };
         const result = await run(tx);
         if (reads.some(([current, seen]) => current() !== seen)) continue;
-        ops.forEach(([op, path, data]) => {
+        ops.forEach(([op, path, data, options]) => {
           writes.push([op, path]);
-          if (op === 'set') put(path, data);
+          if (op === 'set') write(path, data, options);
           else store.delete(path);
         });
         return result;

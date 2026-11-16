@@ -1,4 +1,5 @@
 import { PRO_PERIOD_DAYS } from '../phone/proConfig';
+import { isProEntitlement } from '../phone/entitlement';
 
 // The mock purchase (docs/PRO.md). Preview and local only: it grants Pro with
 // no payment, so it must never answer in production.
@@ -70,9 +71,15 @@ export async function grantMockEntitlement({ db, uid, plan, now = Date.now(), si
     const existing = await tx.get(entitlementRef);
     // A legacy founder doc (docs/PRO.md) is lifetime Pro: a 30 day plan
     // would cut it short, so it is left alone.
-    if (existing.exists && existing.data()?.plan === 'founder') return { plan: 'pro', unchanged: true };
+    const current = existing.exists ? existing.data() : null;
+    if (current?.plan === 'founder') return { plan: 'pro', unchanged: true };
+    // A paid Stripe plan (docs/STRIPE-WEB-PRO.md) is left alone while it is
+    // live, and its Stripe ids are kept either way, so the member can still
+    // reach the customer portal.
+    if (current?.source === 'stripe' && isProEntitlement(current, now)) return { plan: 'pro', unchanged: true };
+    const stripeIds = Object.fromEntries(Object.entries(current || {}).filter(([key]) => key.startsWith('stripe')));
     const expiresAt = now + PRO_PERIOD_DAYS * DAY_MS;
-    tx.set(entitlementRef, { plan: 'pro', source: 'mock', since, expiresAt: toTimestamp(expiresAt) });
+    tx.set(entitlementRef, { ...stripeIds, plan: 'pro', source: 'mock', since, expiresAt: toTimestamp(expiresAt) });
     return { plan: 'pro', expiresAt };
   });
 }
