@@ -13,7 +13,9 @@ import { firebaseUser, pushAvailable, registerPushToken, unregisterPushToken } f
 //   Either one means the sheet never shows again for that uid. A soft
 //   "Not now" is not persisted.
 // - PREF: 'on' or 'off', the in-app choice. A background re-register only
-//   happens when it is 'on', so a user who switched it off stays off.
+//   happens when it is 'on', so a user who switched it off stays off. Either
+//   one also means the sheet never shows again for that uid: the choice has
+//   already been made, on the sheet or the row.
 
 const ASKED_PREFIX = 'fb.pushAsked.';
 const PREF_PREFIX = 'fb.pushPref.';
@@ -115,17 +117,22 @@ export async function checkFirstBet(lookup, uid, code, timeoutMs = FIRST_BET_TIM
   }
 }
 
-// The whole show / suppress rule, from facts already gathered. A permission
-// that is already 'granted' still shows the sheet when nothing is saved for
-// this uid: Android 7 to 12 always report 'granted', and someone who allowed
-// notifications at the OS level has still not chosen them in the app.
-export function decideOptIn({ enabled, native, firstBet, hasUser, askedThisSession: asked, persisted, permission }) {
+// The whole show / suppress rule, from facts already gathered. `persisted` is
+// this uid's saved OS answer (ASKED) and `pref` its saved in-app choice
+// (PREF); anything saved in either means the choice was already made. A
+// permission that is already 'granted' still shows the sheet when nothing is
+// saved for this uid: Android 7 to 12 always report 'granted', and someone
+// who allowed notifications at the OS level has still not chosen them in the
+// app.
+export function decideOptIn({
+  enabled, native, firstBet, hasUser, askedThisSession: asked, persisted, pref, permission,
+}) {
   if (!enabled || !native) return false;
   if (!firstBet) return false;
   if (!hasUser) return false;
   if (asked) return false;
-  if (persisted === 'granted' || persisted === 'denied') return false;
-  if (isGranted(permission)) return !persisted;
+  if (persisted || pref) return false;
+  if (isGranted(permission)) return true;
   return isPromptable(permission);
 }
 
@@ -139,9 +146,11 @@ export async function shouldOfferPushOptIn({ firstBet }) {
     if (!user) return false;
     const persisted = await readAsked(user.uid);
     if (persisted) return false;
+    const pref = await readPref(user.uid);
+    if (pref) return false;
     const permission = await checkPushPermission();
     return decideOptIn({
-      enabled: true, native: true, firstBet: true, hasUser: true, askedThisSession, persisted, permission,
+      enabled: true, native: true, firstBet: true, hasUser: true, askedThisSession, persisted, pref, permission,
     });
   } catch (err) {
     return false;
@@ -205,13 +214,18 @@ export async function readPushSettings(uid) {
 // The row's toggle. Turning on with the permission granted registers; while
 // it is still promptable the row is the user's opt-in path, so it asks (from
 // the tap only). Never asks after a denial. Returns the new { permission, on }.
+// Whenever the OS permission is granted here, ASKED is saved as 'granted'
+// alongside PREF, so the two keys agree. Turning off never saves 'denied':
+// the OS may still allow it, only the in-app choice is off.
 export async function setPushOn(uid, on) {
   if (!pushAvailable() || !uid) return null;
   try {
     if (!on) {
       await writePref(uid, 'off');
       await unregisterPushToken();
-      return { permission: await checkPushPermission(), on: false };
+      const permission = await checkPushPermission();
+      if (isGranted(permission)) await writeAsked(uid, 'granted');
+      return { permission, on: false };
     }
     let permission = await checkPushPermission();
     if (isPromptable(permission)) {
@@ -221,6 +235,7 @@ export async function setPushOn(uid, on) {
       return { permission, on: answer === 'granted' };
     }
     if (!isGranted(permission)) return { permission, on: false };
+    await writeAsked(uid, 'granted');
     await writePref(uid, 'on');
     await registerPushToken();
     return { permission, on: true };
