@@ -95,13 +95,6 @@ body {
   padding-top: 8px;
 }
 
-.wordmark {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
 .screen-title {
   margin: 24px 0 18px;
   line-height: 1.1;
@@ -1315,9 +1308,6 @@ button:focus-visible {
 .danger:hover:not(:disabled) {
   background: #f1e0d9;
 }
-.wordmark {
-  color: var(--accent);
-}
 
 /* Home: an editorial hero and a sample bet, clearly marked as an example. */
 .landing-body {
@@ -1522,8 +1512,14 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 8px;
-  color: #697561;
+}
+.ticket-footer-copy {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: normal;
+  text-transform: none;
 }
 .sample-avatars {
   display: flex;
@@ -1551,28 +1547,6 @@ button:focus-visible {
 .sample-avatars i:nth-child(3) {
   background: #d5d9e7;
   color: #5f6582;
-}
-.scene-note {
-  position: absolute;
-  bottom: 30px;
-  left: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  color: #294631;
-  background: #eef2d9;
-  box-shadow: 0 4px 20px #142c2922;
-  transform: rotate(-5deg);
-  border-radius: 9px;
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.scene-note > span {
-  background: #d8e8b6;
-  border-radius: 50%;
-  padding: 4px;
 }
 .section-heading {
   display: flex;
@@ -2805,12 +2779,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
   .ticket-footer {
     padding: 10px 15px;
-  }
-  .scene-note {
-    font-size: 9px;
-    padding: 9px 12px;
-    left: 20px;
-    bottom: 26px;
   }
   .scene-spark {
     font-size: 55px;

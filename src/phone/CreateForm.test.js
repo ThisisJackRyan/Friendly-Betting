@@ -88,6 +88,23 @@ async function goToStake(question = 'Who is late') {
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 }
 
+// The sign-in slides share the create header: back, title, then a dark Home icon.
+function expectAuthHeaderHome(pane, title) {
+  const row = pane.querySelector('.nav-row');
+  expect(row.querySelector('h1.nav-title')).toHaveTextContent(title);
+  expect(row.querySelector('button.icon-btn')).toHaveAttribute('aria-label', 'Back');
+  const home = row.lastElementChild;
+  expect(home.tagName).toBe('A');
+  expect(home).toHaveClass('nav-home');
+  expect(home).not.toHaveClass('wordmark');
+  expect(home).toHaveAttribute('aria-label', 'Home');
+  expect(home).toHaveAttribute('href', '/');
+  expect(home).toHaveTextContent(/^$/);
+  expect(home.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(row.textContent).not.toMatch(/friendly/i);
+  expect(pane.querySelector('.wordmark')).toBeNull();
+}
+
 test('step 1 is the type picker and back returns home', async () => {
   renderForm();
   const home = screen.getByRole('link', { name: 'Home', exact: true });
@@ -521,6 +538,7 @@ test('create slides run type, details, stake, phone, code, then the bet opens it
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.getByText('Step 4 of 5')).toBeInTheDocument();
+  expectAuthHeaderHome(document.querySelector('.create-pane[data-step="4"]'), 'Phone');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '4');
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
@@ -550,6 +568,7 @@ test('create slides run type, details, stake, phone, code, then the bet opens it
   expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
   const codePane = document.querySelector('.create-pane[data-step="5"]:not(.is-leaving)');
+  expectAuthHeaderHome(codePane, 'Code');
   expect(codePane.querySelector('.person-check')).toBeNull();
   expect(document.querySelector('.create-pane.is-leaving .person-check')).toBeNull();
   // The one check is parked off screen, still rendered, for Resend to reuse.

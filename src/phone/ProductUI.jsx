@@ -1,4 +1,4 @@
-import { FiCheck, FiFlag, FiUsers } from 'react-icons/fi';
+import { FiFlag, FiUsers } from 'react-icons/fi';
 import { createStepOrder } from './creatorSession';
 import { tallyCounts } from './model';
 
@@ -122,14 +122,8 @@ export function ExampleBet() {
             <i>J</i>
             <i>M</i>
           </span>
-          <span>A little more on the line.</span>
+          <span className="ticket-footer-copy">A little more on the line.</span>
         </div>
-      </div>
-      <div className="scene-note">
-        <span>
-          <FiCheck size={16} aria-hidden="true" />
-        </span>
-        Bragging rights, secured.
       </div>
     </div>
   );
