@@ -99,7 +99,7 @@ test('step 1 is the type picker and back returns home', async () => {
   expect(screen.getByRole('heading', { name: 'New bet' })).toHaveClass('nav-title');
   expect(document.querySelector('.stack .wordmark')).not.toBeInTheDocument();
   expect(document.querySelector('h1.screen-title')).not.toBeInTheDocument();
-  expect(screen.getByText('Pick a type')).toBeInTheDocument();
+  expect(screen.queryByText('Pick a type')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /prop/i })).toBeInTheDocument();

@@ -95,7 +95,6 @@ const AppShell = ({ children }) => {
         <Link href="/" className="nav-brand" aria-label="Friendly home" onClick={cancelCreateEntry}>
           <Brand />
         </Link>
-        <p className="nav-caption">YOUR CLUBHOUSE</p>
         <Link
           href="/"
           className={pathname === '/' && !enteringCreate ? 'tab active' : 'tab'}

@@ -46,7 +46,6 @@ const TypePicker = ({ onPick, earlyTypes = EARLY_ACCESS_TYPES }) => {
           <h1 className="screen-title">New bet</h1>
         </>
       )}
-      <p className="section-label">Pick a type</p>
       <div className="type-list">
         {TYPE_ORDER.map((id) => {
           const meta = TYPE_META[id];

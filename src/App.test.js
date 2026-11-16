@@ -138,7 +138,7 @@ test('my bets is a tab with an empty state', () => {
   }
 });
 
-test('Start a bet slides forward into Pick a type', async () => {
+test('Start a bet slides forward into the type picker', async () => {
   navigation.pathname = '/';
   render(
     <CreateChromeProvider>
@@ -156,7 +156,7 @@ test('Start a bet slides forward into Pick a type', async () => {
   const leaving = document.querySelector('.create-pane.is-leaving');
   expect(entering).toHaveClass('slide-forward');
   expect(leaving).toHaveClass('slide-forward');
-  expect(entering).toHaveTextContent('Pick a type');
+  expect(within(entering).getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(leaving.querySelector('.landing-title')).toHaveTextContent('A little rivalry.');
   expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   expect(navigation.push).not.toHaveBeenCalled();
@@ -210,7 +210,7 @@ test.each(['/', '/bets'])(
     expect(document.querySelector('.create-pane.is-leaving')).toContainElement(current);
     expect(document.querySelector('.create-pane.is-leaving')).toHaveAttribute('inert');
     expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
-    expect(document.querySelector('.create-pane.is-entering')).toHaveTextContent('Pick a type');
+    expect(within(document.querySelector('.create-pane.is-entering')).getByRole('button', { name: /money line/i })).toBeInTheDocument();
     expect(create).toHaveAttribute('aria-current', 'page');
     expect(navigation.push).not.toHaveBeenCalled();
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/new'));

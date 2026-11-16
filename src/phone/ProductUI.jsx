@@ -46,7 +46,6 @@ export function FlowProgress({ step = 1, user }) {
   return (
     <div className="flow-progress" aria-label="Create a bet progress">
       <div className="flow-progress-copy">
-        <span>MAKE IT FRIENDLY</span>
         <span>
           Step {current + 1} of {steps.length}
         </span>
