@@ -152,6 +152,7 @@ Preflight never touches auth or the database.
 | `NEXT_PUBLIC_PRO_PAYWALL` | Vercel only | `1` turns on the paywall at `/pro` and the Go Pro link on My bets. Always off in native builds until store In-App Purchase is wired (`mobile/vite.config.mjs` ignores it). See [docs/PRO.md](PRO.md). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | Vercel and native builds | `1` shows early-access bet types (none yet) to Pro members. |
 | `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | Preview and native preview builds | `1` enables the paywall buttons, which call the mock purchase route. Never in production. |
+| `ADMOB_PUBLISHER_ID` | Vercel, server only | The AdMob publisher ID (`pub-` plus 16 digits) for `/app-ads.txt`. Unset or invalid serves the no-sellers placeholder. Wins over `NEXT_PUBLIC_ADMOB_PUBLISHER_ID` (also accepted). See [docs/ADS.md](ADS.md#app-adstxt). |
 | `PRO_MOCK_PURCHASE` | Vercel preview, server only | `1` lets `POST /api/pro/mock-purchase` grant Pro with no payment. The route also refuses `VERCEL_ENV=production`. |
 | `PRO_MOCK_UIDS` | Vercel preview, server only | Testers' uids allowed to use the mock purchase, comma separated. Empty or unset means nobody. Anonymous sessions and tokens without a phone number are always refused. Unset before launch, see [docs/PRO.md](PRO.md#pre-launch-cleanup). |
 
