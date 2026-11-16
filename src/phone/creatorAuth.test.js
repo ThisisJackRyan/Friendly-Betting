@@ -42,6 +42,7 @@ jest.mock('../Config/firebase-config', () => ({
 }));
 
 jest.mock('../platform/runtime', () => ({ isNativeApp: jest.fn(() => false) }));
+jest.mock('./pushOptIn', () => ({ unregisterBeforeSignOut: jest.fn(async () => {}) }));
 
 jest.mock('../platform/nativePhone', () => ({
   cancelNativePhoneCode: jest.fn(),
@@ -555,4 +556,17 @@ test('an expired code does not sign the creator out', async () => {
   mockLinkWithCredential.mockRejectedValue(expired);
   await expect(verifyPhoneCode('vid-1', '111111')).rejects.toBe(expired);
   expect(mockSignOut).not.toHaveBeenCalled();
+});
+
+test('log out drops this install\u2019s push token first, and a failure never blocks it', async () => {
+  const { unregisterBeforeSignOut } = jest.requireMock('./pushOptIn');
+  unregisterBeforeSignOut.mockClear();
+  mockSignOut.mockReset();
+  mockSignOut.mockResolvedValue();
+  await signOutCreator();
+  expect(unregisterBeforeSignOut).toHaveBeenCalledTimes(1);
+  expect(unregisterBeforeSignOut.mock.invocationCallOrder[0]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0]);
+  unregisterBeforeSignOut.mockRejectedValueOnce(new Error('offline'));
+  await signOutCreator();
+  expect(mockSignOut).toHaveBeenCalledTimes(2);
 });

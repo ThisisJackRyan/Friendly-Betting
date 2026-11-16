@@ -24,7 +24,9 @@ import {
 import { formatInvite } from './inviteCopy';
 import { voteUrl } from './routes';
 import { hasShareSheet, openShareSheet, shareMessage } from './share';
-import { takeFreshBet } from './freshBet';
+import { takeFirstBet, takeFreshBet } from './freshBet';
+import { noteOptInShown, shouldOfferPushOptIn } from './pushOptIn';
+import PushOptInSheet from './PushOptInSheet';
 import Bars from './Bars';
 import BetGone from './BetGone';
 import FriendlyLoader, { useMinHold } from './FriendlyLoader';
@@ -138,6 +140,11 @@ const TallyScreen = () => {
   // Whether this tab just made this bet (see freshBet): undefined until the
   // first mount takes the note, then true until the share sheet opens once.
   const fresh = useRef(undefined);
+  // The push opt-in sheet after the creator's first send (pushOptIn.js):
+  // '' (none), 'checking', 'show', then 'done'. While it is checking or up,
+  // the auto share waits (the ref, so it holds from the very first effect).
+  const [optIn, setOptIn] = useState('');
+  const optInHold = useRef(false);
   const minElapsed = useMinHold(betId);
   // Every invite share (the button and the one after Create) goes through the
   // ad gate: maybe an interstitial and a thank-you, then the same share.
@@ -148,9 +155,43 @@ const TallyScreen = () => {
   // thank-you, then the reveal. A settle with Undo skips both (confirmSettle).
   const settleAd = useSettleAd();
 
+  const mounted = useRef(true);
   useEffect(() => {
-    if (fresh.current === undefined) fresh.current = takeFreshBet(betId);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (fresh.current !== undefined) return;
+    fresh.current = takeFreshBet(betId);
+    // Always taken, so the note never outlives this arrival.
+    const first = takeFirstBet(betId) && fresh.current;
+    if (!first) return;
+    optInHold.current = true;
+    setOptIn('checking');
+    // Not cancelled by an effect cleanup: a Strict Mode re-run skips this
+    // block (the note is spent), so this one answer must land.
+    shouldOfferPushOptIn({ firstBet: true })
+      .catch(() => false)
+      .then((show) => {
+        if (!mounted.current) return;
+        if (show) {
+          noteOptInShown();
+          setOptIn('show');
+          return;
+        }
+        optInHold.current = false;
+        setOptIn('done');
+      });
   }, [betId]);
+
+  // Either button (or Escape, or the scrim): the sheet goes, then the share.
+  const closeOptIn = () => {
+    optInHold.current = false;
+    setOptIn('done');
+  };
 
   useEffect(() => {
     document.title = 'The picks · Friendly';
@@ -262,8 +303,9 @@ const TallyScreen = () => {
 
   // Right after Create, the share sheet opens by itself, once. Only a real
   // sheet: with none (or if the browser refuses it) the invite button waits.
+  // After a first bet it waits for the notifications sheet to close.
   useEffect(() => {
-    if (!bet || held || !fresh.current || !votingOpen(bet)) return;
+    if (!bet || held || !fresh.current || optInHold.current || !votingOpen(bet)) return;
     fresh.current = false;
     if (!hasShareSheet()) return;
     const text = inviteText();
@@ -274,7 +316,7 @@ const TallyScreen = () => {
         if (result != null) setShareState(result);
       })
       .finally(() => setSharing(false));
-  }, [bet]);
+  }, [bet, optIn]);
 
   const canSettle = canSettleBet(user, bet);
   // Only an open bet can be called off; a settle can only be undone.
@@ -431,6 +473,7 @@ const TallyScreen = () => {
           </>
         )}
       </div>
+      {optIn === 'show' && reveal && bet && <PushOptInSheet onDone={closeOptIn} />}
       {callOff.open && (
         <ConfirmDialog
           title="Call off this bet?"

@@ -19,6 +19,7 @@ import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
 import { useProBadge } from './useEntitlement';
 import GoProLink from './GoProLink';
+import PushSettingsRow from './PushSettingsRow';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
 import ProSheet from './ProSheet';
@@ -351,6 +352,7 @@ export function MyBetsList({ user }) {
               )}
             </>
           )}
+          <PushSettingsRow uid={uid} />
           <button
             type="button"
             className="logout-link"
