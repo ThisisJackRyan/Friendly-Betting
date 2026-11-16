@@ -447,11 +447,12 @@ describe('private result texts', () => {
   });
 });
 
-describe('push tokens and send claims', () => {
+describe('push tokens, device owners and send claims', () => {
   const ownDevice = 'privatePushTokens/creator-1/devices/device-1';
   const anonDevice = 'privatePushTokens/anon-1/devices/device-2';
   const device = { token: 'fcm-token-1', platform: 'ios', createdAt: 1, updatedAt: 1 };
   const sendClaim = 'privatePushSends/settle:abc123:2';
+  const ownerRecord = 'privatePushDevices/device-1';
 
   // Signed out, anonymous voter, another phone user, and the owner (creator-1).
   const contexts = () => [guest(), anon(), otherPhone(), creator()];
@@ -462,6 +463,7 @@ describe('push tokens and send claims', () => {
       [ownDevice]: device,
       [anonDevice]: { ...device, token: 'fcm-token-2', platform: 'android' },
       [sendClaim]: { at: 2 },
+      [ownerRecord]: { uid: 'creator-1', updatedAt: 1 },
     });
   });
 
@@ -508,6 +510,27 @@ describe('push tokens and send claims', () => {
       await assertFails(db.doc(sendClaim).update({ at: 4 }));
       await assertFails(db.doc(sendClaim).delete());
     }
+  });
+
+  test('no client can get, list, create, update or delete device owner records, not even its own', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc(ownerRecord).get());
+      await assertFails(db.doc('privatePushDevices/device-missing').get());
+      await assertFails(db.collection('privatePushDevices').get());
+      await assertFails(db.collection('privatePushDevices').where('uid', '==', 'creator-1').get());
+      await assertFails(db.collectionGroup('privatePushDevices').get());
+      await assertFails(db.doc('privatePushDevices/device-9').set({ uid: 'creator-1', updatedAt: 2 }));
+      await assertFails(db.doc('privatePushDevices/device-9').set({ uid: 'anon-1', updatedAt: 2 }));
+      await assertFails(db.doc(ownerRecord).set({ uid: 'anon-1', updatedAt: 2 }));
+      await assertFails(db.doc(ownerRecord).update({ uid: 'anon-1' }));
+      await assertFails(db.doc(ownerRecord).update({ updatedAt: 3 }));
+      await assertFails(db.doc(ownerRecord).delete());
+    }
+    // The owner uid named in the record is denied too.
+    const owner = creator();
+    await assertFails(owner.doc(ownerRecord).get());
+    await assertFails(owner.doc(ownerRecord).update({ updatedAt: 4 }));
+    await assertFails(owner.doc(ownerRecord).delete());
   });
 });
 

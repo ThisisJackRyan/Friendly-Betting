@@ -345,6 +345,11 @@ service cloud.firestore {
     match /privatePushSends/{document=**} {
       allow read, write: if false;
     }
+    // Which uid owns each install's device id, so an account switch can move
+    // a leftover token off the old uid. Admin SDK only, like the two above.
+    match /privatePushDevices/{document=**} {
+      allow read, write: if false;
+    }
 
     // Pro entitlements (docs/PRO.md). A member reads their own plan; nobody
     // else can. Only the Admin SDK writes them (the mock purchase route on
