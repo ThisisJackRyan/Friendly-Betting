@@ -841,8 +841,7 @@ async function mockEntitlement(page, { plan = null } = {}) {
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
-      export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
-      export const requestMockPurchase = async () => ({ ok: true });`,
+      export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);`,
   }));
 }
 
