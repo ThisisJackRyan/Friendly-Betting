@@ -115,13 +115,17 @@ export async function checkFirstBet(lookup, uid, code, timeoutMs = FIRST_BET_TIM
   }
 }
 
-// The whole show / suppress rule, from facts already gathered.
+// The whole show / suppress rule, from facts already gathered. A permission
+// that is already 'granted' still shows the sheet when nothing is saved for
+// this uid: Android 7 to 12 always report 'granted', and someone who allowed
+// notifications at the OS level has still not chosen them in the app.
 export function decideOptIn({ enabled, native, firstBet, hasUser, askedThisSession: asked, persisted, permission }) {
   if (!enabled || !native) return false;
   if (!firstBet) return false;
   if (!hasUser) return false;
   if (asked) return false;
   if (persisted === 'granted' || persisted === 'denied') return false;
+  if (isGranted(permission)) return !persisted;
   return isPromptable(permission);
 }
 
@@ -174,23 +178,27 @@ async function afterAnswer(uid, answer) {
   return '';
 }
 
-// "Turn on notifications": the only time the sheet asks the OS. Never throws.
+// "Turn on notifications": the only time the sheet asks the OS. With the
+// permission already granted (Android 7 to 12, or allowed earlier in the OS)
+// there is nothing to ask, so it saves the choice and registers. Never throws.
 export async function acceptPushOptIn() {
   askedThisSession = true;
   if (!pushAvailable()) return '';
   try {
     const user = await firebaseUser();
-    const answer = await requestPushPermission();
+    const answer = isGranted(await checkPushPermission()) ? 'granted' : await requestPushPermission();
     return await afterAnswer(user?.uid, answer);
   } catch (err) {
     return '';
   }
 }
 
-// The Notifications row's starting state for this uid. Null with push off.
+// The Notifications row's starting state for this uid. Null with push off,
+// or when the permission could not be read (the row then renders nothing).
 export async function readPushSettings(uid) {
   if (!pushAvailable() || !uid) return null;
   const [permission, pref] = await Promise.all([checkPushPermission(), readPref(uid)]);
+  if (!permission) return null;
   return { permission, on: pref === 'on' };
 }
 

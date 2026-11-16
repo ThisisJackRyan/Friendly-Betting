@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
@@ -160,6 +160,16 @@ async function settle() {
 
 const sheet = () => screen.queryByRole('dialog', { name: PUSH_COPY.sheetTitle });
 
+// After "Turn on notifications" the answer is async (permission check, OS
+// prompt, Preferences, register). Wait for its real end, the sheet gone and
+// the share sheet opened, instead of a fixed number of ticks.
+async function waitForShare() {
+  await waitFor(() => {
+    expect(sheet()).not.toBeInTheDocument();
+    expect(openShareSheet).toHaveBeenCalledTimes(1);
+  });
+}
+
 function expectNoPushCalls() {
   expect(FirebaseMessaging.checkPermissions).not.toHaveBeenCalled();
   expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
@@ -203,8 +213,9 @@ test('under Strict Mode (both apps use it) the sheet still shows, and the share 
 test('"Turn on notifications" asks, registers on a grant, then the share sheet opens', async () => {
   markFreshBet('abc123', { first: true });
   await renderTally();
+  expect(openShareSheet).not.toHaveBeenCalled();
   await userEvent.click(screen.getByRole('button', { name: PUSH_COPY.turnOn }));
-  await settle();
+  await waitForShare();
   expect(FirebaseMessaging.requestPermissions).toHaveBeenCalledTimes(1);
   expect(registerPushToken).toHaveBeenCalledTimes(1);
   expect(Preferences.store.get('fb.pushAsked.creator-1')).toBe('granted');
@@ -212,12 +223,29 @@ test('"Turn on notifications" asks, registers on a grant, then the share sheet o
   expect(openShareSheet).toHaveBeenCalledTimes(1);
 });
 
+test('the OS already granted (Android 7 to 12) and nothing saved: the sheet shows, and the share waits', async () => {
+  FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+  markFreshBet('abc123', { first: true });
+  await renderTally();
+  expect(await screen.findByRole('dialog', { name: PUSH_COPY.sheetTitle })).toBeInTheDocument();
+  expect(openShareSheet).not.toHaveBeenCalled();
+
+  await userEvent.click(screen.getByRole('button', { name: PUSH_COPY.turnOn }));
+  await waitForShare();
+  expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+  expect(registerPushToken).toHaveBeenCalledTimes(1);
+  expect(Preferences.store.get('fb.pushAsked.creator-1')).toBe('granted');
+  expect(Preferences.store.get('fb.pushPref.creator-1')).toBe('on');
+  expect(registerPushToken.mock.invocationCallOrder[0])
+    .toBeLessThan(openShareSheet.mock.invocationCallOrder[0]);
+});
+
 test('a system denial closes the sheet with no extra dialog, saves it, and the share follows', async () => {
   FirebaseMessaging.requestPermissions.mockResolvedValue({ receive: 'denied' });
   markFreshBet('abc123', { first: true });
   await renderTally();
   await userEvent.click(screen.getByRole('button', { name: PUSH_COPY.turnOn }));
-  await settle();
+  await waitForShare();
   expect(registerPushToken).not.toHaveBeenCalled();
   expect(Preferences.store.get('fb.pushAsked.creator-1')).toBe('denied');
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -229,7 +257,8 @@ test('a failed request does not crash or get stuck: the sheet goes and the share
   markFreshBet('abc123', { first: true });
   await renderTally();
   await userEvent.click(screen.getByRole('button', { name: PUSH_COPY.turnOn }));
-  await settle();
+  await waitForShare();
+  expect(FirebaseMessaging.requestPermissions).toHaveBeenCalledTimes(1);
   expect(sheet()).not.toBeInTheDocument();
   expect(Preferences.set).not.toHaveBeenCalled();
   expect(openShareSheet).toHaveBeenCalledTimes(1);
@@ -280,10 +309,17 @@ test.each([
 });
 
 test.each([
-  ['the OS already granted', () => FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' })],
   ['the OS denied', () => FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'denied' })],
   ['a saved grant', () => Preferences.store.set('fb.pushAsked.creator-1', 'granted')],
   ['a saved denial', () => Preferences.store.set('fb.pushAsked.creator-1', 'denied')],
+  ['the OS already granted and a saved grant', () => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+    Preferences.store.set('fb.pushAsked.creator-1', 'granted');
+  }],
+  ['the OS already granted and a saved denial', () => {
+    FirebaseMessaging.checkPermissions.mockResolvedValue({ receive: 'granted' });
+    Preferences.store.set('fb.pushAsked.creator-1', 'denied');
+  }],
 ])('with %s: no sheet, and the share opens', async (_name, setup) => {
   setup();
   markFreshBet('abc123', { first: true });
