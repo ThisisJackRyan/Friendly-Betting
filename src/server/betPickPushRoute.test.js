@@ -228,7 +228,7 @@ test('happy path: tells only the creator, once, with the live vote; ignores any 
   expect(messages[0].data).toEqual({ code: 'abc123', route: '/b/abc123', event: 'pick' });
   expect(messages[0].apns.headers['apns-collapse-id']).toBe('abc123');
   expect(messages[0].android).toEqual({ collapseKey: 'abc123', notification: { tag: 'abc123', channelId: 'bet_updates' } });
-  expect(store.paths('privatePushSends/')).toEqual(['privatePushSends/pick:abc123:maya']);
+  expect(store.paths('privatePushSends/').sort()).toEqual(['privatePushSends/pick:abc123:maya', 'privatePushSends/pickcount:abc123']);
 
   // A side change and a rename later: the claim holds, nothing more is sent.
   await store.doc('bets/abc123/votes/maya').set({ voterId: 'maya', name: 'May', optionId: 'a', at: at(Date.now()) });
@@ -261,7 +261,7 @@ test('a creator with no registered device (push off in the app): 200, no send, t
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ sent: 0, failed: 0 });
   expect(messaging.sendEach).not.toHaveBeenCalled();
-  expect(store.paths('privatePushSends/')).toEqual(['privatePushSends/pick:abc123:maya']);
+  expect(store.paths('privatePushSends/').sort()).toEqual(['privatePushSends/pick:abc123:maya', 'privatePushSends/pickcount:abc123']);
 });
 
 test('an unknown bet is skipped, not an error, after a valid token', async () => {
