@@ -21,6 +21,21 @@ test('the native app IDs match the test IDs in config', () => {
   expect(manifest).toContain(`android:value="${AD_IDS.android.appId}"`);
 });
 
+test('Info.plist: the ATT string waits on UX, and the SKAdNetwork list is well formed', () => {
+  const fs = jest.requireActual('fs');
+  const path = jest.requireActual('path');
+  const plist = fs.readFileSync(path.join(__dirname, '..', '..', 'ios/App/App/Info.plist'), 'utf8');
+  expect(plist).toMatch(/<key>NSUserTrackingUsageDescription<\/key>\s*<string>TODO_UX_ATT<\/string>/);
+  const block = plist.match(/<key>SKAdNetworkItems<\/key>\s*<array>([\s\S]*?)<\/array>/)[1];
+  const entries = [...block.matchAll(/<dict>\s*<key>SKAdNetworkIdentifier<\/key>\s*<string>([^<]*)<\/string>\s*<\/dict>/g)].map((m) => m[1]);
+  // Google's list (docs/ADS.md): Google's own ID plus its published buyers.
+  expect(entries.length).toBe(50);
+  expect(entries[0]).toBe('cstr6suwn9.skadnetwork');
+  expect(new Set(entries).size).toBe(entries.length);
+  entries.forEach((id) => expect(id).toMatch(/^[a-z0-9]{10}\.skadnetwork$/));
+  expect(block.match(/<dict>/g)).toHaveLength(entries.length);
+});
+
 test('ads are off unless the flag is exactly 1', () => {
   const flag = process.env.NEXT_PUBLIC_ADS_ENABLED;
   try {
