@@ -4,6 +4,7 @@ import {
   authorizeAccountDeletion,
   deleteAccount,
   isAccountDeleted,
+  isMissingIndex,
   tombstonePath,
 } from './deleteAccount';
 import { createStripeClient } from './deleteAccountStripe';
@@ -38,7 +39,7 @@ const settled = {
   },
 };
 
-function seeded(extra = {}) {
+function seeded(extra = {}, dbOptions = {}) {
   return fakeDb({
     // A bet this member created, with a friend's pick and number.
     'bets/mine': { code: 'mine', createdByID: UID, createdByName: 'Jack', status: 'open', options, votes: [] },
@@ -86,7 +87,7 @@ function seeded(extra = {}) {
     'entitlements/sam': { plan: 'pro', source: 'mock' },
     'privatePushTokens/sam': { windowStart: 1, count: 1 },
     ...extra,
-  });
+  }, dbOptions);
 }
 
 function fakeAuth({ missing = false } = {}) {
@@ -303,6 +304,87 @@ describe('deleteAccount', () => {
     const db = seeded();
     await expect(deleteAccount({ db, auth: fakeAuth(), uid: UID, phoneNumber: '' })).rejects.toMatchObject({ code: 'forbidden' });
     expect(db.writes).toEqual([]);
+  });
+
+  describe('legacy picks found through a number', () => {
+    // A pick only in bets/{code}.votes[] (no vote doc), plus their number.
+    const legacyOnly = (code, extra = {}) => ({
+      [`bets/${code}`]: {
+        code, createdByID: 'maya', status: 'open', options,
+        votes: [{ voterId: UID, name: 'Jack', optionId: 'a', at: 1 }, { voterId: 'sam', name: 'Sam', optionId: 'b', at: 2 }],
+        ...extra,
+      },
+      [`${numbersPath(code)}/n-me`]: { e164: PHONE, voterId: UID, optionId: 'a' },
+      [`${numbersPath(code)}/n-sam`]: { e164: '+12025550101', voterId: 'sam', optionId: 'b' },
+    });
+
+    test('an open bet loses the entry and the number; the other voter keeps theirs', async () => {
+      const db = fakeDb(legacyOnly('old'));
+      await run(db);
+      expect(db.data('bets/old').votes).toEqual([{ voterId: 'sam', name: 'Sam', optionId: 'b', at: 2 }]);
+      expect(db.data(`${numbersPath('old')}/n-me`)).toBeUndefined();
+      expect(db.data(`${numbersPath('old')}/n-sam`)).toBeTruthy();
+    });
+
+    test('a settled bet keeps the pick with the name cleared and loses the number', async () => {
+      const db = fakeDb(legacyOnly('old', { status: 'closed', winnerId: 'a' }));
+      await run(db);
+      expect(db.data('bets/old').votes).toEqual([
+        { voterId: UID, name: '', optionId: 'a', at: 1 },
+        { voterId: 'sam', name: 'Sam', optionId: 'b', at: 2 },
+      ]);
+      expect(db.data(`${numbersPath('old')}/n-me`)).toBeUndefined();
+      expect(db.data(`${numbersPath('old')}/n-sam`)).toBeTruthy();
+    });
+
+    test('a "numbers" collection under any other parent is left alone', async () => {
+      const db = fakeDb({
+        'someOther/x/numbers/n-me': { e164: PHONE, voterId: UID },
+        'privateResultTexts/x/deeper/y/numbers/n-me': { e164: PHONE, voterId: UID },
+      });
+      await run(db);
+      expect(db.data('someOther/x/numbers/n-me')).toBeTruthy();
+      expect(db.data('privateResultTexts/x/deeper/y/numbers/n-me')).toBeTruthy();
+      expect(db.writes.filter(([, path]) => path.includes('/x/') || path.includes(':x:'))).toEqual([]);
+    });
+
+    test('pick claims on bets found through a number go too', async () => {
+      const db = fakeDb({ ...legacyOnly('old'), [`privatePushSends/pick:old:${UID}`]: { code: 'old', at: 1 } });
+      await run(db);
+      expect(db.data(`privatePushSends/pick:old:${UID}`)).toBeUndefined();
+    });
+  });
+
+  describe('a missing index', () => {
+    test.each(['votes', 'numbers'])('on %s fails before Stripe or any delete, with only the tombstone written', async (group) => {
+      const db = seeded({}, { failCollectionGroup: { [group]: Object.assign(new Error('needs an index'), { code: 9 }) } });
+      const stripe = fakeStripe();
+      const auth = fakeAuth();
+      await expect(run(db, { stripe, auth })).rejects.toMatchObject({ code: 'missing-index' });
+      Object.values(stripe).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+      expect(auth.deleteUser).not.toHaveBeenCalled();
+      expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+      expect(db.writes).toEqual([['set', tombstonePath(UID)]]);
+      expect(db.data('bets/mine')).toBeTruthy();
+      expect(db.data(`bets/open/votes/${UID}`)).toBeTruthy();
+      expect(db.data(`${numbersPath('open')}/n-me`)).toBeTruthy();
+      expect(db.data(`entitlements/${UID}`)).toBeTruthy();
+      expect(db.data(`privatePushTokens/${UID}`)).toBeTruthy();
+    });
+
+    test('the string form of the code is caught too', async () => {
+      const db = seeded({}, { failCollectionGroup: { votes: { code: 'failed-precondition' } } });
+      await expect(run(db)).rejects.toMatchObject({ code: 'missing-index' });
+      expect(db.writes).toEqual([['set', tombstonePath(UID)]]);
+    });
+
+    test('isMissingIndex knows the Admin SDK codes', () => {
+      expect(isMissingIndex({ code: 9 })).toBe(true);
+      expect(isMissingIndex({ code: 'failed-precondition' })).toBe(true);
+      expect(isMissingIndex({ code: 'missing-index' })).toBe(true);
+      expect(isMissingIndex({ code: 'stripe-failed' })).toBe(false);
+      expect(isMissingIndex(null)).toBe(false);
+    });
   });
 
   describe('Stripe', () => {

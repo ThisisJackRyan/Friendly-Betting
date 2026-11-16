@@ -592,14 +592,14 @@ describe('delete account', () => {
     expect(again).not.toHaveClass('danger');
     expect(within(dialog).queryByRole('alert')).toBeNull();
     await userEvent.click(again);
-    expect(sessionStorage.getItem(RESUME_KEY)).not.toBeNull();
+    expect(JSON.parse(sessionStorage.getItem(RESUME_KEY)).uid).toBe('creator');
     expect(signOutCreator).toHaveBeenCalledTimes(1);
     expect(clearLocalAccountData).not.toHaveBeenCalled();
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
   test('back from sign-in, the confirm opens again, once', () => {
-    markDeleteAccountResume();
+    markDeleteAccountResume('creator');
     const { unmount } = render(<MyBetsList user={user} />);
     expect(screen.getByRole('dialog', { name: 'Delete your account?' })).toBeInTheDocument();
     unmount();
@@ -608,10 +608,17 @@ describe('delete account', () => {
   });
 
   test('a resume note does not open the confirm for someone who is not a member', () => {
-    markDeleteAccountResume();
+    markDeleteAccountResume('creator');
     render(<MyBetsList user={null} />);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(sessionStorage.getItem(RESUME_KEY)).not.toBeNull();
+  });
+
+  test('a resume note left by another member does not open the confirm, and is dropped', () => {
+    markDeleteAccountResume('someone-else');
+    render(<MyBetsList user={user} />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
   });
 
   test.each([

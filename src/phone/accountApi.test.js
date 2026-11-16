@@ -68,6 +68,18 @@ describe('deleteAccount', () => {
     await expect(deleteAccount()).rejects.toMatchObject({ code: 'delete-failed' });
   });
 
+  test('an Auth user that is already gone is success: an earlier attempt deleted it', async () => {
+    getIdToken.mockRejectedValue(Object.assign(new Error('x'), { code: 'auth/user-not-found' }));
+    await expect(deleteAccount()).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test('an expired or revoked session token stays an error', async () => {
+    getIdToken.mockRejectedValue(Object.assign(new Error('x'), { code: 'auth/user-token-expired' }));
+    await expect(deleteAccount()).rejects.toMatchObject({ code: 'auth/user-token-expired' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test('nobody signed in never calls the server', async () => {
     auth.currentUser = null;
     await expect(deleteAccount()).rejects.toMatchObject({ code: 'unauthorized' });
@@ -77,17 +89,40 @@ describe('deleteAccount', () => {
 
 describe('the resume note', () => {
   test('is taken once', () => {
-    markDeleteAccountResume(1000);
-    expect(takeDeleteAccountResume(2000)).toBe(true);
-    expect(takeDeleteAccountResume(2000)).toBe(false);
+    markDeleteAccountResume('me', 1000);
+    expect(takeDeleteAccountResume('me', 2000)).toBe(true);
+    expect(takeDeleteAccountResume('me', 2000)).toBe(false);
   });
 
   test('expires after 10 minutes and can be cleared', () => {
-    markDeleteAccountResume(0);
-    expect(takeDeleteAccountResume(10 * 60 * 1000 + 1)).toBe(false);
-    markDeleteAccountResume(0);
+    markDeleteAccountResume('me', 0);
+    expect(takeDeleteAccountResume('me', 10 * 60 * 1000 + 1)).toBe(false);
+    markDeleteAccountResume('me', 0);
     clearDeleteAccountResume();
-    expect(takeDeleteAccountResume(1)).toBe(false);
+    expect(takeDeleteAccountResume('me', 1)).toBe(false);
+  });
+
+  test('only resumes for the member who left it, and is removed either way', () => {
+    markDeleteAccountResume('me', 1000);
+    expect(takeDeleteAccountResume('someone-else', 2000)).toBe(false);
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
+    expect(takeDeleteAccountResume('me', 2000)).toBe(false);
+  });
+
+  test('without a uid nothing is stored or taken', () => {
+    markDeleteAccountResume('', 1000);
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
+    markDeleteAccountResume('me', 1000);
+    expect(takeDeleteAccountResume('', 2000)).toBe(false);
+    expect(takeDeleteAccountResume('me', 2000)).toBe(true);
+  });
+
+  test('an old or garbled note is ignored', () => {
+    sessionStorage.setItem(RESUME_KEY, '1000');
+    expect(takeDeleteAccountResume('me', 2000)).toBe(false);
+    sessionStorage.setItem(RESUME_KEY, '{not json');
+    expect(takeDeleteAccountResume('me', 2000)).toBe(false);
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
   });
 });
 

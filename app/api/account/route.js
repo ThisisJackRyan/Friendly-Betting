@@ -40,6 +40,12 @@ async function remove(request) {
   } catch (err) {
     if (err?.code === 'forbidden') return json({ error: 'forbidden' }, 403);
     if (err?.code === 'admin-not-configured') return json({ error: 'not-configured' }, 503);
+    if (err?.code === 'missing-index') {
+      // findTargets found a collection-group index missing; only the tombstone is written.
+      // A raw FAILED_PRECONDITION from a later step stays a 500.
+      console.error('account delete stopped: missing-index');
+      return json({ error: 'not-configured' }, 503);
+    }
     if (err?.code === 'stripe-failed') {
       console.error('account delete stopped: stripe-failed');
       return json({ error: 'billing-unavailable' }, 503);

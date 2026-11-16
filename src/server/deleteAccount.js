@@ -1,6 +1,5 @@
 import { isFinished } from '../phone/betStatus';
 import { deleteBet } from './deleteBet';
-import { numbersPath } from './resultTexts';
 import { OPEN_SUBSCRIPTION_STATUSES } from './deleteAccountStripe';
 
 // In-app account deletion (docs/DEVELOPMENT.md, "Delete account"). The route
@@ -58,6 +57,12 @@ export async function isAccountDeleted(db, uid) {
 
 const isMissing = (err) => err?.code === 'auth/user-not-found';
 
+// A Firestore query that needs an index nobody deployed yet. The Admin SDK
+// reports it as gRPC FAILED_PRECONDITION: code 9, or 'failed-precondition'.
+export function isMissingIndex(err) {
+  return err?.code === 'missing-index' || err?.code === 9 || err?.code === 'failed-precondition';
+}
+
 async function writeTombstone(db, uid, at) {
   const ref = db.doc(tombstonePath(uid));
   const snap = await ref.get();
@@ -88,9 +93,7 @@ async function cancelStripe(stripe, entitlement) {
   await stripe.deleteCustomer(customerId);
 }
 
-async function deleteOwnedBets(db, uid, phoneNumber) {
-  const owned = await db.collection('bets').where('createdByID', '==', uid).get();
-  const codes = owned.docs.map((item) => item.id);
+async function deleteOwnedBets(db, uid, phoneNumber, codes) {
   for (const code of codes) {
     await deleteBet({ db, code, uid, phoneNumber });
     // Per-bet push receipts with a known id. No name or number in them.
@@ -104,6 +107,37 @@ async function deleteOwnedBets(db, uid, phoneNumber) {
 function betCodeOf(path) {
   const parts = path.split('/');
   return parts.length === 4 && parts[0] === 'bets' && parts[2] === 'votes' ? parts[1] : '';
+}
+
+// privateResultTexts/{code}/numbers/{id}: the code, or '' for any other
+// "numbers" collection.
+function numbersCodeOf(path) {
+  const parts = path.split('/');
+  return parts.length === 4 && parts[0] === 'privateResultTexts' && parts[2] === 'numbers' ? parts[1] : '';
+}
+
+// Every query the delete needs, before anything irreversible. The two
+// collection-group queries need the indexes in firestore.indexes.json; if one
+// is missing this throws 'missing-index' with only the tombstone written.
+async function findTargets(db, uid) {
+  try {
+    const owned = await db.collection('bets').where('createdByID', '==', uid).get();
+    const votes = await db.collectionGroup('votes').where('voterId', '==', uid).get();
+    const numbers = await db.collectionGroup('numbers').where('voterId', '==', uid).get();
+    const ownedCodes = owned.docs.map((item) => item.id);
+    const owns = new Set(ownedCodes);
+    const numberDocs = numbers.docs.filter((item) => numbersCodeOf(item.ref.path));
+    // Bets found through a number too, so a legacy pick that lives only in
+    // bets/{code}.votes[] (no vote doc) is scrubbed as well.
+    const seen = [
+      ...votes.docs.map((item) => betCodeOf(item.ref.path)),
+      ...numberDocs.map((item) => numbersCodeOf(item.ref.path)),
+    ];
+    const votedCodes = Array.from(new Set(seen.filter((code) => code && !owns.has(code))));
+    return { ownedCodes, votedCodes, numberRefs: numberDocs.map((item) => item.ref) };
+  } catch (err) {
+    throw isMissingIndex(err) ? failure('missing-index') : err;
+  }
 }
 
 // One bet the member voted on but did not create. Open: the pick goes.
@@ -141,22 +175,15 @@ async function scrubVote(db, code, uid) {
   });
 }
 
-async function scrubVotes(db, uid, ownedCodes) {
-  const owned = new Set(ownedCodes);
-  const listed = await db.collectionGroup('votes').where('voterId', '==', uid).get();
-  const codes = Array.from(new Set(listed.docs.map((item) => betCodeOf(item.ref.path)).filter(Boolean)));
-  for (const code of codes) {
-    if (owned.has(code)) continue;
-    await scrubVote(db, code, uid);
-  }
-  return codes.filter((code) => !owned.has(code));
+async function scrubVotes(db, uid, codes) {
+  for (const code of codes) await scrubVote(db, code, uid);
 }
 
-// The member's phone number docs on these bets, finished or not.
-async function deleteNumbers(db, uid, codes) {
-  for (const code of codes) {
-    const listed = await db.collection(numbersPath(code)).where('voterId', '==', uid).get();
-    for (const item of listed.docs) await item.ref.delete();
+// Every result-text number doc of theirs, on any bet, finished or not.
+async function deleteNumbers(db, uid, refs) {
+  for (const ref of refs) {
+    const snap = await ref.get();
+    if (snap.exists && snap.data()?.voterId === uid) await ref.delete();
   }
 }
 
@@ -193,22 +220,24 @@ async function deleteAuthUser(auth, uid) {
   }
 }
 
-// Order matters (plan section 5): tombstone, Stripe, owned bets, votes on
-// other bets, push data, billing docs, and Auth last so a failure anywhere,
-// Auth included, can be retried with the same token.
+// Order matters (plan section 5): tombstone, every query (so a missing index
+// fails before anything irreversible), Stripe, owned bets, votes on other
+// bets, numbers, push data, billing docs, and Auth last so a failure
+// anywhere, Auth included, can be retried with the same token.
 // `stripe` is a createStripeClient() client or null (no Stripe in this deploy).
 export async function deleteAccount({ db, auth, uid, phoneNumber, stripe = null, at = Date.now() }) {
   if (!uid || !phoneNumber) throw failure('forbidden');
 
   await writeTombstone(db, uid, at);
+  const { ownedCodes, votedCodes, numberRefs } = await findTargets(db, uid);
 
   const entitlementRef = db.doc(`entitlements/${uid}`);
   const entitlement = (await entitlementRef.get()).data() || null;
   await cancelStripe(stripe, entitlement);
 
-  const ownedCodes = await deleteOwnedBets(db, uid, phoneNumber);
-  const votedCodes = await scrubVotes(db, uid, ownedCodes);
-  await deleteNumbers(db, uid, votedCodes);
+  await deleteOwnedBets(db, uid, phoneNumber, ownedCodes);
+  await scrubVotes(db, uid, votedCodes);
+  await deleteNumbers(db, uid, numberRefs);
   await deletePush(db, uid, [...ownedCodes, ...votedCodes]);
 
   await db.doc(`stripeNoticeDismissals/${uid}`).delete();

@@ -29,7 +29,7 @@ const TOKENS = {
 let db;
 let auth;
 
-function seed() {
+function seed(dbOptions = {}) {
   return fakeDb({
     'bets/mine': { code: 'mine', createdByID: UID, status: 'open', votes: [] },
     'bets/mine/votes/friend': { voterId: 'friend', name: 'Lee', optionId: 'a', at: 1 },
@@ -37,7 +37,7 @@ function seed() {
     [`bets/open/votes/${UID}`]: { voterId: UID, name: 'Jack', optionId: 'a', at: 1 },
     [`${numbersPath('open')}/n-me`]: { e164: PHONE, voterId: UID, optionId: 'a' },
     [`entitlements/${UID}`]: { plan: 'pro', source: 'stripe', stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1' },
-  });
+  }, dbOptions);
 }
 
 beforeEach(() => {
@@ -153,6 +153,17 @@ test('an unexpected failure is a 500 that logs only the error code', async () =>
   error.mockRestore();
 });
 
+test('a raw FAILED_PRECONDITION from a later step is a 500 server, not not-configured', async () => {
+  const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+  auth.deleteUser.mockRejectedValue(Object.assign(new Error(`user ${UID}`), { code: 9 }));
+  const res = await del({ token: 'good' });
+  expect(res.status).toBe(500);
+  expect(await res.json()).toEqual({ error: 'server' });
+  expect(auth.deleteUser).toHaveBeenCalledWith(UID);
+  expect(error.mock.calls).toEqual([['account delete failed: 9']]);
+  error.mockRestore();
+});
+
 test('a deleteUser failure is a 500 with tokens unrevoked, and a retry with the same token succeeds', async () => {
   const error = jest.spyOn(console, 'error').mockImplementation(() => {});
   // Model real revocation: once revoked, the same ID token fails the check.
@@ -179,6 +190,31 @@ test('a deleteUser failure is a 500 with tokens unrevoked, and a retry with the 
   expect(auth.deleteUser).toHaveBeenCalledTimes(2);
   expect(auth.revokeRefreshTokens).toHaveBeenCalledTimes(1);
   expect(auth.verifyIdToken.mock.calls).toEqual([['good', true], ['good', true]]);
+  error.mockRestore();
+});
+
+test('a missing Firestore index is a 503 not-configured with nothing deleted and no Stripe call', async () => {
+  const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+  db = seed({ failCollectionGroup: { votes: Object.assign(new Error(`index for ${UID}`), { code: 9 }) } });
+  adminDb.mockReturnValue(db);
+  const stripe = {
+    retrieveSubscription: jest.fn(async () => ({ id: 'sub_1', status: 'active' })),
+    cancelSubscription: jest.fn(async () => ({})),
+    listSubscriptions: jest.fn(async () => []),
+    deleteCustomer: jest.fn(async () => ({})),
+  };
+  createStripeClient.mockReturnValue(stripe);
+  const res = await del({ token: 'good' });
+  expect(res.status).toBe(503);
+  expect(await res.json()).toEqual({ error: 'not-configured' });
+  Object.values(stripe).forEach((fn) => expect(fn).not.toHaveBeenCalled());
+  expect(db.writes).toEqual([['set', tombstonePath(UID)]]);
+  expect(db.data('bets/mine')).toBeTruthy();
+  expect(db.data(`bets/open/votes/${UID}`)).toBeTruthy();
+  expect(db.data(`${numbersPath('open')}/n-me`)).toBeTruthy();
+  expect(db.data(`entitlements/${UID}`)).toBeTruthy();
+  expect(auth.deleteUser).not.toHaveBeenCalled();
+  expect(error.mock.calls).toEqual([['account delete stopped: missing-index']]);
   error.mockRestore();
 });
 

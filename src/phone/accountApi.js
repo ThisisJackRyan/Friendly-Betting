@@ -24,7 +24,10 @@ function isOffline() {
 }
 
 // Resolves on success. Rejects with code 'offline', 'requires-recent-login'
-// (sign in again, then retry) or the server's error code.
+// (sign in again, then retry) or the server's error code. An Auth user that
+// is already gone counts as success: an earlier attempt deleted the account
+// and its response was lost. 'auth/user-token-expired' stays an error, since
+// it can also mean a revoked or disabled session.
 export async function deleteAccount() {
   const user = auth?.currentUser;
   if (!user) throw failure('unauthorized');
@@ -33,6 +36,7 @@ export async function deleteAccount() {
     // Always a new token: after "Sign in again" it carries the new sign-in time.
     token = await user.getIdToken(true);
   } catch (cause) {
+    if (cause?.code === 'auth/user-not-found') return;
     if (cause?.code === 'auth/network-request-failed' || isOffline()) throw failure('offline', cause);
     throw failure(cause?.code || 'token-failed', cause);
   }
@@ -68,9 +72,12 @@ function local() {
   }
 }
 
-export function markDeleteAccountResume(now = Date.now()) {
+// The note names the member, so it only reopens the confirm for the same
+// account (the same phone number signs back in to the same uid).
+export function markDeleteAccountResume(uid, now = Date.now()) {
+  if (!uid) return;
   try {
-    session()?.setItem(RESUME_KEY, String(now));
+    session()?.setItem(RESUME_KEY, JSON.stringify({ uid, at: now }));
   } catch {
     // No storage: they land on My bets and tap Delete account again.
   }
@@ -84,15 +91,17 @@ export function clearDeleteAccountResume() {
   }
 }
 
-// True once, for a recent note.
-export function takeDeleteAccountResume(now = Date.now()) {
+// True once, for a recent note left by this member. Any note is removed.
+export function takeDeleteAccountResume(uid, now = Date.now()) {
+  if (!uid) return false;
   try {
     const store = session();
     const value = store?.getItem(RESUME_KEY);
     if (value == null) return false;
     store.removeItem(RESUME_KEY);
-    const at = Number(value);
-    return Number.isFinite(at) && now - at >= 0 && now - at <= RESUME_MS;
+    const note = JSON.parse(value);
+    const at = Number(note?.at);
+    return note?.uid === uid && Number.isFinite(at) && now - at >= 0 && now - at <= RESUME_MS;
   } catch {
     return false;
   }

@@ -104,7 +104,7 @@ export function MyBetsList({ user }) {
 
   // Back from "Sign in again": reopen the confirm.
   useEffect(() => {
-    if (uid && takeDeleteAccountResume()) setAccount({ busy: false, error: '', reauth: false });
+    if (uid && takeDeleteAccountResume(uid)) setAccount({ busy: false, error: '', reauth: false });
   }, [uid]);
 
   const openAccount = (event) => {
@@ -141,7 +141,7 @@ export function MyBetsList({ user }) {
   // Sends them through phone sign-in (My bets shows it to anyone signed
   // out), and My bets reopens the confirm when they are back.
   const reauthForAccount = async () => {
-    markDeleteAccountResume();
+    markDeleteAccountResume(uid);
     try {
       await signOutCreator();
     } catch {

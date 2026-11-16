@@ -2,10 +2,11 @@
 // modules use. Transactions are optimistic like Firestore: if a doc read in
 // the transaction (or a query's result set) changed before commit, the callback runs again.
 // Queries support where(field, '==', value) on a collection or a collection
-// group, outside transactions.
+// group, outside transactions. `failCollectionGroup: { votes: err }` makes
+// every collectionGroup('votes') query reject with err (a missing index).
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
-export function fakeDb(initial = {}) {
+export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
   const store = new Map();
   const writes = [];
   let clock = 0;
@@ -36,18 +37,21 @@ export function fakeDb(initial = {}) {
     });
     put(path, next);
   };
-  const query = (match, filters = []) => ({
+  const query = (match, filters = [], fail = null) => ({
     query: true,
     where: (field, op, value) => {
       if (op !== '==') throw new Error(`fakeDb supports only == (got ${op})`);
-      return query(match, [...filters, [field, value]]);
+      return query(match, [...filters, [field, value]], fail);
     },
-    get: async () => ({
-      docs: Array.from(store.keys())
-        .filter(match)
-        .filter((key) => filters.every(([field, value]) => store.get(key).data?.[field] === value))
-        .map(snap),
-    }),
+    get: async () => {
+      if (fail) throw fail;
+      return {
+        docs: Array.from(store.keys())
+          .filter(match)
+          .filter((key) => filters.every(([field, value]) => store.get(key).data?.[field] === value))
+          .map(snap),
+      };
+    },
   });
   function ref(path) {
     return {
@@ -84,7 +88,7 @@ export function fakeDb(initial = {}) {
     collectionGroup: (id) => query((key) => {
       const parts = key.split('/');
       return parts.length % 2 === 0 && parts.at(-2) === id;
-    }),
+    }, [], failCollectionGroup[id] || null),
     runTransaction: async (run) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const reads = [];
