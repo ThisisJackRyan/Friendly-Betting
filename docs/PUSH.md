@@ -14,7 +14,7 @@ With the flag off (and always on the web):
 - the opt-in sheet and the Notifications row never render, and the opt-in module (`src/phone/pushOptIn.js`) makes no plugin, Preferences or register calls; Create does no first-bet lookup, and the tally's share sheet opens after Create exactly as before;
 - `POST`, `DELETE` and `OPTIONS /api/push/tokens` answer a plain 404 with no CORS headers, as if the route did not exist;
 - `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM;
-- settle and call-off do not post to `/api/bets/{code}/push`, and that route answers `{ skipped: 'disabled' }` without reading the bet, a token or calling Messaging;
+- settle and call-off do not post to `/api/bets/{code}/push`, and that route answers a plain 404 (no CORS) without checking auth, reading the bet, a token or calling Messaging;
 - no Android notification channel is created.
 
 To stop server sends, set the flag off and redeploy the server: the send helper and the token route then go quiet even for installed apps built with it on (their register calls get a 404). Installed apps still run their own client plumbing until a new native build ships with the flag off.
@@ -149,25 +149,33 @@ Payload `data` (strings only): `code`, `route` = `/b/{code}`, `event` = `settle`
 
 ### Who gets it
 
-- **Settle:** the voters on `settlement.recipients` (the snapshot taken in the settle transaction), minus the creator and the settler (settle is creator-only, so they are the same uid; a `settledBy` uid, if a later build writes one, is skipped too). A voter without a uid is skipped. Winners and losers get the same body.
+- **Settle:** the voters on `settlement.recipients` (the snapshot taken in the settle transaction) who also have a pick (a truthy `optionId`) in the live votes (the bet's `votes` array merged with `bets/{code}/votes/*`, via `readBetWithVotes`). The creator's client writes the snapshot and the rules do not check what is inside it, so a listed uid that never voted is dropped. This is an intersection: a live voter missing from the snapshot is not added. Minus the creator and the settler (settle is creator-only, so they are the same uid; a `settledBy` uid, if a later build writes one, is skipped too). A voter without a uid is skipped. Winners and losers get the same body.
 - **Call-off:** voters with a pick in the live votes (the bet's `votes` array merged with `bets/{code}/votes/*`, via `readBetWithVotes`), minus the creator. There is no settlement snapshot on a call-off. The in-app inbox skips called-off bets; push does not.
 - A recipient with no registered device just gets nothing.
 
 ### Trigger: fire-and-forget POST plus a server-side wait
 
-After `settleBet` or `callOffBet` commits, the client calls `requestBetPush(code)`, right next to `requestResultTexts(code)`: a fire-and-forget `POST /api/bets/{code}/push` with no body. It is never awaited, every error is caught, and with the flag off it does not post at all. It runs from any client (a web settle still pings the voters' phones), and it is independent of the result-texts flag.
+After `settleBet` or `callOffBet` commits, the client calls `requestBetPush(code)`, right next to `requestResultTexts(code)`: a fire-and-forget `POST /api/bets/{code}/push` with no body and `Authorization: Bearer <ID token>` (the current Firebase user's `getIdToken()`). With no signed-in user, or if getting the token fails, it does not post. It is never awaited, every error is caught, and with the flag off it does not post at all. It runs from any client the creator is signed in on (a web settle still pings the voters' phones), and it is independent of the result-texts flag. It never logs the token or the uid.
 
-The route (`runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 60`, CORS from `src/server/http.js`) calls `deliverBetPush`:
+The route (`runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 60`, CORS from `src/server/http.js`) checks, in order:
 
-1. Flag off: returns `{ skipped: 'disabled' }` before the database.
+- A malformed code: 404.
+- Flag off: a plain 404 with no CORS, before auth or the database (same as `/api/push/tokens`).
+- No Bearer ID token, or one `verifyIdToken` rejects: 401, before the database.
+- More than 10 POSTs from one uid in 10 minutes on this server instance (`src/server/betPushLimit.js`, in memory only): 429 `{ error: 'rate-limited' }`.
+- Reads only the bet doc `bets/{code}` (no votes). A missing bet: 200 `{ sent: 0, failed: 0, skipped: 'not-found' }`. A uid that is not the bet's `createdByID` (the only uid the rules let settle or call off): 403 `{ error: 'forbidden' }`, with no vote read, no wait and no send.
+
+Then it calls `deliverBetPush`:
+
+1. Flag off: returns `{ skipped: 'disabled' }` before the database (the route never gets here with the flag off).
 2. Reads the bet with its votes. While a run for the same `code` + `settledAt` is in flight on this instance, a repeat returns `{ skipped: 'in-flight' }` at once, so a double POST does not start two 35s waits.
 3. **Settle:** waits `undoHoldMs(bet)` (until 35s after the server `settledAt`, the rules' undo window), then re-reads the bet. Still inside a window (it was undone and settled again), or no longer settled (undone): nobody is sent and no claim is written. A later settle has a new `settledAt`, so its own POST is a new event and may send. **Call-off:** no undo exists (`undoHoldMs` is 0), so it sends right away.
-4. An event older than 10 minutes (`MAX_EVENT_AGE_MS`) or with no `settledAt` sends nobody, so a stray POST cannot ping voters about a bet settled long ago (for example before the flag was on).
+4. An event older than 10 minutes (`MAX_EVENT_AGE_MS`) or with no `settledAt` sends nobody, so a stray POST cannot ping voters about a bet settled long ago (for example before the flag was on). A settle with no winning side label sends nobody (`{ skipped: 'no-winner' }`), so the body never reads " won. See who called it.".
 5. Claims `privatePushSends/{eventId}` in a transaction, with `eventId` = `settle:{code}:{settledAtMs}` or `calloff:{code}:{settledAtMs}`. An existing claim means already sent: `{ skipped: 'already-sent' }`. The claim holds only `{ code, at }`.
 6. Sends to each recipient through `sendToUser`, one at a time; a failure or throw for one is caught and counted, and the rest still go. If nothing reached any device and something failed (or the Admin SDK was not set up), the claim is deleted so a retry can send. Recipients who simply have no device are not a failure.
 7. Answers counts only: `{ sent, failed }` (plus `skipped` when it did nothing). 503 when `FIREBASE_SERVICE_ACCOUNT` is missing, 500 on any other read failure; logs at most the bet code and an error code.
 
-No auth, like the result-text send route: the body is ignored, the server picks the recipients, it only acts on a bet already settled past its undo window or called off, and each event is claimed once. The worst a stranger can do is trigger, early, the one notification the creator's own POST would have sent anyway.
+Only the creator can trigger it: anyone else holding the code (it travels in SMS) gets a 401 or 403 before any vote read or the 35s wait. The body is ignored, the server picks the recipients, it only acts on a bet already settled past its undo window or called off, and each event is claimed once. Logs hold at most the bet code and an error code; the ID token and uid are never logged or echoed. The 429 throttle is per instance, so across instances it only slows a misbehaving client; the creator check and the claim are what bound the sends.
 
 Why this trigger. It is the pattern result texts already ship (`deliverResultTexts`, same 35s hold, same re-read). The alternatives are worse on Vercel today: a check on next read would hold the ping until someone opens the bet, which defeats the point; a Vercel cron has a granularity of minutes, needs `vercel.json` and `CRON_SECRET` (planned only for closing-soon, PR 5), and would have to scan for settled bets; Firestore triggers would need Cloud Functions, which this project does not deploy.
 

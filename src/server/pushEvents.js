@@ -50,16 +50,26 @@ function unique(uids) {
   return Array.from(new Set(uids.filter((uid) => typeof uid === 'string' && uid)));
 }
 
-// Settle: the settlement snapshot's recipients. Call-off: everyone with a
-// pick in the live votes (array plus vote docs; there is no snapshot). Never
-// the creator or the settler.
+// Uids with a recorded pick in the live votes (the legacy array plus the
+// vote docs, merged by readBetWithVotes).
+function liveVoters(bet) {
+  return new Set((bet.votes || []).filter((vote) => vote?.optionId).map((vote) => vote.voterId));
+}
+
+// Settle: the settlement snapshot's recipients, kept only if they also have a
+// pick in the live votes. The creator's client writes the snapshot and the
+// rules do not check what is inside it, so a uid that never voted is dropped.
+// A later live voter missing from the snapshot is not added. Call-off:
+// everyone with a pick in the live votes (there is no snapshot). Never the
+// creator or the settler.
 export function pushRecipients(bet) {
   const actors = actorsOf(bet);
+  const voters = liveVoters(bet || {});
   let uids = [];
   if (isCalledOff(bet)) {
-    uids = (bet.votes || []).filter((vote) => vote?.optionId).map((vote) => vote.voterId);
+    uids = Array.from(voters);
   } else if (isSettled(bet)) {
-    uids = (settlementOf(bet)?.recipients || []).map((item) => item?.voterId);
+    uids = (settlementOf(bet)?.recipients || []).map((item) => item?.voterId).filter((uid) => voters.has(uid));
   }
   return unique(uids).filter((uid) => !actors.has(uid));
 }
@@ -122,6 +132,8 @@ async function deliver({ db, code, now, wait, send, bet: firstRead }) {
   if (!bet || (!isSettled(bet) && !isCalledOff(bet))) return { sent: 0, failed: 0, skipped: 'not-settled' };
   const eventId = pushEventId(bet, code);
   if (!eventId) return { sent: 0, failed: 0, skipped: 'no-event' };
+  // A settle with no winning side would read " won. See who called it."
+  if (!isCalledOff(bet) && !winningSide(bet)) return { sent: 0, failed: 0, skipped: 'no-winner' };
   if (now() - settledAtMs(bet) > MAX_EVENT_AGE_MS) return { sent: 0, failed: 0, skipped: 'stale' };
   const recipients = pushRecipients(bet);
   if (!recipients.length) return { sent: 0, failed: 0, skipped: 'no-recipients' };

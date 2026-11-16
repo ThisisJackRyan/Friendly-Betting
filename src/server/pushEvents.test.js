@@ -138,6 +138,23 @@ describe('recipients', () => {
     expect(pushRecipients(bet)).not.toContain('late');
   });
 
+  test('settle: a snapshot uid with no live pick is dropped; real voters still get through', () => {
+    const bet = settled();
+    bet.settlement.recipients = [
+      ...bet.settlement.recipients,
+      { voterId: 'stranger', name: 'X', optionId: 'a' },
+      { voterId: 'lurker', name: 'Y', optionId: 'b' },
+    ];
+    bet.votes = [...bet.votes, { voterId: 'lurker', name: 'Y' }];
+    expect(pushRecipients(bet).sort()).toEqual(['jack', 'sam']);
+  });
+
+  test('settle: a snapshot voter whose live pick is gone is dropped', () => {
+    const bet = settled();
+    bet.votes = bet.votes.filter((vote) => vote.voterId !== 'sam');
+    expect(pushRecipients(bet)).toEqual(['jack']);
+  });
+
   test('call-off: only voters with a pick, never the creator', () => {
     const bet = calledOff(openBet({
       votes: [
@@ -340,6 +357,7 @@ describe('deliverBetPush', () => {
       [openBet(), 'not-settled'],
       [settled(openBet(), 'a', NOW - MAX_EVENT_AGE_MS - 1), 'stale'],
       [{ ...settled(), settledAt: undefined }, 'no-event'],
+      [{ ...settled(), winnerId: 'gone', settlement: { ...settled().settlement, optionLabel: '' } }, 'no-winner'],
       [settled(openBet({ votes: [{ voterId: 'creator', optionId: 'a' }] })), 'no-recipients'],
       [calledOff(openBet({ votes: [{ voterId: 'creator', optionId: 'a' }, { voterId: 'x' }] })), 'no-recipients'],
     ];
@@ -381,6 +399,19 @@ describe('deliverBetPush', () => {
         expect(m.apns).toEqual({ headers: { 'apns-collapse-id': CODE }, payload: { aps: { threadId: CODE } } });
       });
       ['tok-', 'jack', 'sam', 'creator', PHONE].forEach((secret) => expect(logged()).not.toContain(secret));
+    });
+
+    test('settle: a non-voter listed in settlement.recipients is never sent, even with a device', async () => {
+      const bet = settled();
+      bet.settlement.recipients = [...bet.settlement.recipients, { voterId: 'stranger', name: 'X', optionId: 'a' }];
+      const db = withDevices(bet);
+      await db.doc(`${DEVICES('stranger')}/d9`).set({ token: 'tok-stranger', platform: 'ios' });
+      adminDb.mockReturnValue(db);
+      const send = jest.fn(sendToUser);
+      expect(await deliverBetPush({ db, code: CODE, send, now: () => NOW })).toEqual({ sent: 2, failed: 0 });
+      expect(recipientsOf(send)).toEqual(['jack', 'sam']);
+      const tokens = messaging.sendEach.mock.calls.flatMap(([batch]) => batch).map((m) => m.token).sort();
+      expect(tokens).toEqual(['tok-jack-android', 'tok-sam-ios']);
     });
 
     test('Messaging throwing for everyone fails soft, logs only the code, and frees the claim', async () => {
