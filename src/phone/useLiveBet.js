@@ -10,8 +10,12 @@ import { hydrateBet, subscribeBet } from './api';
 // tabs). Once a bet has loaded, a later snapshot error keeps the last good bet
 // on screen; `failed` is only set when nothing loaded. A missing bet the server
 // confirms (deleted, or a bad code) sets `bet` to null at any time. A miss
-// served from the offline cache never blanks a loaded bet; before anything
-// loads it counts as a load failure until the server answers.
+// served from the offline cache never blanks a loaded bet. Before anything
+// loads, a cache miss keeps the loader up for CACHE_MISS_GRACE_MS (a bet just
+// created in a transaction is not in the local cache yet); if the server has
+// not answered by then, it counts as a load failure.
+export const CACHE_MISS_GRACE_MS = 1500;
+
 export function useLiveBet(code) {
   const [bet, setBet] = useState(undefined);
   const [failed, setFailed] = useState(false);
@@ -24,6 +28,13 @@ export function useLiveBet(code) {
     // Bumped on every bet snapshot and every resubscribe, so a slow
     // hydrateBet can't overwrite a newer snapshot or land after unmount.
     let latest = 0;
+    // Pending fallback for a first-load cache miss; cleared by any
+    // authoritative snapshot, a resubscribe, or unmount.
+    let graceTimer = null;
+    const clearGrace = () => {
+      if (graceTimer) clearTimeout(graceTimer);
+      graceTimer = null;
+    };
 
     setBet(undefined);
     setFailed(false);
@@ -36,12 +47,26 @@ export function useLiveBet(code) {
 
     const subscribe = () => {
       if (unsubscribe) unsubscribe();
+      clearGrace();
       const token = {};
       current = token;
       latest += 1;
       unsubscribe = subscribeBet(code, (next, err, meta) => {
         if (!active || current !== token) return;
-        if (err || (!next && meta?.fromCache)) {
+        if (!next && !err && meta?.fromCache) {
+          // Not in the local cache yet. Keep the loader up and give the
+          // server a moment to answer before calling it a failure.
+          if (loaded || graceTimer) return;
+          graceTimer = setTimeout(() => {
+            graceTimer = null;
+            if (!active || current !== token || loaded) return;
+            setFailed(true);
+            setBet(null);
+          }, CACHE_MISS_GRACE_MS);
+          return;
+        }
+        clearGrace();
+        if (err) {
           if (loaded) return;
           setFailed(true);
           setBet(null);
@@ -81,6 +106,7 @@ export function useLiveBet(code) {
     window.addEventListener('online', resubscribe);
     return () => {
       active = false;
+      clearGrace();
       document.removeEventListener('visibilitychange', resubscribe);
       window.removeEventListener('online', resubscribe);
       if (unsubscribe) unsubscribe();

@@ -6,7 +6,7 @@ Friends-only wagers. Create a bet, text a short vote link (`/b/[code]`), watch t
 
 Responsive clubhouse design: bottom navigation on phones, a sidebar and header from 768px, and focused creation, verification, and voting screens. My bets includes status filters, search, and summaries based on your saved bets. The home-page example is illustrative; it is never saved to Firebase.
 
-Bets are stored in the existing Firebase project (`friendly-betting-fb47e`) and read and written from the browser through `src/phone/api.js`. Names and a fallback id stay in `localStorage` on this device. The only server code is a few Next.js API routes (see [API routes](#api-routes)) that use the Firebase Admin SDK for private result-text numbers and creator deletes. The app works without them configured.
+Bets are stored in the existing Firebase project (`friendly-betting-fb47e`) and read and written from the browser through `src/phone/api.js`. Names and a fallback id stay in `localStorage` on this device. The only server code is a few Next.js API routes (see [API routes](#api-routes)) that use the Firebase Admin SDK for private result-text numbers, creator deletes and, with the Pro paywall on, bet creates. The app works without them configured.
 
 ## Run locally
 
@@ -78,7 +78,7 @@ Firebase JS remains the session authority on both platforms, with IndexedDB pers
 
 Native release check: create each bet type on a device, verify a configured test phone, invite a browser participant, cast picks from both clients, settle as the creator, check winner/loser results, reopen the app, share the result and confirm the URL uses prod. Also test OTP resend/expiry, Android back, cold/warm deep links, notches, keyboard, rotation and lost connection. Browser smoke tests cannot verify native phone auth, Messages, OS link association or signing.
 
-The paywall is off unless `NEXT_PUBLIC_PRO_PAYWALL=1` (web only). Pro is $3/month: no ads, Run it back and head-to-head stats. There is one plan (Pro); the Founder tier was dropped. Creating bets is not capped: `FREE_BETS` in `src/phone/proConfig.js` is not enforced anywhere yet. Bettors always free. One non-voter nudge remains later work. (The README has the same Pro line.)
+The paywall is off unless `NEXT_PUBLIC_PRO_PAYWALL=1` (web only). Pro is $3/month: no ads, the Pro badge, Run it back, head-to-head stats and early access. There is one plan (Pro); the Founder tier was dropped. Creating bets is never capped: free creators make unlimited bets, with ads. Bettors always free. One non-voter nudge remains later work. (The README has the same Pro line.)
 
 ### Current close/settle and SMS map
 
@@ -90,13 +90,15 @@ The default notification delivery channel is the in-app inbox, while open or on 
 
 Optional result texts ("text me who won"), off by default: with `NEXT_PUBLIC_RESULT_TEXTS=1`, `VoteScreen` shows `ResultTextCard` after a recorded pick → `resultTexts.saveResultText` → `POST /api/bets/:code/result-texts` (Admin SDK, private storage). After settling, `requestResultTexts` → `POST /api/bets/:code/result-texts/send` → `deliverResultTexts` → `sendResultSms` in `src/server/sms.js`. That function is still a `TODO(notify)` that throws `sms-not-configured`, so **no SMS is actually sent yet**; saved numbers are deleted at settle and counted as failed. Leave the flag off until an SMS provider and `FIREBASE_SERVICE_ACCOUNT` are configured. Full details: [docs/result-texts.md](result-texts.md).
 
+Push notifications are infra only, off by default (`NEXT_PUBLIC_PUSH_ENABLED`): a token route, native token plumbing and a server send helper, with no UI, no permission prompt and no sends wired to bet events yet. Setup steps that stay outside the repo (APNs key, Xcode capabilities, Firebase config files) are in [docs/PUSH.md](PUSH.md).
+
 ## Settlement and results
 
 Creators pick the winning side, review the result, then tap **Settle & notify**. The close and result snapshot are saved in one Firestore transaction, including all winning participants, the stake, and recipient IDs. Repeating the same close keeps the original result; a different winner or a late edit is rejected by the app and by this repo's `firestore.rules` (see [Firestore rules](#firestore-rules) for deployment). Only the creator can close or settle (`calledOff` can only be set by settling).
 
 Participants get **in-app** results: “You called it.” for winners, “This one’s settled.” for everyone else. A Results button appears in the header after a successful pick, with an unread count when the creator settles. Reopening Friendly in the same browser also picks up results settled while away. Read receipts survive reloads and sync between tabs. No participant phone number or extra sign-in is required. Automatic SMS (see result texts above) and background push are not live. Browser storage and the participant identity must still be available; clearing them or using another device loses inbox continuity. Returning to an old bet link registers an existing participant for future results.
 
-Both the invite and tally links show the final result, winning names, winning side, and stake. **Share the result** opens the native share sheet, Messages, clipboard, or a copyable text fallback. Money is not collected or paid out. Stakes are displayed as entered; `$5` is not multiplied into a pot, and multiple winners are not assigned invented payout amounts. Only an explicit stake such as `$20 pot` is described as a pot. Noncash and blank stakes work too (blank means bragging rights).
+Both the invite and tally links show the final result, winning names, winning side, and stake. **Share the result** opens the native share sheet, Messages, clipboard, or a copyable text fallback. Money is not collected or paid out. Stakes are displayed as entered; `$5` is not multiplied into a pot, and multiple winners are not assigned invented payout amounts. Only an explicit stake such as `$20 pot` is described as a pot. Noncash and blank stakes work too (blank means bragging rights). **Share as image** (settled bets with a result) shares the winner card PNG: in the app it is written to the cache folder with `@capacitor/filesystem` and handed to `@capacitor/share` as a `file://` URI (Android serves it through the existing FileProvider `cache-path`; the Android web view has no `navigator.share`), falling back to the result text through the share sheet. On the web it uses `navigator.share({ files })` where `canShare` allows, otherwise downloads the PNG, and only shares the result text when neither works.
 
 Creators can delete their own bet from My bets. See [API routes](#api-routes) for how that works with and without Admin credentials.
 
@@ -116,7 +118,7 @@ Next, after this loop works with real friends: one nudge for non-voters, “run 
 
 ## Firestore rules
 
-`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; per-voter vote docs (`bets/{code}/votes/{uid}`) that only their voter writes, plus an append-only legacy `votes` array for older builds (docs/VOTE-SECURITY.md, NOT DEPLOYED); and a deny-all for `privateResultTexts` (Admin SDK only). Tests live in `rules/*.rules.test.js` and run with `npm run test:rules`.
+`firestore.rules` is the source of truth for what the repo expects: creator-only edits, close/settle and delete; per-voter vote docs (`bets/{code}/votes/{uid}`) that only their voter writes, plus an append-only legacy `votes` array for older builds (docs/VOTE-SECURITY.md, NOT DEPLOYED); and a deny-all for `privateResultTexts`, `privatePushTokens` and `privatePushSends` (Admin SDK only). Tests live in `rules/*.rules.test.js` and run with `npm run test:rules`.
 
 The file is **not auto-deployed**. Nothing in this repo or on Vercel deploys it. Prod rules live in the Firebase console. Before anyone runs `firebase deploy --only firestore:rules`, review it line by line against the rules live in the console for `friendly-betting-fb47e` and merge anything the live rules allow that is missing here. Any catch-all `match /{document=**}` allow rule in the console would expose private result-text numbers and must not exist.
 
@@ -129,9 +131,12 @@ All of them run on the Node runtime with the Firebase Admin SDK (`src/server/fir
 | `POST /api/bets/[code]/result-texts` | Voter (Firebase ID token, the anonymous user) | Saves one US number per voter per bet in `privateResultTexts/{code}`. Side comes from the recorded vote. |
 | `POST /api/bets/[code]/result-texts/send` | Anyone; acts only on settled bets | Claims each saved number once (deleted in a transaction) and calls `sendResultSms`. |
 | `DELETE /api/bets/[code]` | Creator (ID token with the creator uid and phone) | `src/server/deleteBet.js`: deletes the bet, its result-text numbers and the `privateResultTexts/{code}` doc in one transaction. |
+| `POST /api/bets` | Creator (ID token with the creator uid and phone); 404 unless `NEXT_PUBLIC_PRO_PAYWALL=1` | `src/server/createBet.js`: creates a bet with the server-side Pro checks (rematch and early types need Pro; creating is not capped). See [docs/PRO.md](PRO.md#server-side-pro-checks). |
 | `DELETE /api/account` | Phone-verified member who signed in within the last 10 minutes | `src/server/deleteAccount.js`: deletes the account. See [Delete account](#delete-account). |
 
 If the delete route returns 503 `not-configured`, the app falls back to deleting `bets/{code}` and its vote docs directly from the client, in one batch, which `firestore.rules` allows for the creator only. No numbers can exist in that case, since saving them needs the same credentials. Legacy detail docs (`MoneyLineBets`/`OverUnderBets`/`PropBets`) are left in place.
+
+The create route has no fallback: with the paywall on, the app creates bets only through it, and a 503 is an error (a client create would skip the Pro checks). With the paywall off the app never calls it and writes bets from the client as before.
 
 ### Delete account
 
@@ -186,13 +191,12 @@ Preflight never touches auth or the database.
 | `FIREBASE_SERVICE_ACCOUNT` | Vercel, server only | Service-account JSON (or base64 of it) for the API routes. Optional; without it the routes return 503 and the app uses its client fallbacks. |
 | `NEXT_PUBLIC_RESULT_TEXTS` | Vercel and native builds | `1` shows the optional result-text field and fires the send call after settling. Leave unset until an SMS provider is wired into `src/server/sms.js` and the service account is set. |
 | `NEXT_PUBLIC_ADS_ENABLED` | Vercel and native builds | `1` lets `showInterstitial` show ads (house ad on web, AdMob test ads in the app). No flow calls it yet. See [docs/ADS.md](ADS.md). |
-| `NEXT_PUBLIC_PRO_PAYWALL` | Vercel only | `1` turns on the paywall at `/pro` and the Go Pro link on My bets. Always off in native builds until store In-App Purchase is wired (`mobile/vite.config.mjs` ignores it). See [docs/PRO.md](PRO.md). |
+| `NEXT_PUBLIC_PUSH_ENABLED` | Vercel and native builds | `1` turns on the push token route (`/api/push/tokens`), the native token plumbing and the server send helper. Off (unset) by default: the route is a 404 and nothing sends. No UI or bet event uses it yet. See [docs/PUSH.md](PUSH.md). |
+| `NEXT_PUBLIC_PRO_PAYWALL` | Vercel only | `1` turns on the paywall at `/pro` and the Go Pro link on My bets, and sends new bets through `POST /api/bets` (needs `FIREBASE_SERVICE_ACCOUNT`). Always off in native builds until store In-App Purchase is wired (`mobile/vite.config.mjs` ignores it). See [docs/PRO.md](PRO.md). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | Vercel and native builds | `1` shows early-access bet types (none yet) to Pro members. |
-| `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | Preview and native preview builds | `1` enables the paywall buttons, which call the mock purchase route. Never in production. |
-| `PRO_MOCK_PURCHASE` | Vercel preview, server only | `1` lets `POST /api/pro/mock-purchase` grant Pro with no payment. The route also refuses `VERCEL_ENV=production`. |
-| `PRO_MOCK_UIDS` | Vercel preview, server only | Testers' uids allowed to use the mock purchase, comma separated. Empty or unset means nobody. Anonymous sessions and tokens without a phone number are always refused. Unset before launch, see [docs/PRO.md](PRO.md#pre-launch-cleanup). |
+| `ADMOB_PUBLISHER_ID` | Vercel, server only | The AdMob publisher ID (`pub-` plus 16 digits) for `/app-ads.txt`. Unset or invalid serves the no-sellers placeholder. Wins over `NEXT_PUBLIC_ADMOB_PUBLISHER_ID` (also accepted). See [docs/ADS.md](ADS.md#app-adstxt). |
 
-`NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
+`NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED`, `NEXT_PUBLIC_PUSH_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 
 ## Screenshots
 

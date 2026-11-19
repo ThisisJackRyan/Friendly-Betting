@@ -395,6 +395,7 @@ describe('Friends', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     expect(screen.queryByText('Bears win?')).not.toBeInTheDocument();
     const section = screen.getByRole('region', { name: 'Head to head' });
+    expect(within(section).getByRole('heading', { level: 2, name: 'Head to head' })).toBeInTheDocument();
     const rows = within(section).getAllByRole('button');
     expect(rows.map((row) => row.textContent)).toEqual([
       'Ana1 W1 LBets together 4',

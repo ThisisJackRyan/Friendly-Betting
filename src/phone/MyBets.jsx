@@ -29,6 +29,7 @@ import {
   takeDeleteAccountResume,
 } from './accountApi';
 import GoProLink from './GoProLink';
+import PushSettingsRow from './PushSettingsRow';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
 import ProSheet from './ProSheet';
@@ -252,7 +253,6 @@ export function MyBetsList({ user }) {
         <>
           <div className="bets-heading">
             <div>
-              <p className="eyebrow">YOUR SIDE OF THE STORY</p>
               <div className="bets-title-row">
                 <h1 className="screen-title">
                   My bets
@@ -419,6 +419,7 @@ export function MyBetsList({ user }) {
               )}
             </>
           )}
+          <PushSettingsRow uid={uid} />
           {uid && (
             <button type="button" className="logout-link delete-account-link press" onClick={openAccount}>
               {DELETE_ACCOUNT_COPY.row}

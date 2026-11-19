@@ -17,21 +17,143 @@ None of these block merging the infrastructure. All of them block shipping ads.
 
   `src/ads/config.test.js` asserts the IDs are test IDs and that the native files match
   config. Update that test with the real IDs in the same change.
-- **TODO: ATT.** Review the `NSUserTrackingUsageDescription` text in `Info.plist` and the App
-  Store privacy answers (tracking, identifiers, advertising data). Decide whether the prompt
-  should come from a deliberate moment (call `initAds()` there) instead of app start.
-- **TODO: SKAdNetwork.** Re-check `SKAdNetworkItems` in `Info.plist` against Google's current
-  list (developers.google.com/admob/ios/privacy/strategies) plus any mediation partners.
-- **TODO: app-ads.txt.** Publish `https://www.friendly-bets.com/app-ads.txt` with the AdMob
-  publisher line, and set that domain as the developer website in both stores.
-- **TODO: consent (UMP).** Required for EEA, UK and Switzerland users, and for US state privacy
-  regulations. Configure the messages in AdMob, then call the plugin's consent API
-  (`requestConsentInfo` / `showConsentForm`) before `initialize`, and only request ads when
-  consent allows. Not wired yet.
-- **TODO: Play data safety** form and the Play Console "Contains ads" declaration.
+- **Done: ATT copy (UX).** `NSUserTrackingUsageDescription` in `Info.plist` is final and
+  UX-approved: "This lets us show you ads that are more relevant to you." Apple shows it in the
+  system tracking prompt, and `src/ads/config.test.js` asserts the exact sentence. The prompt
+  order is wired: UMP first, then ATT only if the status is still `notDetermined` (see
+  [Consent and ATT](#consent-and-att)). There is no pre-prompt screen.
+- **Done: SKAdNetwork.** `SKAdNetworkItems` in `Info.plist` matches Google's list (50 IDs: Google
+  plus its published third-party buyers), fetched 2026-11-16 from
+  <https://developers.google.com/admob/ios/3p-skadnetworks> (page "Last updated: January 30, 2026"),
+  which <https://developers.google.com/admob/ios/privacy/strategies> links to. That refresh added
+  `97r2b46745`, `c3frkrj4fj`, `f38h382jlk`, `kbmxgpxpgc`, `klf5c3l5u5`, `wg4vff78zm` and dropped
+  `pwa73g5rt2` (no longer on Google's list). No mediation partners are configured, so nothing else
+  is listed. Re-check the page before each release; `src/ads/config.test.js` checks the count and
+  the format, so update it with the list.
+- **TODO: app-ads.txt.** The route is live; it needs Jack's publisher ID and the store listings.
+  See [app-ads.txt](#app-adstxt) for the steps.
+- **Done in code: consent (UMP).** `initAds()` asks UMP before anything else and only initializes
+  AdMob and requests ads when `canRequestAds` is true (see [Consent and ATT](#consent-and-att)).
+  The messages themselves are configured in AdMob, below.
 - **Pro is wired.** `src/ads/pro.js` `isPro()` reads a cache that `src/phone/useEntitlement.js`
   fills from the signed-in user's `entitlements/{uid}` doc, so a Pro member (legacy founder plans
   included) gets reason `pro` and never sees an ad. Billing itself is still a TODO: see [docs/PRO.md](PRO.md).
+
+### What Jack must do himself
+
+None of this can be done from the repo.
+
+1. **AdMob apps and units.** Create the iOS and Android apps and one interstitial unit each in
+   AdMob, then swap the test IDs in `src/ads/config.js`, `Info.plist` and `AndroidManifest.xml`
+   and update `src/ads/config.test.js` in the same change (see real IDs above).
+2. **Consent messages in AdMob** (Privacy & messaging): create and publish the GDPR message
+   (EEA, UK, Switzerland) and, if wanted, the US state regulations message for both apps.
+   Optionally an IDFA explainer message for iOS: with it published, UMP shows the explainer and
+   the ATT prompt itself, and the app's own ATT call sees the status already answered and stays
+   quiet. **Until these messages exist and are published, the consent form may not appear**
+   (`isConsentFormAvailable` is false); `canRequestAds` then follows Google's default for the
+   user's region.
+3. **App Store privacy labels** (App Store Connect > App Privacy): declare tracking, identifiers
+   (device ID / IDFA), advertising data and the other data the Google Mobile Ads SDK collects
+   (Google lists it for the SDK), and answer "Yes" to tracking if ATT can be granted.
+4. **Google Play**: the Data safety form (advertising ID, the ads SDK's data) and the "Contains
+   ads" declaration in the Play Console (App content).
+5. **app-ads.txt** (see [app-ads.txt](#app-adstxt)): set the publisher ID and store listings.
+
+## app-ads.txt
+
+`GET /app-ads.txt` is served by `app/app-ads.txt/route.js` (body built in
+`src/server/appAdsTxt.js`): status 200, `Content-Type: text/plain; charset=utf-8`, no auth, no
+redirect, never the SPA or `not-found`. It reads the env on every request.
+
+**Until a publisher ID is set** the body is:
+
+```
+# Friendly Bets has no authorized ad sellers yet.
+placeholder.example.com, placeholder, DIRECT, placeholder
+```
+
+That is valid and authorizes nobody. The second line is the reserved placeholder record from the
+IAB ads.txt v1.1 spec (section 3.2.1), which app-ads.txt follows: a file with no sellers should
+carry it so crawlers can tell it from an error page (a comment-only or empty file is the
+deprecated form). It is not a seller and has no publisher ID.
+
+**Once a publisher ID is set** the body is exactly one line:
+
+```
+google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+```
+
+`f08c47fec0942fa0` is Google's certification authority ID, the same for every AdMob account.
+
+The ID is read from these env vars, first valid one wins:
+
+1. `ADMOB_PUBLISHER_ID` (server only; preferred)
+2. `NEXT_PUBLIC_ADMOB_PUBLISHER_ID`
+
+A value counts only if it is `pub-` plus 16 digits (surrounding spaces are trimmed, and the
+`ca-app-pub-...` form the AdMob console shows is accepted). Anything else (empty, a typo, an app ID
+with `~`, an ad unit ID with `/`, Google's test publisher `pub-3940256099942544`) is ignored, and
+if neither var holds a valid ID the placeholder body is served. The route never invents an ID.
+
+### Steps for Jack
+
+1. In AdMob, open **Apps > View all apps > app-ads.txt > How to set up app-ads.txt** (or
+   **Settings > Account information**) and copy the **Publisher ID** (`pub-` plus 16 digits).
+   Only the `pub-...` part goes in the env var, not the whole snippet.
+2. In Vercel, **Settings > Environment Variables**, add `ADMOB_PUBLISHER_ID` = that ID for
+   **Production**. Redeploy production (env changes only apply to a new deployment).
+3. Set the developer website to `https://www.friendly-bets.com` (the same host that serves
+   `/app-ads.txt`) in both listings:
+   - App Store Connect: the **Marketing URL** field of the app's App Store listing.
+   - Play Console: **Store settings > Store listing contact details > Website**.
+4. Verify after the deploy:
+
+   ```sh
+   curl -sI https://www.friendly-bets.com/app-ads.txt   # 200, content-type: text/plain; charset=utf-8
+   curl -s  https://www.friendly-bets.com/app-ads.txt   # the google.com line (or the placeholder before step 2)
+   curl -sIL https://friendly-bets.com/app-ads.txt      # apex: a redirect to www, then the same 200
+   ```
+
+   AdMob can take a day or more to crawl it (**Apps > View all apps > app-ads.txt** tab).
+
+### The apex redirect
+
+Crawlers drop the `www.` from the developer website (the spec excludes `www.` and `m.`), so they
+request `https://friendly-bets.com/app-ads.txt`. The apex already redirects to
+`www.friendly-bets.com` at the Vercel domain layer, path preserved (docs/DEVELOPMENT.md, Deploy on
+Vercel), and both the spec and Google allow a redirect within the same root domain, including to
+`www.`. So the apex request lands on this route.
+There is deliberately no Next redirect for this path; do not add one. If the apex redirect is ever
+changed, keep it path-preserving and on `friendly-bets.com`.
+
+## Consent and ATT
+
+Native only (`initAds()` returns at once on the web, with the flag off, and for Pro, so none of
+this runs there: no consent request, no form, no ATT, no SDK). Once per launch, in this order:
+
+1. `AdMob.requestConsentInfo()` (Google UMP), every launch.
+2. If `isConsentFormAvailable` and `status === 'REQUIRED'`: `AdMob.showConsentForm()`, and its
+   result replaces the consent info.
+3. If `canRequestAds` is false: stop. No ATT, no `initialize`, no ad request this launch;
+   `showInterstitial` resolves reason `consent`.
+4. iOS only: `trackingAuthorizationStatus()`, and `requestTrackingAuthorization()` only if it is
+   still `notDetermined` (UMP's IDFA message may already have asked). Authorized, denied or
+   restricted are never asked again.
+5. `AdMob.initialize()`, then ads load as before.
+
+`canRequestAds` is the only decision. When it is true the ad request is a normal one: the SDK
+reads the stored consent (the TCF / US privacy strings UMP wrote) and serves personalized or
+non-personalized ads by itself. There is no custom NPA flag.
+
+Failures fail soft: if `requestConsentInfo` or `showConsentForm` throws (offline, say), no ad is
+requested and the next `initAds()` (the next ad attempt) asks again. A failed ATT check is ignored
+(non-personalized ads). A failed `initialize` after consent is not fatal: the ad is still tried,
+and init retries next time. A `canRequestAds: false` answer is kept for the rest of the launch,
+so the form is not put in front of every ad; the next launch asks again.
+
+There is no in-app privacy options entry point (`showPrivacyOptionsForm`) yet. If the published
+GDPR message needs one, it needs a settings row (and UX copy).
 
 ## Files
 
@@ -84,19 +206,22 @@ closed, or as soon as it is skipped. It never rejects and never throws.
 | `capped` | This placement hit its per-session or per-day limit. |
 | `interval` | Any interstitial was shown less than `minIntervalMs` ago. |
 | `timeout` | The ad was not on screen within `timeoutMs` (5 s). |
+| `consent` | Native only: UMP did not allow ad requests (`canRequestAds` false), or the consent request failed. No ad is requested. Not counted. |
 | `not-loaded` | AdMob could not load an ad (no fill, network). |
 | `error` | Anything else: plugin missing, show failed, house ad could not mount. |
 
 Callers should continue their flow on any result. Only `shown` means the person saw an ad.
 
-`initAds()` initializes AdMob once, then on iOS checks the tracking status and asks for
-permission only if it is `notDetermined`. The promise is memoized; a failed init resolves
-`{ ok: false }` (it never rejects) and is retried on the next call. It does nothing on the web,
-with the flag off, or for Pro. The native app calls `startAdsWhenProKnown()`
+`initAds()` runs UMP consent, then (iOS, only if consent allows ads) the tracking prompt if the
+status is still `notDetermined`, then `AdMob.initialize()` only if consent allows ads (see
+[Consent and ATT](#consent-and-att)). It resolves `{ ok, canRequestAds }` and never rejects. The
+promise is memoized; a failed consent request or a failed init resolves `ok: false` and is retried
+on the next call. It does nothing on the web, with the flag off, or for Pro
+(`{ ok: false, canRequestAds: false }`). The native app calls `startAdsWhenProKnown()`
 (`src/ads/startAds.js`) at boot (`mobile/main.jsx`). It waits until the entitlement has loaded
 (or auth says nobody is signed in), at most 5 s, so a Pro member's cold start never inits the
-SDK or sees the ATT prompt, then calls `startAdsOnAppActive()`, which runs `initAds()` once the
-app is active, so the ATT prompt and SDK startup stay out of the first ad's 5 s budget.
+SDK or sees the consent form or the ATT prompt, then calls `startAdsOnAppActive()`, which runs `initAds()` once the
+app is active, so the consent form, the ATT prompt and SDK startup stay out of the first ad's 5 s budget.
 `showInterstitial` still calls `initAds()` as a backstop.
 
 ## Invite interstitial
@@ -197,10 +322,11 @@ and so does the global `maxPerDay` of 4 ads a day across all placements.
 ## Backends
 
 1. **Disabled**: flag off or Pro. Resolves immediately, touches nothing.
-2. **Native** (`Capacitor.isNativePlatform()`): `initAds()`, `prepareInterstitial` with the
-   platform's interstitial unit, listeners for dismissed and failed-to-show, then
-   `showInterstitial`. Resolves `shown` when the ad is dismissed. If init fails, it still tries
-   to load the ad (fail open); a load failure is then `not-loaded`.
+2. **Native** (`Capacitor.isNativePlatform()`): `initAds()` (consent, ATT, init), then, only if
+   `canRequestAds`, `prepareInterstitial` with the platform's interstitial unit, listeners for
+   dismissed and failed-to-show, then `showInterstitial`. Resolves `shown` when the ad is
+   dismissed. No consent is `consent`, with no ad request. If `initialize` fails after consent, it
+   still tries to load the ad (fail open); a load failure is then `not-loaded`.
 3. **Web**: mounts `HouseAd` on its own React root at the end of `<body>`. Fixed position, so the
    page under it does not shift. Respects safe-area insets, a 44 pt close button, Escape closes.
    While it is up the app root (`#root`, `#__next` or `.app-frame`) is `inert`; on close focus
@@ -208,8 +334,10 @@ and so does the global `maxPerDay` of 4 ads a day across all placements.
 
 ### Timeouts
 
-- `timeoutMs` (5000) covers everything up to the ad being on screen: plugin import, init, ATT,
-  load and present. Past it the call resolves `timeout`, and a load that finishes later is
+- `timeoutMs` (5000) covers everything up to the ad being on screen: plugin import, consent
+  (and its form, when `showInterstitial` is the first to run it), ATT, init, load and present.
+  A consent form left open past it skips that ad as `timeout`; the answer still applies to the
+  next one. Past it the call resolves `timeout`, and a load that finishes later is
   not shown.
 - Once a native ad is on screen there is no 5 s limit (people watch ads longer than that).
   `dismissTimeoutMs` (2 min) is a safety net in case the dismiss event never arrives.
@@ -269,9 +397,12 @@ From Google's sample ad units (they always serve test ads, safe to click):
   the house ad overlay (closes on the button, Escape, or after 10 s), then the thank-you; tap it
   to share.
 - App: `NEXT_PUBLIC_ADS_ENABLED=1 npm run mobile:sync`, open Xcode or Android Studio, run on a
-  device or simulator and tap Text the crew on a tally. Expect a Google "Test Ad" interstitial and
-  the ATT prompt on first run (iOS). Reset ATT with Settings > Privacy > Tracking, or by
-  deleting the app.
+  device or simulator and tap Text the crew on a tally. Expect the consent form if a GDPR
+  message is published and the device is in (or debug-set to) the EEA/UK, then the ATT prompt on
+  first run (iOS), then a Google "Test Ad" interstitial. Reset ATT with Settings > Privacy >
+  Tracking, or by deleting the app; reset consent by deleting the app. The plugin's
+  `resetConsentInfo()` and debug geography (`requestConsentInfo({ debugGeography, testDeviceIdentifiers })`)
+  are for local testing only and are not wired.
 - Clear caps between tries: `localStorage.removeItem('fb.ads.caps.v1')` and reload.
 
 ## Native build notes
@@ -280,7 +411,8 @@ From Google's sample ad units (they always serve test ads, safe to click):
   build (File > Packages > Resolve Package Versions if it does not). No `pod install`.
 - Android: the plugin applies its own Kotlin Gradle plugin. The first Gradle sync downloads
   `play-services-ads`.
-- `Info.plist` carries `GADApplicationIdentifier`, `NSUserTrackingUsageDescription` and
-  `SKAdNetworkItems`. The Android manifest carries the AdMob application ID `meta-data`.
+- `Info.plist` carries `GADApplicationIdentifier`, `NSUserTrackingUsageDescription`
+  (UX's final ATT sentence, see Release TODOs) and `SKAdNetworkItems`. UMP needs no extra plist or manifest
+  keys. The Android manifest carries the AdMob application ID `meta-data`.
   The Google Mobile Ads SDK crashes at launch if the app ID is missing, so keep these in sync
   with config.

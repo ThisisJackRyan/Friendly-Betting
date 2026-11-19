@@ -78,12 +78,18 @@
 			</array>
 		</dict>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>FirebaseMessagingAutoInitEnabled</key>
+	<false/>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>NSUserTrackingUsageDescription</key>
-	<string>This identifier will be used to deliver ads that are more relevant to you.</string>
+	<string>This lets us show you ads that are more relevant to you.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
@@ -132,7 +138,15 @@
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
+			<string>wg4vff78zm.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
 			<string>3qy4746246.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>f38h382jlk.skadnetwork</string>
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
@@ -228,15 +242,19 @@
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
+			<string>klf5c3l5u5.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
 			<string>ppxm28t8ap.skadnetwork</string>
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
-			<string>uw77j35x4d.skadnetwork</string>
+			<string>kbmxgpxpgc.skadnetwork</string>
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
-			<string>pwa73g5rt2.skadnetwork</string>
+			<string>uw77j35x4d.skadnetwork</string>
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
@@ -252,6 +270,10 @@
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
+			<string>c3frkrj4fj.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
 			<string>e5fvkxwrpn.skadnetwork</string>
 		</dict>
 		<dict>
@@ -261,6 +283,10 @@
 		<dict>
 			<key>SKAdNetworkIdentifier</key>
 			<string>3rd42ekr43.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>97r2b46745.skadnetwork</string>
 		</dict>
 		<dict>
 			<key>SKAdNetworkIdentifier</key>

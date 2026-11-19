@@ -96,3 +96,10 @@ Tests: `rules/undoCallOff.rules.test.js` and the called-off vote block in
    the rules. Older builds keep working: they write a number settledAt, which the rules
    still accept for a settle (it just can't be undone).
 3. Deploy the send route with `maxDuration = 60` before texts are turned on.
+
+## Push notifications
+
+Settle and call-off push (docs/PUSH.md, behind `NEXT_PUBLIC_PUSH_ENABLED`, off) follows the
+same rule: `deliverBetPush` (`src/server/pushEvents.js`) waits out the 35s window and
+re-reads the bet. An undone settle pushes nobody and leaves no send claim; a new settle has a
+new `settledAt`, so it is a new event. A call-off has no undo and pushes right away.

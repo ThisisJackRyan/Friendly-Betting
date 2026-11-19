@@ -21,6 +21,9 @@
         "packageOptions": {
           "@capacitor-firebase/authentication": {
             "symlink": true
+          },
+          "@capacitor-firebase/messaging": {
+            "symlink": true
           }
         },
         "swiftToolsVersion": "6.1",
