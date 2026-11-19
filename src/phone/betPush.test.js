@@ -1,5 +1,6 @@
 import { auth } from '../Config/firebase-config';
 import { requestBetPush, requestPickPush } from './betPush';
+
 jest.mock('./resultTexts', () => ({ apiUrl: (path) => `https://www.friendly-bets.com${path}` }));
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 

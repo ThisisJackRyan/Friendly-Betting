@@ -1,4 +1,4 @@
-import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
+import { isCalledOff, isClosed, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
 import { PUSH_NOTIFICATION_COPY } from '../phone/pushCopy';
 import { PUSH_CHANNEL_ID, pushEnabled } from '../phone/pushConfig';
@@ -6,6 +6,7 @@ import { settlementOf } from '../phone/settlement';
 import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
 import { cleanName, voteAtMs } from '../phone/votes';
 import { readBetWithVotes } from './betVotes';
+import { validCode } from './http';
 import { sendToUser } from './pushSend';
 
 // Settle and call-off push (docs/PUSH.md). The app fire-and-forgets
@@ -319,4 +320,184 @@ export async function deliverPickPush({ db, code, actorUid, bet: given, now = Da
     }
   }
   return { sent, failed };
+}
+
+// Closing-soon reminder (docs/PUSH.md). A scheduled caller (the GitHub
+// Actions workflow in ci/push-closing.yml) hits GET /api/cron/push-closing
+// every 15 minutes; deliverClosingSoon finds the bets whose closesAt is under
+// an hour away and runs deliverClosingPush for each. Once per bet, ever, to
+// the creator only.
+
+// "Under an hour left": 0 < closesAt - now < CLOSING_WINDOW_MS. Exactly an
+// hour left is outside; at or past closesAt the bet is already closed.
+export const CLOSING_WINDOW_MS = 60 * 60 * 1000;
+
+// Unclaimed bets handled per run, soonest closing first. Already-claimed
+// bets are skipped cheaply and do not use these slots. A later call picks
+// up any unclaimed bet still in the window.
+export const CLOSING_PUSH_MAX_BETS = 50;
+
+// Docs inspected per run (the Firestore query limit). Larger than
+// CLOSING_PUSH_MAX_BETS so a window full of already-claimed bets does not
+// hide unclaimed ones behind the first 50.
+export const CLOSING_PUSH_MAX_SCAN = 200;
+
+// closing:{code}. No timestamp: a creator who later moves the deadline does
+// not get a second reminder.
+export function closingEventId(code) {
+  return `closing:${code}`;
+}
+
+// closesAt is epoch ms (parseCloses in src/phone/model.js); anything else
+// counts as no close time.
+function closesAtOf(bet) {
+  const value = bet?.closesAt;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function inClosingWindow(bet, now) {
+  const closesAt = closesAtOf(bet);
+  if (closesAt == null) return false;
+  const left = closesAt - now;
+  return left > 0 && left < CLOSING_WINDOW_MS;
+}
+
+// Only the creator. Nothing records friends who opened the invite but have
+// not picked (no viewer, member or invitee data exists), and a recorded pick
+// means they already picked, so voters never get the reminder.
+export function closingRecipients(bet) {
+  const creator = bet?.createdByID;
+  return typeof creator === 'string' && creator ? [creator] : [];
+}
+
+// kind 'creator' or 'pending' (a friend in the bet who has not picked).
+// v1 is creator-only and no join tracking is planned, so 'pending' is
+// unused. Title is the bet question; data opens /b/{code}. No phone, token,
+// uid or name.
+export function buildClosingPush(bet, code, kind = 'creator') {
+  return {
+    title: String(questionOf(bet)),
+    body: kind === 'pending' ? PUSH_NOTIFICATION_COPY.closingPending : PUSH_NOTIFICATION_COPY.closingCreator,
+    data: { code: String(code), route: `/b/${code}`, event: 'closing' },
+  };
+}
+
+// Why a bet gets no reminder now, or null when it should get one.
+function closingSkip(bet, now) {
+  if (closesAtOf(bet) == null) return 'no-close-time';
+  if (isCalledOff(bet)) return 'called-off';
+  if (isSettled(bet)) return 'settled';
+  if (isFinished(bet) || isClosed(bet, now)) return 'closed';
+  if (!inClosingWindow(bet, now)) return 'outside-window';
+  if (!closingRecipients(bet).length) return 'no-recipients';
+  return null;
+}
+
+// One bet. Safe to run any number of times: the claim makes it once per bet.
+// Votes are unused (recipients are creator-only), so this reads only
+// bets/{code}. An existing claim is checked first, so a rerun does not
+// read the bet at all.
+export async function deliverClosingPush({ db, code, now = Date.now, send = sendToUser }) {
+  if (!pushEnabled()) return { sent: 0, failed: 0, skipped: 'disabled' };
+  const claimRef = db.doc(sendsPath(closingEventId(code)));
+  if ((await claimRef.get()).exists) return { sent: 0, failed: 0, skipped: 'already-sent' };
+  const snap = await db.doc(`bets/${code}`).get();
+  if (!snap.exists) return { sent: 0, failed: 0, skipped: 'not-found' };
+  const bet = snap.data();
+  const skip = closingSkip(bet, now());
+  if (skip) return { sent: 0, failed: 0, skipped: skip };
+
+  // Claim before the send; another run that already claimed it wins.
+  const claimed = await db.runTransaction(async (tx) => {
+    const current = await tx.get(claimRef);
+    if (current.exists) return false;
+    tx.set(claimRef, { code, at: now() });
+    return true;
+  });
+  if (!claimed) return { sent: 0, failed: 0, skipped: 'already-sent' };
+
+  let sent = 0;
+  let failed = 0;
+  let retryable = false;
+  let sendSkip = null;
+  for (const uid of closingRecipients(bet)) {
+    try {
+      const result = await send(uid, buildClosingPush(bet, code, 'creator'), betPushOptions(code));
+      sent += result?.sent || 0;
+      failed += result?.failed || 0;
+      if (RETRYABLE_SKIPS.has(result?.skipped)) retryable = true;
+      if (typeof result?.skipped === 'string') sendSkip = result.skipped;
+    } catch (err) {
+      failed += 1;
+      console.warn(`closing push failed for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
+    }
+  }
+  // Nothing reached a device and something failed: drop the claim so the
+  // next run can send. A creator with no registered device (push off in the
+  // app) is not a failure, so the claim stays.
+  if (!sent && (failed || retryable)) {
+    try {
+      await claimRef.delete();
+    } catch (err) {
+      console.warn(`closing push claim not released for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
+    }
+  }
+  // sendSkip says why nothing went out (no-devices keeps the claim;
+  // admin-not-configured or read-failed released it).
+  return !sent && !failed && sendSkip ? { sent, failed, skipped: sendSkip } : { sent, failed };
+}
+
+// The one hook the scheduled route calls. One indexed range query on
+// closesAt (Firestore's automatic single-field index; no composite index),
+// soonest first, at most CLOSING_PUSH_MAX_SCAN docs. Status is not filtered
+// in the query (legacy open bets have none, and called-off can be a
+// boolean); deliverClosingPush reads only the bet doc and skips the ones
+// that are done. Already-claimed bets are detected from the claim doc and
+// do not count toward CLOSING_PUSH_MAX_BETS, so they cannot starve later
+// unclaimed bets in the same window. Returns counts only, never a uid.
+export async function deliverClosingSoon({
+  db, now = Date.now, send = sendToUser,
+  limit = CLOSING_PUSH_MAX_BETS, scan = CLOSING_PUSH_MAX_SCAN,
+}) {
+  if (!pushEnabled()) return { processed: 0, sent: 0, failed: 0, skipped: 'disabled' };
+  const start = now();
+  const { docs } = await db.collection('bets')
+    .where('closesAt', '>', start)
+    .where('closesAt', '<', start + CLOSING_WINDOW_MS)
+    .orderBy('closesAt', 'asc')
+    .limit(scan)
+    .get();
+  const totals = { processed: 0, notified: 0, sent: 0, failed: 0, skips: {} };
+  const skipped = (reason) => {
+    totals.skips[reason] = (totals.skips[reason] || 0) + 1;
+  };
+  let attempted = 0;
+  for (const snap of docs) {
+    const code = snap.id;
+    const claimRef = validCode(code) ? db.doc(sendsPath(closingEventId(code))) : null;
+    if (claimRef && (await claimRef.get()).exists) {
+      totals.processed += 1;
+      skipped('already-sent');
+      continue;
+    }
+    if (attempted >= limit) break;
+    attempted += 1;
+    totals.processed += 1;
+    if (!validCode(code)) {
+      skipped('bad-code');
+      continue;
+    }
+    try {
+      const result = await deliverClosingPush({ db, code, now, send });
+      totals.sent += result.sent || 0;
+      totals.failed += result.failed || 0;
+      if (result.skipped) skipped(result.skipped);
+      else if (result.sent) totals.notified += 1;
+    } catch (err) {
+      // One bad bet (a read or claim failure) never stops the rest.
+      totals.failed += 1;
+      console.warn(`closing push failed for bet ${code}: ${typeof err?.code === 'string' ? err.code : 'error'}`);
+    }
+  }
+  return totals;
 }

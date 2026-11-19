@@ -8,6 +8,7 @@ import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 import { saveRematch } from './rematch';
 import { requestBetPush, requestPickPush } from './betPush';
+
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
   // bets/{code} -> { collection: 'bets', id }; bets/{code}/votes/{uid} ->

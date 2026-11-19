@@ -24,6 +24,7 @@ function fireAndForget(code, suffix) {
     // Push is a bonus. The write it follows never fails because of it.
   }
 }
+
 // After a settle or call-off commits, ask the server to push the result to the
 // voters (docs/PUSH.md). Fire-and-forget like requestResultTexts: the server
 // re-reads the bet, waits out a settle's undo window and picks the

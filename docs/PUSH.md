@@ -1,6 +1,7 @@
 # Push notifications
 
-Status: **infra, opt-in UX, settle and call-off sends, and the first-pick send, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, a friend's first pick tells the bet's creator, and the Android app creates its one notification channel at start. The closing-soon cron is a later PR. Nothing is sent while the flag is off, and it is off.
+Status: **infra, opt-in UX, settle and call-off sends, the first-pick send, and the closing-soon cron, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, a friend's first pick tells the bet's creator, a cron reminds the creator once when their bet has under an hour left, and the Android app creates its one notification channel at start. This was the last of the five push PRs. Nothing is sent while the flag is off, and it is off.
+
 ## The flag
 
 `NEXT_PUBLIC_PUSH_ENABLED`. Only the exact value `1` turns it on; unset, empty, `0`, `true` and anything else are off. It is read by both builds: Next inlines it for the web and API routes, and `mobile/vite.config.mjs` defines it for the app from the shell or the repo-root `.env*` files (the shell wins). It is unset in the repo. Helper: `pushEnabled()` in `src/phone/pushConfig.js`.
@@ -15,7 +16,9 @@ With the flag off (and always on the web):
 - `sendToUser` returns `{ skipped: 'disabled' }` without touching Firestore or FCM;
 - settle and call-off do not post to `/api/bets/{code}/push`, and that route answers a plain 404 (no CORS) without checking auth, reading the bet, a token or calling Messaging;
 - a pick does not post to `/api/bets/{code}/push/pick` (no ID token is read), and that route answers the same plain 404;
+- `GET /api/cron/push-closing` answers a plain 404 before checking `CRON_SECRET`, querying bets, claiming or calling Messaging, and `deliverClosingPush` / `deliverClosingSoon` return `{ skipped: 'disabled' }` without touching Firestore;
 - no Android notification channel is created.
+
 To stop server sends, set the flag off and redeploy the server: the send helper and the token route then go quiet even for installed apps built with it on (their register calls get a 404). Installed apps still run their own client plumbing until a new native build ships with the flag off.
 
 ## What this infra adds
@@ -32,15 +35,18 @@ To stop server sends, set the flag off and redeploy the server: the send helper 
 | Server send helper | `src/server/pushSend.js`: `sendToUser(uid, payload, { collapseKey, threadId, channelId, code })` |
 | Settle and call-off send | `src/server/pushEvents.js` (`deliverBetPush`), `app/api/bets/[code]/push/route.js`, client `src/phone/betPush.js` (`requestBetPush`) |
 | First-pick send | `src/server/pushEvents.js` (`deliverPickPush`), `app/api/bets/[code]/push/pick/route.js`, client `src/phone/betPush.js` (`requestPickPush`), called from `castVote` in `src/phone/api.js` |
+| Closing-soon reminder | `src/server/pushEvents.js` (`deliverClosingSoon`, `deliverClosingPush`, `buildClosingPush`, `closingRecipients`, `closingEventId`, `inClosingWindow`, `CLOSING_WINDOW_MS`, `CLOSING_PUSH_MAX_BETS`), `app/api/cron/push-closing/route.js` (`GET`), workflow in `ci/push-closing.yml` (Jack moves it to `.github/workflows/push-closing.yml`) |
 | Android channel | `src/phone/pushChannel.js` (`ensurePushChannel`, called by `PushSync`); id `PUSH_CHANNEL_ID` in `pushConfig.js` |
 | Admin Messaging | `adminMessaging()` in `src/server/firebaseAdmin.js`, lazy like `adminDb()` / `adminAuth()` |
 | Device owners | `privatePushDevices/{deviceId}` (`{ uid, updatedAt }`), written by `saveDeviceToken` / `removeDeviceToken` |
 | Rules | `privatePushTokens`, `privatePushDevices` and `privatePushSends` deny all client access in `firestore.rules` |
 | Plugins | `@capacitor-firebase/messaging` v8, `@capacitor/preferences` (per-install device id, opt-in state) and `capacitor-native-settings` v8 (Open Settings) |
 | Native | Android `POST_NOTIFICATIONS`; iOS `UIBackgroundModes: remote-notification`; FCM auto-init off on both; `AppDelegate.swift` forwards the APNs token to the plugin |
+
 ### Client plumbing
 
 Every function is a no-op unless the flag is on **and** `Capacitor.isNativePlatform()`. Register and unregister also need a real Firebase user (anonymous counts); the local fallback uid cannot register. None of them asks for notification permission: the opt-in sheet or the Notifications row asks first, in context, then calls `registerPushToken()`. They never throw; they return `{ ok: true }` or `{ ok: false, skipped | error }`. They never log the token, uid or a phone number.
+
 - `getPushDeviceId()`: a UUID kept in Preferences under `fb.pushDeviceId`. Stable per install, never the raw token.
 - `getPushToken()`: `FirebaseMessaging.getToken()`.
 - `registerPushToken()`: `POST /api/push/tokens` with `{ deviceId, token, platform }` and `Authorization: Bearer <ID token>`.
@@ -75,11 +81,11 @@ The opt-in UX still unregisters before log out (`signOutCreator`) and re-registe
 
 ### Server send helper
 
-`sendToUser(uid, { title, body, data }, { collapseKey, threadId, channelId, code })` loads that uid's device docs and calls `adminMessaging().sendEach(...)`, one message per device. Settle and call-off call it through `deliverBetPush`, and the first pick through `deliverPickPush` (both below); the closing cron does not exist yet.
+`sendToUser(uid, { title, body, data }, { collapseKey, threadId, channelId, code })` loads that uid's device docs and calls `adminMessaging().sendEach(...)`, one message per device. Settle and call-off call it through `deliverBetPush`, the first pick through `deliverPickPush`, and the closing-soon reminder through `deliverClosingPush` (all below).
 
 - Title and body come from the caller; this module has no user-facing copy. `data` values are sent as strings.
 - `collapseKey` sets Android `collapseKey` and `notification.tag` (a newer notification replaces the shown one) and the iOS `apns-collapse-id` header. `threadId` sets `aps.thread-id`. Bet sends pass the bet code for both, so a later event on the same bet replaces the earlier notification instead of stacking.
-- `channelId` sets Android `notification.channelId`. Bet sends pass `bet_updates` (`PUSH_CHANNEL_ID`). `betPushOptions(code)` in `pushEvents.js` returns all four options; the first-pick send uses it too, and the closing-soon send should.
+- `channelId` sets Android `notification.channelId`. Bet sends pass `bet_updates` (`PUSH_CHANNEL_ID`). `betPushOptions(code)` in `pushEvents.js` returns all four options; the first-pick and closing-soon sends use it too.
 - On `messaging/registration-token-not-registered` or `messaging/invalid-registration-token`, it deletes that device doc (only if it still holds the dead token).
 - Never throws for setup problems. If `adminDb()` / `adminMessaging()` throw (for example `admin-not-configured` when `FIREBASE_SERVICE_ACCOUNT` is missing or invalid), or the first device read fails on a bad credential, it returns `{ sent: 0, failed: 0, removed: 0, skipped: 'admin-not-configured' }` without calling FCM or writing anything. Any other device read failure returns `skipped: 'read-failed'`. Either way it logs only a safe error code, so a settle caller can ignore the result.
 - Returns counts only: `{ sent, failed, removed }`. Logs at most error codes and, if the caller passes a valid one, the bet code. Never a token, uid or phone number. Payloads must never contain phone numbers.
@@ -141,7 +147,8 @@ In `src/phone/pushCopy.js` (`PUSH_NOTIFICATION_COPY`), asserted verbatim in `pus
 | Settled with a winner | `{question}` | `{side} won. See who called it.` (`{side}` is `settlement.optionLabel`, the winning option's vote label, for example `Over won. See who called it.`) |
 | Called off | `{question}` | `This bet was called off. Nobody won this one.` |
 
-The first-pick bodies are below. The closing-soon bodies are approved too and land with their send PR.
+The first-pick and closing-soon bodies are in their sections below.
+
 Payload `data` (strings only): `code`, `route` = `/b/{code}`, `event` = `settle` or `calloff`. No phone numbers, tokens, uids or names. Options: `collapseKey` and `threadId` = the bet code, `channelId` = `bet_updates`.
 
 ### Who gets it
@@ -174,7 +181,7 @@ Then it calls `deliverBetPush`:
 
 Only the creator can trigger it: anyone else holding the code (it travels in SMS) gets a 401 or 403 before any vote read or the 35s wait. The body is ignored, the server picks the recipients, it only acts on a bet already settled past its undo window or called off, and each event is claimed once. Logs hold at most the bet code and an error code; the ID token and uid are never logged or echoed. The 429 throttle is per instance, so across instances it only slows a misbehaving client; the creator check and the claim are what bound the sends.
 
-Why this trigger. It is the pattern result texts already ship (`deliverResultTexts`, same 35s hold, same re-read). The alternatives are worse on Vercel today: a check on next read would hold the ping until someone opens the bet, which defeats the point; a Vercel cron has a granularity of minutes, needs `vercel.json` and `CRON_SECRET` (planned only for closing-soon, PR 5), and would have to scan for settled bets; Firestore triggers would need Cloud Functions, which this project does not deploy.
+Why this trigger. It is the pattern result texts already ship (`deliverResultTexts`, same 35s hold, same re-read). The alternatives are worse on Vercel today: a check on next read would hold the ping until someone opens the bet, which defeats the point; a Vercel cron has a granularity of minutes, needs `vercel.json` and `CRON_SECRET` (used only by closing-soon, below), and would have to scan for settled bets; Firestore triggers would need Cloud Functions, which this project does not deploy.
 
 **Tradeoff (same as result texts):** the wait lives inside one function invocation. If the function dies mid-wait (a crash, a deploy, a platform timeout), or the client's POST never reaches the server (offline right after settling, app killed), that settle sends no push, and nothing retries it later. Nothing is claimed in that case, so a later POST for the same settle (for example a settle retry with the same winner, which posts again) can still send within the 10-minute limit. Call-offs do not wait, so they only miss on a lost POST or a crash mid-send.
 
@@ -227,6 +234,99 @@ Then it calls `deliverPickPush`:
 The body is ignored, so a patched client cannot choose the recipient, the name or the side: the server sends the live vote to the creator. Only a uid with a recorded pick on the bet gets past the 403, and the claim bounds it to one push per voter per bet. The per-bet cap bounds it to 10 per bet per 10 minutes however many uids pick. Logs hold at most the bet code and an error code; the ID token, uid, name and phone are never logged or echoed.
 
 **Tradeoffs (same shape as settle):** if the voter's POST never reaches the server (offline right after picking, app killed) or the function dies mid-send, that first pick sends no push, and nothing retries it later. If a first pick's POST was lost and the same voter later changes sides, this app does not post again (a side change is not a first pick), so nothing goes out. If some later POST does arrive for that voter while nothing is claimed (a first pick whose send failed and released the claim, or a POST from another client), it notifies with whatever side and name the live vote holds then, within the 10-minute limit. The server never trusts the client's idea of "first": the claim is what makes it once only.
+
+## Closing-soon reminder
+
+### Copy (UX final, Nov 16 2026)
+
+In `src/phone/pushCopy.js` (`PUSH_NOTIFICATION_COPY.closingCreator` and `closingPending`), asserted verbatim in `pushCopy.test.js` and `pushClosing.test.js`, curly apostrophe included. The title is the bet question (`questionOf(bet)`), like every bet push.
+
+| Who | Title | Body |
+| --- | --- | --- |
+| The creator | `{question}` | `Under an hour left. Nudge anyone who hasn’t picked.` |
+| A friend in the bet who has not picked | `{question}` | `Under an hour left to pick a side.` |
+
+`buildClosingPush(bet, code, kind)` builds either one (`kind` is `creator` or `pending`). Only the creator body is sent today; see "Who gets it".
+
+Payload `data` (strings only): `code`, `route` = `/b/{code}`, `event` = `closing`. No phone numbers, tokens, uids or names. Options: `betPushOptions(code)`, so `collapseKey` and `threadId` are the bet code and `channelId` is `bet_updates`.
+
+### When
+
+Once per bet, ever, when under an hour is left before the bet's close time:
+
+- The close time is `closesAt`, epoch milliseconds (`parseCloses` / `buildDraft` in `src/phone/model.js`). Create starts with no close time (`DEFAULT_CLOSES` is empty), so many bets have `closesAt: null`. A bet with no `closesAt`, or one that is not a number, is skipped (`no-close-time`).
+- "Under an hour left" is strict and still in the future: `0 < closesAt - now < 60 * 60 * 1000` (`inClosingWindow`, `CLOSING_WINDOW_MS`). Exactly 60 minutes left is outside the window. At or past `closesAt` the bet is already closed.
+- Skipped, with no claim: called off (`isCalledOff`: `calledOff: true` or `status: 'called-off'`), settled (`isSettled`), otherwise finished or closed (`isFinished` / `isClosed`: `status: 'closed'`, or `closesAt <= now`), outside the window, or no creator uid. A legacy open bet with no `status` still gets it.
+
+### Who gets it
+
+The bet's creator (`createdByID`, when it is a non-empty string) only. `closingRecipients(bet)` returns `[createdByID]` or nothing. The creator gets the creator body even if they picked too.
+
+The approved plan also named friends who are part of the bet but have not picked yet. **Nothing in the data identifies them**, so they get nothing:
+
+- Invites are share or SMS links to `/b/{code}`. Opening the vote page writes no viewer, member, invitee or "joined" record.
+- Votes exist only after a pick: the legacy `votes` array and `bets/{code}/votes/{uid}`. A uid there has already picked, so it is not a "not picked yet" friend; voters who picked are never sent the reminder.
+- `subscribeMyBets` queries only `createdByID`. There is no participants list.
+
+This PR adds no new tracking (no viewers, joined or invitees collection). Creator-only reminders are final for v1; no join tracking is planned. The not-yet-picked body and its payload (`buildClosingPush(bet, code, 'pending')`) are kept as approved copy and tests, but production never sends them.
+
+Prefs are honored the same way as settle and first pick: `sendToUser` only delivers to registered device tokens, and the app unregisters its token when the in-app choice is off. No server-side pref document, no new Firestore field. A creator with no registered device gets nothing, and that is not a failure.
+
+### Trigger: a GitHub Actions workflow every 15 minutes
+
+The route is `GET /api/cron/push-closing`, protected by `Authorization: Bearer ${CRON_SECRET}`. A 15-minute Vercel cron cannot deploy on the Hobby plan (the first preview of this branch failed with "Hobby accounts are limited to daily cron jobs"), and there is no `vercel.json` in this PR (none existed before it).
+
+Captain's call: call the route from a GitHub Actions scheduled workflow every 15 minutes (`cron: "*/15 * * * *"`, plus `workflow_dispatch`). The workflow lives at `ci/push-closing.yml` because the token that opened this PR lacks GitHub's `workflow` scope, which is required to create files under `.github/workflows/`. Jack moves it to `.github/workflows/push-closing.yml` (or grants `workflow` scope) when he adds the repo secret. Until then, GitHub will not run it. Scheduled workflows also run only from the default branch once the file is in place.
+
+The workflow sends `Authorization: Bearer ${{ secrets.CRON_SECRET }}` to `https://www.friendly-bets.com/api/cron/push-closing` (or `vars.PUSH_CRON_URL` if that repo variable is set). It uses `curl --fail-with-body --max-time 60`. If the secret is missing or blank, it prints a short notice and exits 0, so the schedule does not fail every 15 minutes before the secret is added. A 404 (the flag is off) is also a quiet exit 0. It fails only when the secret is set and the call gets a 401, a 5xx, or a network error. It never echoes the secret.
+
+The route is safe to call at any frequency: the per-bet claim `privatePushSends/closing:{code}` makes the reminder send at most once, even if two callers overlap or a run retries.
+
+The route (`runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, `maxDuration = 60`; not a browser or app route, so no CORS and no `OPTIONS`) checks, in order:
+
+1. Flag off: a plain 404 `{ error: 'not-found' }`, before auth, the database or Messaging.
+2. `Authorization: Bearer ${CRON_SECRET}`, compared in constant time (`crypto.timingSafeEqual` when the lengths match). A missing header, a wrong secret, or a missing or blank `CRON_SECRET` is a 401 `{ error: 'unauthorized' }`. The secret and the header are never logged. The GitHub Actions workflow sends this header; a manual call must send the same one.
+3. Runs `deliverClosingSoon` and answers 200 with counts only: `{ processed, notified, sent, failed, skips: { reason: count } }`. 503 `{ error: 'not-configured' }` when `FIREBASE_SERVICE_ACCOUNT` is missing, 500 `{ error: 'server' }` on any other failure; logs at most an error code.
+
+`deliverClosingSoon`:
+
+1. Flag off: `{ skipped: 'disabled' }` before the database.
+2. One query: `bets` where `closesAt > now` and `closesAt < now + 1h`, `orderBy('closesAt', 'asc')`, `.limit(CLOSING_PUSH_MAX_SCAN)` (200). Soonest-closing bets go first. Already-claimed bets (a cheap read of `privatePushSends/closing:{code}`) are skipped and do not count toward `CLOSING_PUSH_MAX_BETS` (50 unclaimed bets processed per run). Status is not filtered in the query (legacy open bets have none, and called-off can be a boolean); that is checked per unclaimed bet after a `bets/{code}` read.
+3. For each result, `deliverClosingPush`, one at a time. A throw for one bet (a read or claim failure) is counted as a failure, logged with the bet code and an error code, and the rest still run.
+
+`deliverClosingPush` (one bet):
+
+1. Flag off: `{ skipped: 'disabled' }` before the database.
+2. If the claim already exists, `{ skipped: 'already-sent' }` and the bet is not read. Otherwise reads only `bets/{code}` (votes are unused, because recipients are creator-only). Missing: `not-found`. Then the skip rules above.
+3. Claims `privatePushSends/closing:{code}` in a transaction (the existing deny-all collection; no rules change). No timestamp in the id, so a creator who moves the deadline later does not get a second reminder. An existing claim means already sent: `{ skipped: 'already-sent' }`. The claim holds only `{ code, at }`.
+4. Sends to the creator through `sendToUser` with `betPushOptions(code)`. If nothing reached a device and it failed, threw, or the Admin SDK was not set up or could not read devices (`admin-not-configured`, `read-failed`), the claim is deleted so a later call can try again while the bet is still in the window. No registered device (`no-devices`) keeps the claim.
+
+### Index
+
+A range plus `orderBy` on the single field `closesAt` is served by Firestore's automatic single-field index. No composite index, no `firestore.indexes.json`, and `firebase.json` is unchanged. Docs whose `closesAt` is missing, null or not a number never match the range.
+
+### `CRON_SECRET`
+
+Leave `CRON_SECRET` unset for now. Push stays flag-off until after the Apple signup and the first native build. Setting it is bundled with Jack's later push setup list (the APNs key and Xcode capabilities), not asked for today. When it is set, it is one long random value used both as a Vercel Production env and as a GitHub repo secret of the same name. It is not in the repo, not in any `.env` file, and this PR does not set it. Until it is set, the workflow prints a short notice and exits 0, and a manual call without the secret is a 401 and sends nothing.
+
+### Vercel plan limits (Jack decision)
+
+From Vercel's Cron Jobs usage and pricing page (checked Nov 16 2026):
+
+- **Hobby:** 100 cron jobs, at most once per day, precision per hour (plus or minus 59 minutes). An expression that runs more than once a day **fails the deployment** ("Hobby accounts are limited to daily cron jobs").
+- **Pro and Enterprise:** 100 cron jobs, down to once per minute, per-minute precision.
+- Vercel crons run on **production deployments only**, never on previews. A preview can only be tested by calling the route by hand, with a `CRON_SECRET` set for Preview.
+
+The `friendly-betting` project (team `thisisjackryans-projects`) is **on Hobby**. That was confirmed when the first preview of this branch failed at 11:46 AM CST on Nov 16 2026 (`dpl_6MbmGe3Xpiq68imhiPaTTjNJCXmZ`) with the Hobby daily-cron error above. A 15-minute Vercel cron is therefore not in the repo. The route is triggered by the GitHub Actions workflow instead, so no Vercel Pro upgrade is required for this reminder.
+
+### Tradeoffs
+
+- If the route is called every 15 minutes, the reminder arrives with anywhere from about 45 to just under 60 minutes left (less if a run fails and the next one retries). A bet created or edited to close in under 15 minutes may be missed between calls.
+- At most 50 unclaimed bets are processed per run (the query may inspect up to 200). Already-claimed bets are skipped from the claim doc and do not use those slots, so they cannot hide later unclaimed bets in the same window. If more than 50 unclaimed bets close within the same hour, the ones past the 50 soonest wait for a later call.
+- Each unclaimed candidate is a single `bets/{code}` read, not a vote-list read. Already-claimed bets are not re-read.
+- If the function dies after the claim is written and before the send finishes, that reminder is lost: the claim stays, and a later call treats it as already sent.
+- Friends who have not picked are not notified. That is final for v1; no join tracking is planned. The unused not-yet-picked body stays in copy and tests and is never sent.
+
 ## Android notification channel
 
 UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
@@ -240,9 +340,8 @@ UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
 
 ## Later PRs
 
-1. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
+None planned. The closing-soon reminder was the last of the five push PRs (#96 infra, #97 opt-in, #98 settle and call-off, #99 first pick, then this one). Creator-only reminders are final for v1; no join tracking is planned.
 
-It ships with the flag off. Its bodies (already approved) arrive with that PR.
 ## What Jack must do himself
 
 None of this is in the repo, and none of it goes in a PR.
@@ -253,4 +352,6 @@ None of this is in the repo, and none of it goes in a PR.
 4. Confirm both native apps (`com.friendlybetting.app` on iOS and Android) are registered in `friendly-betting-fb47e` and that Cloud Messaging is enabled (Firebase Cloud Messaging API (V1) on).
 5. Android SHA-1 / SHA-256 fingerprints stay a Jack-only console step.
 6. Nothing merges to `main`, and no rules deploy, without Jack's own go. `firestore.rules` is not auto-deployed: review it line by line against the live console rules before anyone runs `firebase deploy --only firestore:rules`.
-7. Turn the flag on in a preview first (Vercel env plus the native build env, then redeploy and rebuild: the flag is build-time), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds.
+7. After the Apple signup and the first native build, as part of the push setup list (with the APNs key and Xcode capabilities), set `CRON_SECRET` to a long random value as a Vercel Production env and as a GitHub repo secret of the same value. Never commit it. Leave it unset until then. Until it is set, the workflow prints a short notice and exits 0, and the route answers 401 if called with no secret.
+8. Move `ci/push-closing.yml` to `.github/workflows/push-closing.yml` (or grant a token the `workflow` scope and move it in a later commit), and delete `ci/README.md`. GitHub only runs scheduled workflows from the default branch once the file is under `.github/workflows/`. Optional: set repo variable `PUSH_CRON_URL` if the route is not at `https://www.friendly-bets.com/api/cron/push-closing`.
+9. Turn the flag on in a preview first (Vercel env plus the native build env, then redeploy and rebuild: the flag is build-time), then production only after the steps above are done on the machine that cuts the TestFlight and Play builds. The Actions workflow calls production. To try the route on a preview, set a Preview `CRON_SECRET` and call `/api/cron/push-closing` by hand, or point `PUSH_CRON_URL` at that preview and run `workflow_dispatch` once the workflow file is in place.

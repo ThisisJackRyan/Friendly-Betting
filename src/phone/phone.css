@@ -3768,6 +3768,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
 
 /* The button under a failed create's error (CreateSaveError): Go Pro or Try again. */
 .create-error-action { margin-top: 8px; }
+
 /* Push opt-in sheet (after the creator's first send) and the quiet
    Notifications row on My bets, above Log out. Same scrim, sheet and
    button language as the Pro sheet. */
