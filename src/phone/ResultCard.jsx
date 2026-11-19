@@ -29,8 +29,7 @@ export default function ResultCard({ bet, voterId, preview = false }) {
   };
   return (
     <section className="result-card" aria-label={preview ? 'Result preview' : 'Settled result'}>
-      <div className="result-eyebrow">
-        <span>FRIENDLY · {preview ? 'THE FINAL CALL' : 'CLOSED'}</span>
+      <div className="result-mark">
         <FiAward size={24} aria-hidden="true" />
       </div>
       <h2>{headline}</h2>

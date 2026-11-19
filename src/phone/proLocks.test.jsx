@@ -214,27 +214,23 @@ describe('head-to-head stats (Friends on My bets)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  test('the page behind is inert while the sheet is up, and focus goes back to Friends after a purchase', async () => {
+  test('the page behind is inert while the sheet is up, and focus goes back to Friends after a restore', async () => {
     setup();
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
     fetchEntitlement.mockResolvedValue(PRO);
-    try {
-      const root = await showInRoot(<MyBetsList user={MAYA} />);
-      expect(root).not.toHaveAttribute('inert');
-      await userEvent.click(friends());
-      const sheet = screen.getByRole('dialog', { name: SHEET });
-      expect(root.contains(sheet)).toBe(false);
-      expect(root).toHaveAttribute('inert');
-      expect(sheet).toHaveFocus();
+    const root = await showInRoot(<MyBetsList user={MAYA} />);
+    expect(root).not.toHaveAttribute('inert');
+    await userEvent.click(friends());
+    const sheet = screen.getByRole('dialog', { name: SHEET });
+    expect(root.contains(sheet)).toBe(false);
+    expect(root).toHaveAttribute('inert');
+    expect(sheet).toHaveFocus();
+    expect(within(sheet).getByRole('button', { name: 'Coming soon' })).toBeDisabled();
 
-      await userEvent.click(within(sheet).getByRole('button', { name: 'Get Pro' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Back to my bets' }));
-      expect(screen.queryByRole('dialog')).toBeNull();
-      expect(root).not.toHaveAttribute('inert');
-      expect(friends()).toHaveFocus();
-    } finally {
-      delete process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE;
-    }
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Restore purchase' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Back to my bets' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(root).not.toHaveAttribute('inert');
+    expect(friends()).toHaveFocus();
   });
 
   test.each([

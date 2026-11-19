@@ -6,8 +6,9 @@ as they like, with ads. With the paywall on, the server checks Pro only for Run 
 early-access types (see [Server-side Pro checks](#server-side-pro-checks)). Bettors (anyone who
 only picks a side) are always free and never need an account.
 
-Today Pro is a data model, rules, a client listener, badges, a flagged paywall and a
-preview-only mock purchase. **No real payment exists yet**; see [TODOs](#todos-for-real-billing).
+Today Pro is a data model, rules, a client listener, badges and a flagged paywall. **Nothing
+sells Pro yet**: no real payment and no mock purchase (the preview-only mock was removed before
+launch). See [TODOs](#todos-for-real-billing).
 Pro already turns ads off (see [docs/ADS.md](ADS.md)).
 
 ## Data model
@@ -17,15 +18,17 @@ Pro already turns ads off (see [docs/ADS.md](ADS.md)).
 | Field | Type | Notes |
 | --- | --- | --- |
 | `plan` | `'pro'` | The only plan sold. Legacy docs may say `'founder'`: see below. |
-| `source` | `'mock' \| 'storekit' \| 'play' \| 'stripe' \| 'revenuecat' \| 'admin'` | Who granted it. Only `mock` is written today. |
+| `source` | `'mock' \| 'storekit' \| 'play' \| 'stripe' \| 'revenuecat' \| 'admin'` | Who granted it. Nothing writes entitlements today; earlier preview tests wrote `mock`. |
 | `since` | timestamp | Server time of the grant. |
 | `expiresAt` | timestamp or `null` | End of the paid period. Missing or `null` means no expiry. |
 
-**Legacy founder docs.** Before the Founder tier was dropped, the mock purchase could write
+**Mock and legacy founder docs.** Production has no entitlement docs today, but reads must not
+break if one reappears: a `source: 'mock'` doc reads like any other plan (Pro while it is live).
+Before the Founder tier was dropped, the old mock purchase could write
 `{ plan: 'founder', source: 'mock', since, founderNumber, expiresAt: null }` (lifetime). Those
 docs still read as Pro, forever, whatever `expiresAt` says, with the plain `Pro` badge: the
-number is never shown. Nothing writes that shape any more, and a legacy founder who buys Pro
-again keeps their doc unchanged (a 30 day plan would cut lifetime short).
+number is never shown. Nothing writes that shape any more. A future billing writer should leave
+a legacy founder doc unchanged (a 30 day plan would cut lifetime short).
 
 Pure helpers in `src/phone/entitlement.js`:
 
@@ -34,7 +37,7 @@ Pure helpers in `src/phone/entitlement.js`:
 - `badgeFor(ent, now)`: `{ kind: 'pro' }` for any live plan, or `null`.
 
 Pricing, flags and the Pro sheet's strings live in `src/phone/proConfig.js`
-(`PRO_MONTHLY_USD`, `PRO_PERIOD_DAYS`, `EARLY_ACCESS_TYPES`, `PRO_ROW`, `PRO_COPY`). The errors
+(`PRO_MONTHLY_USD`, `EARLY_ACCESS_TYPES`, `PRO_ROW`, `PRO_COPY`). The errors
 for a create the server refuses are in `src/phone/createErrors.js` (`CREATE_ERROR_COPY`; see
 [Create errors](#create-errors)).
 
@@ -65,8 +68,8 @@ auto-deployed (see the note at its top).
 ## Client
 
 - `src/phone/entitlementApi.js`: `subscribeEntitlement(uid, cb)` (onSnapshot of the user's own
-  doc), `fetchEntitlement(uid)` (one server read of it, for Restore purchase),
-  `requestMockPurchase(plan)`. The only Pro reads. Both treat `permission-denied` on the
+  doc) and `fetchEntitlement(uid)` (one server read of it, for Restore purchase). The only Pro
+  reads; nothing on the client writes or buys a plan. Both treat `permission-denied` on the
   user's own doc as no entitlement, like a missing doc, so rules without the `entitlements`
   block (not yet deployed) read as not Pro rather than an error; any other error is still an
   error. Restore purchase always asks the server, even after the listener (or an earlier
@@ -123,17 +126,17 @@ before `ads.`, and `text-wrap: balance`, so `ads.` never wraps alone) and
   loads before it shows (the sheet never waits on a read, so there is no skeleton); a plan that
   arrives later as Pro swaps in the success screen.
 - **Fine print.** `Pro renews at $3/mo until you cancel in Settings.`
-- **Main button.** `Get Pro`, enabled as soon as the sheet shows; `Getting you set…` while
-  buying (the X, Maybe later, Escape and the scrim do nothing until it ends); `Coming soon`,
-  disabled, without `NEXT_PUBLIC_PRO_MOCK_PURCHASE=1`. A failed purchase shows
-  `Couldn’t finish that. Try again.` above it.
+- **Main button.** Always `Coming soon`, disabled, for anyone not already Pro: nothing sells
+  Pro yet, so the sheet never offers a dead `Get Pro`. A real checkout (Stripe, #89; store IAP
+  later) is what turns it back into `Get Pro`. `PRO_COPY.getPro` and `PRO_COPY.buying` stay in
+  `proConfig.js` for that. `Couldn’t finish that. Try again.` shows above it when Restore fails.
 - **Restore purchase** re-reads `entitlements/{uid}` from the server (`fetchEntitlement` in
   `entitlementApi.js`, via `refreshEntitlement()` in `useEntitlement.js`, which shares the result
   with every screen and the ad service). Pro found: `Restored. You’re Pro.`; none:
   `Nothing to restore on this account.` above the button. No store receipts are checked yet.
 - **Terms / Privacy** link to `NEXT_PUBLIC_TERMS_URL` / `NEXT_PUBLIC_PRIVACY_URL` in a new tab,
   each only when set; the dots only sit between links that show.
-- **Success screen.** A Pro member (already Pro on arrival, or just bought or restored) sees a
+- **Success screen.** A Pro member (already Pro on arrival, or just restored) sees a
   large Pro badge and `You’re Pro. No more ads.`, and `Back to my bets`.
 
 ### Entry points and locks
@@ -267,11 +270,8 @@ the server instead of showing the success screen. `not-configured` means the pay
 | --- | --- | --- |
 | `NEXT_PUBLIC_PRO_PAYWALL` | off | `/pro`, the Pro sheet, the Go Pro entry points and the Pro locks. Web only: always off in the native app (see below). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | off | Early-access types for Pro members. |
-| `NEXT_PUBLIC_PRO_MOCK_PURCHASE` | off | Paywall buttons call the mock route. Previews only. |
 | `NEXT_PUBLIC_TERMS_URL` | unset | The Pro sheet's Terms link. Hidden when unset. |
 | `NEXT_PUBLIC_PRIVACY_URL` | unset | The Pro sheet's Privacy link. Hidden when unset. |
-| `PRO_MOCK_PURCHASE` | off | Server: the mock route answers at all. |
-| `PRO_MOCK_UIDS` | empty | Server: testers' uids allowed to use the mock route, comma separated. Empty or unset means nobody. |
 
 The `NEXT_PUBLIC_*` flags are inlined by Next for the web and defined by `mobile/vite.config.mjs`
 for the app, like `NEXT_PUBLIC_ADS_ENABLED`. Only `1` turns a flag on.
@@ -281,42 +281,6 @@ for the app, like `NEXT_PUBLIC_ADS_ENABLED`. Only `1` turns a flag on.
 other way. `mobile/vite.config.mjs` enforces it by always defining the flag as off, whatever the
 build env says (tested in `mobile/viteConfig.test.js`). Turn it back on there only together with
 StoreKit and Play Billing.
-
-## Mock purchase
-
-`POST /api/pro/mock-purchase` with `{ plan: 'pro' }` and
-`Authorization: Bearer <Firebase ID token>`. Code: `app/api/pro/mock-purchase/route.js`,
-`src/server/proPurchase.js`. Tests: `src/server/proPurchase.test.js`.
-
-Guards, in order:
-
-1. **404** unless `PRO_MOCK_PURCHASE === '1'` and the deploy is not production:
-   `VERCEL_ENV` of `preview` or `development` on Vercel (previews run with
-   `NODE_ENV=production`, so `VERCEL_ENV` decides there), or, off Vercel,
-   `NODE_ENV !== 'production'`. `VERCEL_ENV=production` is always a 404, as is any other
-   `VERCEL_ENV`. OPTIONS is a 404 too. Nothing is read before this check.
-2. **401** without a bearer token, or with one the Admin SDK can't verify. The token is checked
-   with `verifyIdToken(token, true)`, so a revoked token is a 401 too. The uid always comes
-   from the token; a `uid` in the body is ignored.
-3. **403** `forbidden` for an anonymous session (`firebase.sign_in_provider === 'anonymous'`), a
-   token without a `phone_number` claim, or a uid not listed in `PRO_MOCK_UIDS`. Empty or unset
-   `PRO_MOCK_UIDS` means everyone gets a 403.
-4. **400** `invalid-plan` for anything but `pro` (`founder` included).
-5. **503** without `FIREBASE_SERVICE_ACCOUNT`.
-
-Why the allowlist: there is only one Firebase project, so a mock purchase on a preview writes a
-real `entitlements/{uid}`. Without it, any bettor (an anonymous session) on a preview could make
-itself Pro. The checks live
-in `authorizeMockBuyer` and `mockBuyerAllowed` (`src/server/proPurchase.js`), which never log
-tokens, phone numbers or uids. To add a tester, put their uid in `PRO_MOCK_UIDS` on the preview
-deploy.
-
-Writes (one transaction): Pro is `{ plan: 'pro', source: 'mock', since: serverTimestamp,
-expiresAt: now + 30 days }`. A legacy founder doc is left as it is. CORS is the same
-allowlist as the other routes (`src/server/http.js`).
-
-The native app calls the production origin (`apiUrl`), where this route is a 404, and its
-paywall is always off, so mock purchases only work on the web preview.
 
 ## TODOs for real billing
 
@@ -337,8 +301,8 @@ paywall is always off, so mock purchases only work on the web preview.
   early-access types; the rules change in
   [Rules caveat](#rules-caveat-a-rules-deploy-needs-sign-off) is still needed if those checks
   must hold against patched clients.
-- **Mock removal.** Before launch, delete the mock route and `NEXT_PUBLIC_PRO_MOCK_PURCHASE`, or
-  keep them strictly preview-only. Either way, do the [pre-launch cleanup](#pre-launch-cleanup).
+- ~~**Mock removal.**~~ Done: the mock purchase route, its flags and the client call are gone.
+  See [pre-launch cleanup](#pre-launch-cleanup) for the leftover Vercel variables.
 - **App Store review notes.** Digital goods inside the iOS app must use In-App Purchase (no
   Stripe links in the app, unless a permitted external-purchase entitlement applies). Show price,
   period and auto-renew terms on the paywall, link the Terms of Use and Privacy Policy, include
@@ -346,26 +310,37 @@ paywall is always off, so mock purchases only work on the web preview.
 
 ## Pre-launch cleanup
 
-Mock purchases write to the one production Firebase project, so testers' mock plans are real
-data. Before real billing launches, by hand (nothing does this automatically):
+The test-only mock purchase is gone: no route (`/api/pro/mock-purchase` is a 404 like any
+unknown path), no flags read by the code, no client call. What is left, by hand:
 
-1. **Turn the mock off.** Unset `PRO_MOCK_PURCHASE`, `PRO_MOCK_UIDS` and
-   `NEXT_PUBLIC_PRO_MOCK_PURCHASE` in every Vercel environment, and redeploy.
-2. **Delete every mock entitlement.** Every `entitlements` doc with `source == 'mock'`. In the
-   Firebase console, filter the `entitlements` collection on `source == mock` and delete the
-   results, or run a one-off Admin SDK script from a trusted machine with the service account:
+1. **Entitlement data.** Production has 0 `entitlements` docs, so there is nothing to delete.
+   If a `source == 'mock'` or legacy founder doc ever shows up, it still reads as Pro (see
+   [Data model](#data-model)); delete it in the Firebase console. `meta/founders` is not read
+   by anything; delete it if it is still there.
+2. **Leftover Vercel variables.** Nothing reads `PRO_MOCK_PURCHASE`, `PRO_MOCK_UIDS` or
+   `NEXT_PUBLIC_PRO_MOCK_PURCHASE` any more, so they are harmless, but unset them in the Vercel
+   dashboard wherever they are still set, including the preview variables scoped to the
+   `epic/ads-pro` branch.
 
-   ```js
-   const snap = await db.collection('entitlements').where('source', '==', 'mock').get();
-   const batch = db.batch();
-   snap.docs.forEach((doc) => batch.delete(doc.ref));
-   await batch.commit(); // over 500 docs: commit in chunks of 500
-   ```
+## Overlap with open branches
 
-   Count the docs first and check that none has another `source`.
-3. **Legacy founder docs.** Step 2 already deletes every mock one (they are all
-   `source == 'mock'`). If `meta/founders` is still in the database, delete it: nothing reads it.
-4. **Check.** `entitlements` has no `source == 'mock'` docs, `meta/founders` is gone, and
-   `POST /api/pro/mock-purchase` is a 404 on every deploy.
-
-Do not commit the script or wire it into a build or deploy step.
+- **#89 `feature/stripe-web-pro`** was written against the mock and keeps it as a fallback
+  beside Stripe: `purchasable = stripeCheckout || proMockPurchaseEnabled()`, imports of
+  `requestMockPurchase` and `proMockPurchaseEnabled`, `app/api/pro/mock-purchase`, and edits to
+  `src/server/proPurchase.js` (which imports the removed `PRO_PERIOD_DAYS`). After this change
+  lands, #89 should drop the mock fallback and set `purchasable = stripeCheckout` only, delete
+  its edits to `proPurchase.js` and the mock route (both deleted here), drop the mock flag from
+  `proConfig.js`, `mobile/vite.config.mjs` and their tests, and stop stubbing
+  `requestMockPurchase` in `src/setupTests.js`, `mobile/e2e/app.spec.js` and
+  `scripts/screenshots.mjs`. Expect conflicts in `src/phone/ProSheet.jsx` (here the buy path,
+  the `buying` state and `mainLabel` were removed and the main button is a fixed disabled
+  `Coming soon`; #89 has to bring back a Stripe-only buy path), `src/phone/entitlementApi.js`
+  (`requestMockPurchase`, the `auth`/`apiUrl` imports and the abort controller in
+  `withTimeout` were removed; #89's `postWithToken` / `requestCheckout` /
+  `requestBillingPortal` refactor needs them back), `src/phone/proConfig.js`,
+  `src/phone/entitlementApi.test.js`, `src/phone/proConfig.test.js`, `src/setupTests.js`,
+  `mobile/viteConfig.test.js`, this file and `docs/DEVELOPMENT.md`; and a modify/delete conflict
+  on `src/server/proPurchase.js` (resolve by deleting it).
+- **#91 `feature/server-pro-check`** (`POST /api/bets`) does not use the mock purchase. It only
+  overlaps on docs: this file (the intro, the locks paragraph and the flags table) and the
+  environment variable table in `docs/DEVELOPMENT.md`, where the mock rows were removed here.

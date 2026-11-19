@@ -1,9 +1,6 @@
-// Pro pricing, flags and copy (docs/PRO.md). Shared by the paywall and the
-// mock purchase route, so nothing here loads Firebase.
+// Pro pricing, flags and copy (docs/PRO.md). Nothing here loads Firebase.
 
 export const PRO_MONTHLY_USD = 3;
-// A mock Pro month. Real renewals will come from the store (docs/PRO.md).
-export const PRO_PERIOD_DAYS = 30;
 
 // Early-access bet types for Pro members. Empty: no real new types yet. Each
 // entry is { id, label, hint, example? } and shows in the type picker only
@@ -18,11 +15,6 @@ export function proPaywallEnabled() {
 
 export function proEarlyTypesEnabled() {
   return process.env.NEXT_PUBLIC_PRO_EARLY_TYPES === '1';
-}
-
-// Preview builds only: the paywall buttons call the mock purchase route.
-export function proMockPurchaseEnabled() {
-  return process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE === '1';
 }
 
 // Terms and Privacy links on the Pro sheet. Each shows only when its URL is

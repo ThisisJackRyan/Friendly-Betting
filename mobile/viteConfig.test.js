@@ -8,7 +8,6 @@ const FLAGS = [
   'NEXT_PUBLIC_ADS_ENABLED',
   'NEXT_PUBLIC_PRO_PAYWALL',
   'NEXT_PUBLIC_PRO_EARLY_TYPES',
-  'NEXT_PUBLIC_PRO_MOCK_PURCHASE',
 ];
 
 // Jest can't import the ESM config directly, so evaluate it in a real Node process.
