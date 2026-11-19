@@ -225,7 +225,6 @@ const VoteScreen = () => {
         <Link href="/" aria-label="Friendly home">
           <Brand />
         </Link>
-        <span>BETTER WITH FRIENDS</span>
         <ResultsMenu />
       </header>
       <div className="scroll screen-fade vote-screen">

@@ -27,7 +27,7 @@ export default function FriendsView({ friends }) {
   }
   return (
     <section className="friends" aria-labelledby="friends-heading">
-      <p id="friends-heading" className="eyebrow">Head to head</p>
+      <h2 id="friends-heading" className="friends-heading">Head to head</h2>
       <ul className="friend-list">
         {friends.map((friend, index) => {
           const open = openId === friend.voterId;

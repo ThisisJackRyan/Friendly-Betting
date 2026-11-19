@@ -38,6 +38,8 @@ jest.mock('@capacitor/core', () => ({
 
 jest.mock('@capacitor-community/admob', () => ({
   AdMob: {
+    requestConsentInfo: jest.fn(async () => ({ status: 'NOT_REQUIRED', canRequestAds: true })),
+    showConsentForm: jest.fn(),
     initialize: jest.fn(),
     trackingAuthorizationStatus: jest.fn(),
     requestTrackingAuthorization: jest.fn(),

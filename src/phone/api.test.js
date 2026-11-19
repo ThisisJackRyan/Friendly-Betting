@@ -1,11 +1,13 @@
 import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { auth } from '../Config/firebase-config';
 import {
-  __resetVoteRulesForTests, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
+  __resetCreateForTests, __resetVoteRulesForTests, CREATE_STALL_CAP_MS, CREATE_TIMEOUT_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
   subscribeMyBets, undoSettle,
 } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
+import { saveRematch } from './rematch';
+import { requestBetPush, requestPickPush } from './betPush';
 
 jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
@@ -24,6 +26,7 @@ jest.mock('firebase/firestore', () => ({
   deleteField: () => 'DELETE_FIELD',
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
+jest.mock('./betPush', () => ({ requestBetPush: jest.fn(), requestPickPush: jest.fn() }));
 jest.mock('./resultTexts', () => ({
   requestResultTexts: jest.fn(),
   apiUrl: (path) => `https://www.friendly-bets.com${path}`,
@@ -102,6 +105,8 @@ beforeEach(() => {
   });
   rememberBet.mockClear();
   requestResultTexts.mockReset();
+  requestBetPush.mockReset();
+  requestPickPush.mockReset();
 });
 
 test('closing writes one atomic result with both winner and loser recipients', async () => {
@@ -348,6 +353,41 @@ test('a failed settle never asks for result texts', async () => {
   await settleBet('abc123', 'a');
   await expect(settleBet('abc123', 'b')).rejects.toThrow('already settled');
   expect(requestResultTexts).toHaveBeenCalledTimes(1);
+});
+
+test('a committed settle or call-off asks for a push once, after the write', async () => {
+  const statusAtCall = [];
+  requestBetPush.mockImplementation(() => { statusAtCall.push(stored.status); });
+  await settleBet('abc123', 'a');
+  expect(requestBetPush).toHaveBeenCalledTimes(1);
+  expect(requestBetPush).toHaveBeenCalledWith('abc123');
+  stored = { ...stored, status: 'open', winnerId: null, settlement: undefined, settledAt: undefined };
+  await callOffBet('abc123');
+  expect(requestBetPush).toHaveBeenCalledTimes(2);
+  expect(statusAtCall).toEqual(['closed', 'closed']);
+  // Push sits next to result texts; neither replaces the other.
+  expect(requestResultTexts).toHaveBeenCalledTimes(2);
+});
+
+test('a failed settle or call-off never asks for a push', async () => {
+  auth.currentUser = null;
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('Only the creator');
+  await expect(callOffBet('abc123')).rejects.toThrow('Only the creator');
+  auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }] };
+  runTransaction.mockRejectedValueOnce(new Error('offline'));
+  await expect(settleBet('abc123', 'a')).rejects.toThrow('offline');
+  expect(requestBetPush).not.toHaveBeenCalled();
+});
+
+test('a throwing push request never breaks a settle or call-off', async () => {
+  requestBetPush.mockImplementation(() => { throw new Error('push broke'); });
+  const result = await settleBet('abc123', 'a');
+  expect(result.status).toBe('closed');
+  expect(stored.winnerId).toBe('a');
+  stored = { ...stored, status: 'open', winnerId: null, settlement: undefined, settledAt: undefined };
+  const off = await callOffBet('abc123');
+  expect(off.calledOff).toBe(true);
+  expect(requestBetPush).toHaveBeenCalledTimes(2);
 });
 
 test('votes and settlements never carry a phone number', async () => {
@@ -646,8 +686,9 @@ describe('live listeners merge the bet with its vote docs', () => {
   beforeEach(() => {
     listeners = [];
     onSnapshot.mockReset();
-    onSnapshot.mockImplementation((ref, next, error) => {
-      const entry = { ref, next, error, stopped: false };
+    onSnapshot.mockImplementation((ref, ...rest) => {
+      const [options, next, error] = typeof rest[0] === 'function' ? [undefined, ...rest] : rest;
+      const entry = { ref, options, next, error, stopped: false };
       listeners.push(entry);
       return () => { entry.stopped = true; };
     });
@@ -695,6 +736,47 @@ describe('live listeners merge the bet with its vote docs', () => {
     const err = new Error('offline');
     betListener().error(err);
     expect(onChange).toHaveBeenLastCalledWith(undefined, err);
+  });
+
+  test('subscribeBet listens to the bet doc with metadata changes, and the votes without', () => {
+    subscribeBet('abc123', () => {});
+    expect(betListener().options).toEqual({ includeMetadataChanges: true });
+    expect(votesListener().options).toBeUndefined();
+  });
+
+  test('subscribeBet reports a cache miss, then the metadata-only server miss', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(null, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: true });
+    // A repeat of the same miss is not reported again.
+    betListener().next(betSnap(null, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap(null, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: false });
+    betListener().next(betSnap(null, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('subscribeBet skips a metadata-only snapshot on a loaded bet, but not a vote doc update', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(stored, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap({ ...stored, votes: stored.votes.map((vote) => ({ ...vote })) }, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    votesListener().next(voteSnap({ maya: { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 2, nanoseconds: 0 } } }));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[1][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+    // Changed data still emits.
+    betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+    expect(onChange).toHaveBeenCalledTimes(3);
+    expect(onChange.mock.calls[2][0].status).toBe('closed');
   });
 
   test('subscribeMyBets merges each bet\'s vote docs and closes listeners with the list', () => {
@@ -806,7 +888,8 @@ describe('a session that learns the rules deny vote docs', () => {
 
   test('a denied vote listen is remembered: the next subscribeBet opens no votes listener', () => {
     const listeners = [];
-    onSnapshot.mockImplementation((ref, next, error) => {
+    onSnapshot.mockImplementation((ref, ...rest) => {
+      const [next, error] = typeof rest[0] === 'function' ? rest : rest.slice(1);
       listeners.push({ ref, next, error });
       return () => {};
     });
@@ -877,6 +960,544 @@ describe('a session that learns the rules deny vote docs', () => {
     expect(getDocs).toHaveBeenCalledTimes(2);
     expect(voteDocs.maya).toMatchObject({ voterId: 'maya', name: 'May', optionId: 'b' });
     expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam']);
-    expect(voteReads()).toHaveLength(1);
+    // Each pick reads the voter's own doc (first-pick check), and so does the rename.
+    expect(voteReads()).toHaveLength(3);
+  });
+});
+
+describe('first-pick push', () => {
+  test('a friend\'s first pick (vote doc) requests the pick push once, after the commit', async () => {
+    const committed = [];
+    requestPickPush.mockImplementation(() => { committed.push(Boolean(voteDocs.maya)); });
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    expect(requestPickPush).toHaveBeenCalledWith('abc123');
+    expect(committed).toEqual([true]);
+    expect(requestBetPush).not.toHaveBeenCalled();
+  });
+
+  test('a side change or a re-pick with a vote doc does not request it', async () => {
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    requestPickPush.mockClear();
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a voter with only a legacy array entry writing their first vote doc is a re-pick', async () => {
+    await castVote('abc123', { voterId: 'jack', name: 'Jack', optionId: 'b' });
+    expect(voteDocs.jack).toMatchObject({ optionId: 'b' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('an array entry with no side does not count as a pick', async () => {
+    stored.votes = [...stored.votes, { voterId: 'lee', name: 'Lee' }];
+    await castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+  });
+
+  test('the creator\'s own first pick does not request it', async () => {
+    await castVote('abc123', { voterId: 'creator', name: 'Casey', optionId: 'a' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('legacy array fallback: a first pick requests it; a side change does not', async () => {
+    voteRules = false;
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    expect(stored.votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    // Now the session knows the rules deny vote docs: straight to the array.
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'b' });
+    await castVote('abc123', { voterId: 'jack', name: 'Jack', optionId: 'b' });
+    expect(requestPickPush).toHaveBeenCalledTimes(1);
+    await castVote('abc123', { voterId: 'lee', name: '', optionId: 'b' });
+    expect(requestPickPush).toHaveBeenCalledTimes(2);
+  });
+
+  test('a failed pick does not request it', async () => {
+    runTransaction.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('offline');
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'zzz' })).rejects.toThrow('Pick one');
+    runTransaction.mockRejectedValue(denied());
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a closed bet refuses the pick and requests nothing', async () => {
+    stored.status = 'closed';
+    await expect(castVote('abc123', { voterId: 'maya', optionId: 'a' })).rejects.toThrow('closed');
+    expect(requestPickPush).not.toHaveBeenCalled();
+  });
+
+  test('a throwing request never fails the pick', async () => {
+    requestPickPush.mockImplementation(() => { throw new Error('push broke'); });
+    await expect(castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' })).resolves.toBeUndefined();
+    expect(voteDocs.maya).toMatchObject({ optionId: 'a' });
+    expect(rememberBet).toHaveBeenCalledWith('maya', 'abc123');
+    voteRules = false;
+    __resetVoteRulesForTests();
+    await expect(castVote('abc123', { voterId: 'lee', name: 'Lee', optionId: 'a' })).resolves.toBeUndefined();
+    expect(requestPickPush).toHaveBeenCalledTimes(2);
+  });
+
+  test('a rename never requests it', async () => {
+    await renameVote('abc123', 'jack', 'John');
+    await castVote('abc123', { voterId: 'maya', name: 'Maya', optionId: 'a' });
+    requestPickPush.mockClear();
+    await renameVote('abc123', 'maya', 'May');
+    voteRules = false;
+    __resetVoteRulesForTests();
+    await renameVote('abc123', 'sam', 'Sammy');
+    expect(requestPickPush).not.toHaveBeenCalled();
+    expect(requestBetPush).not.toHaveBeenCalled();
+  });
+});
+
+// Server-side Pro checks (docs/PRO.md): with the paywall on, new bets go
+// through POST /api/bets; with it off, the client writes them as before.
+describe('creating a bet', () => {
+  const fields = {
+    schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line', question: 'Who wins?', stake: 'Pizza',
+    options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Lions' }], createdByID: 'creator', createdByName: 'Jack',
+  };
+  const settled = {
+    code: 'old123', schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line', question: 'Who wins?', stake: 'Pizza',
+    status: 'closed', winnerId: 'a', options: [{ id: 'a', label: 'Bears' }, { id: 'b', label: 'Lions' }], createdByID: 'creator',
+  };
+  const savedFlag = process.env.NEXT_PUBLIC_PRO_PAYWALL;
+  const respond = (status, body) => {
+    global.fetch = jest.fn(async () => ({
+      ok: status < 300,
+      status,
+      json: async () => {
+        if (body === undefined) throw new SyntaxError('no json');
+        return body;
+      },
+    }));
+  };
+  const getIdToken = jest.fn(async () => 'id-token');
+  const SAVE_FAILED = 'Couldn’t save this bet. Try again.';
+  const goOffline = () => jest.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+  const never = () => new Promise(() => {});
+  // Lets the save's promise chain run, then moves the clock past the timeout.
+  const timeOut = async () => {
+    await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS);
+  };
+
+  beforeEach(() => {
+    stored = null;
+    auth.currentUser = { uid: 'creator', providerData: [{ providerId: 'phone' }], getIdToken };
+    getIdToken.mockClear();
+    __resetCreateForTests();
+    global.fetch = jest.fn(async () => {
+      throw new Error('fetch must not be called');
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    delete global.fetch;
+    if (savedFlag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+    else process.env.NEXT_PUBLIC_PRO_PAYWALL = savedFlag;
+  });
+
+  describe.each([undefined, '0', 'true'])('paywall off (NEXT_PUBLIC_PRO_PAYWALL=%p)', (flag) => {
+    beforeEach(() => {
+      if (flag === undefined) delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+      else process.env.NEXT_PUBLIC_PRO_PAYWALL = flag;
+    });
+
+    test('Create writes bets/{code} from the client, as today, and never calls the route', async () => {
+      const code = await saveBet(null, fields);
+      expect(code).toMatch(/^[a-z2-9]{6}$/);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(tx.set).toHaveBeenCalledWith({ collection: 'bets', id: code }, {
+        ...fields, schemaVersion: 2, code, status: 'open', winnerId: null, votes: [], createdAt: expect.any(Number),
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(getIdToken).not.toHaveBeenCalled();
+    });
+
+    test('Run it back works for everyone through the client write, link and all', async () => {
+      const code = await saveRematch(saveBet, settled, auth.currentUser, 'old123');
+      expect(tx.set.mock.calls[0][1]).toMatchObject({ code, rematchOf: { code: 'old123' }, status: 'open' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('rules without rematchOf: the client retry still drops the link', async () => {
+      runTransaction.mockRejectedValueOnce(denied());
+      await saveRematch(saveBet, settled, auth.currentUser, 'old123');
+      expect(runTransaction).toHaveBeenCalledTimes(2);
+      expect(tx.set.mock.calls[0][1]).not.toHaveProperty('rematchOf');
+    });
+  });
+
+  describe('paywall on', () => {
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+    });
+
+    test('Create posts the fields to /api/bets with the ID token and never writes the bet itself', async () => {
+      respond(200, { code: 'srv123' });
+      await expect(saveBet(null, fields)).resolves.toBe('srv123');
+      expect(global.fetch).toHaveBeenCalledWith('https://www.friendly-bets.com/api/bets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer id-token' },
+        body: JSON.stringify({ fields }),
+        signal: expect.any(AbortSignal),
+      });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('Run it back goes through the route with its rematch link', async () => {
+      respond(200, { code: 'srv456' });
+      await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123')).resolves.toBe('srv456');
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body).fields.rematchOf).toEqual({ code: 'old123' });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      [403, 'pro-required'],
+      [403, 'forbidden'],
+      [400, 'invalid-bet'],
+      [401, 'unauthorized'],
+      [500, 'server'],
+    ])('a %i %s is an error with that code and the generic save message', async (status, error) => {
+      respond(status, { error });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: error, message: 'Couldn’t save this bet. Try again.' });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('a rematch refused for Pro is not retried without its link', async () => {
+      respond(403, { error: 'pro-required' });
+      await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123')).rejects.toMatchObject({ code: 'pro-required' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('fails closed without server credentials: a 503 never falls back to the client write', async () => {
+      respond(503, { error: 'not-configured' });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'not-configured' });
+      expect(runTransaction).not.toHaveBeenCalled();
+      expect(tx.set).not.toHaveBeenCalled();
+    });
+
+    test('an ok answer without a code is an error, not a bet', async () => {
+      respond(200, undefined);
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'create-failed' });
+    });
+
+    test('a request that never reaches the server is tagged offline', async () => {
+      global.fetch = jest.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      });
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('a token that can\'t refresh offline is tagged offline; nothing is sent', async () => {
+      getIdToken.mockRejectedValueOnce(Object.assign(new Error('net'), { code: 'auth/network-request-failed' }));
+      await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    test('nobody signed in: nothing is sent', async () => {
+      auth.currentUser = null;
+      await expect(saveBet(null, fields)).rejects.toThrow();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('editing an existing bet is unchanged: a client update, no route', async () => {
+      stored = { ...fields, status: 'open' };
+      await expect(saveBet('abc123', { stake: 'Tacos' })).resolves.toBe('abc123');
+      expect(stored.stake).toBe('Tacos');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  // QA: offline, a save sat on "Getting it ready…" ~35s, then showed
+  // Firestore's "Connection failed.". A create that can't reach the network
+  // fails fast with the generic save line, and the retry never makes two bets.
+  describe('a save that can\'t reach the network', () => {
+    describe('paywall off (the client transaction)', () => {
+      beforeEach(() => {
+        delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
+      });
+
+      test('already offline: fails at once with the save line, nothing is written', async () => {
+        goOffline();
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(runTransaction).not.toHaveBeenCalled();
+        expect(stored).toBeNull();
+      });
+
+      test('Firestore\'s "Connection failed." becomes the save line', async () => {
+        runTransaction.mockRejectedValueOnce(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+        const err = await saveBet(null, fields).catch((e) => e);
+        expect(err).toMatchObject({ code: 'unavailable', message: SAVE_FAILED });
+        expect(err.message).not.toMatch(/Connection failed/);
+      });
+
+      test('a failure while the browser went offline becomes the save line', async () => {
+        runTransaction.mockImplementationOnce(async () => {
+          goOffline();
+          throw new Error('Failed to get document because the client is offline.');
+        });
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      });
+
+      test('permission-denied is passed through untouched', async () => {
+        runTransaction.mockRejectedValueOnce(denied());
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'permission-denied' });
+      });
+
+      test('a hung write gives up after CREATE_TIMEOUT_MS with the save line', async () => {
+        jest.useFakeTimers();
+        expect(CREATE_TIMEOUT_MS).toBeGreaterThanOrEqual(10000);
+        expect(CREATE_TIMEOUT_MS).toBeLessThanOrEqual(15000);
+        runTransaction.mockImplementationOnce(never);
+        const result = saveBet(null, fields).catch((e) => e);
+        await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS - 1);
+        let settled = false;
+        result.then(() => { settled = true; });
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(await result).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+      });
+
+      test('the retry after a timeout: a save that landed late is the bet, never a second one', async () => {
+        jest.useFakeTimers();
+        let land;
+        runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+          land = () => resolve(run(tx));
+        }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout' });
+
+        // Run it back's close time moves with the clock; it's still the same bet.
+        const retry = saveBet(null, { ...fields, closesAt: 999 });
+        land();
+        const code = await retry;
+        expect(tx.set).toHaveBeenCalledTimes(1);
+        expect(tx.set.mock.calls[0][0]).toEqual({ collection: 'bets', id: code });
+        expect(runTransaction).toHaveBeenCalledTimes(1);
+      });
+
+      test('the retry after a timeout: a save that failed meanwhile is made fresh', async () => {
+        jest.useFakeTimers();
+        let fail;
+        runTransaction.mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        const retry = saveBet(null, fields);
+        fail(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+        const code = await retry;
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+        expect(tx.set).toHaveBeenCalledTimes(1);
+      });
+
+      test('the retry while the earlier save still hangs fails again without a second write', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        const retry = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await retry).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+        expect(runTransaction).toHaveBeenCalledTimes(1);
+      });
+
+      test('a late save, then a retry with other fields: a new bet, not the earlier one', async () => {
+        jest.useFakeTimers();
+        let land;
+        runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+          land = () => resolve(run(tx));
+        }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout' });
+        land();
+        await jest.advanceTimersByTimeAsync(0);
+        const earlier = tx.set.mock.calls[0][0].id;
+
+        const code = await saveBet(null, { ...fields, stake: 'Tacos' });
+        expect(code).not.toBe(earlier);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+        expect(tx.set).toHaveBeenCalledTimes(2);
+      });
+
+      test('a hung save never holds up a create with other fields', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        // No clock moves: it doesn't wait out the hung save.
+        const code = await saveBet(null, { ...fields, stake: 'Tacos' });
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      test('the stall cap drops a hung save: the same bet\'s retry then starts fresh', async () => {
+        jest.useFakeTimers();
+        expect(CREATE_STALL_CAP_MS).toBeGreaterThan(2 * CREATE_TIMEOUT_MS);
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - CREATE_TIMEOUT_MS);
+
+        const code = await saveBet(null, fields);
+        expect(code).toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      test('a retry still waiting when the cap passes starts fresh instead of timing out', async () => {
+        jest.useFakeTimers();
+        runTransaction.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - 2 * CREATE_TIMEOUT_MS + 1000);
+
+        const retry = saveBet(null, fields);
+        await jest.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS - 1000);
+        await expect(retry).resolves.toMatch(/^[a-z2-9]{6}$/);
+        expect(runTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      test('Run it back offline fails at once with the save line, not retried without its link', async () => {
+        goOffline();
+        await expect(saveRematch(saveBet, settled, auth.currentUser, 'old123'))
+          .rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(runTransaction).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('paywall on (POST /api/bets)', () => {
+      beforeEach(() => {
+        process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
+      });
+
+      test('already offline: fails at once; no token, no request', async () => {
+        goOffline();
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+        expect(getIdToken).not.toHaveBeenCalled();
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      test('an HTTP failure while the browser reports offline is the save line', async () => {
+        respond(502, undefined);
+        global.fetch.mockImplementationOnce(async () => {
+          goOffline();
+          return { ok: false, status: 502, json: async () => ({}) };
+        });
+        await expect(saveBet(null, fields)).rejects.toMatchObject({ code: 'offline', message: SAVE_FAILED });
+      });
+
+      test('a hung request gives up after CREATE_TIMEOUT_MS; the retry waits on it and makes one bet', async () => {
+        jest.useFakeTimers();
+        let answer;
+        global.fetch = jest.fn(() => new Promise((resolve) => { answer = resolve; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+
+        const retry = saveBet(null, fields);
+        answer({ ok: true, status: 200, json: async () => ({ code: 'srv789' }) });
+        await expect(retry).resolves.toBe('srv789');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      test('a late answer, then a retry with other fields: a new bet, not the earlier one', async () => {
+        jest.useFakeTimers();
+        let answer;
+        global.fetch = jest.fn()
+          .mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }))
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv222' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        answer({ ok: true, status: 200, json: async () => ({ code: 'srv111' }) });
+        await jest.advanceTimersByTimeAsync(0);
+
+        await expect(saveBet(null, { ...fields, stake: 'Tacos' })).resolves.toBe('srv222');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('a hung request never holds up a create with other fields', async () => {
+        jest.useFakeTimers();
+        global.fetch = jest.fn()
+          .mockImplementationOnce(never)
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv333' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+
+        await expect(saveBet(null, { ...fields, stake: 'Tacos' })).resolves.toBe('srv333');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('the stall cap aborts a hung request; the same bet\'s retry then starts fresh', async () => {
+        jest.useFakeTimers();
+        let signal;
+        global.fetch = jest.fn()
+          .mockImplementationOnce((_url, init) => {
+            signal = init.signal;
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
+          })
+          .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => ({ code: 'srv444' }) }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        // A retry before the cap still waits on it, and doesn't abort it.
+        const early = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await early).toMatchObject({ code: 'timeout' });
+        expect(signal.aborted).toBe(false);
+
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - 2 * CREATE_TIMEOUT_MS);
+        expect(signal.aborted).toBe(true);
+        await expect(saveBet(null, fields)).resolves.toBe('srv444');
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+      });
+
+      test('a token refresh still hung at the cap sends nothing when it comes back', async () => {
+        jest.useFakeTimers();
+        let token;
+        getIdToken.mockImplementationOnce(() => new Promise((resolve) => { token = resolve; }));
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        await first;
+        await jest.advanceTimersByTimeAsync(CREATE_STALL_CAP_MS - CREATE_TIMEOUT_MS);
+        token('id-token');
+        await jest.advanceTimersByTimeAsync(0);
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        respond(200, { code: 'srv555' });
+        await expect(saveBet(null, fields)).resolves.toBe('srv555');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      test('a hung token refresh gives up too', async () => {
+        jest.useFakeTimers();
+        getIdToken.mockImplementationOnce(never);
+        const first = saveBet(null, fields).catch((e) => e);
+        await timeOut();
+        expect(await first).toMatchObject({ code: 'timeout', message: SAVE_FAILED });
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
   });
 });

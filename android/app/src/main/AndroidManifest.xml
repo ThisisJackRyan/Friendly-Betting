@@ -14,6 +14,11 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
 
+        <!-- Push (docs/PUSH.md): no FCM token until the app asks for one after opt-in. -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
@@ -59,4 +64,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ push permission. Only requested after opt-in (docs/PUSH.md). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

@@ -1,7 +1,13 @@
 import { canShareImageFiles, downloadImage, shareImage } from './imageShare';
 import { isNativeApp } from '../platform/runtime';
+import { Share } from '@capacitor/share';
+import { Filesystem } from '@capacitor/filesystem';
 
 jest.mock('../platform/runtime', () => ({ isNativeApp: jest.fn(() => false) }));
+jest.mock('@capacitor/share', () => ({ Share: { share: jest.fn() } }));
+jest.mock('@capacitor/filesystem', () => ({ Directory: { Cache: 'CACHE' }, Filesystem: { writeFile: jest.fn() } }));
+
+const CACHE_URI = 'file:///data/user/0/com.friendlybetting.app/cache/friendly-result.png';
 
 const png = () => new Blob(['png'], { type: 'image/png' });
 const realShare = navigator.share;
@@ -10,6 +16,10 @@ const realCanShare = navigator.canShare;
 let clicked;
 beforeEach(() => {
   isNativeApp.mockReturnValue(false);
+  Share.share.mockReset();
+  Share.share.mockResolvedValue({});
+  Filesystem.writeFile.mockReset();
+  Filesystem.writeFile.mockResolvedValue({ uri: CACHE_URI });
   clicked = [];
   URL.createObjectURL = jest.fn(() => 'blob:card');
   URL.revokeObjectURL = jest.fn();
@@ -43,14 +53,16 @@ test('shares the PNG as a file when the browser can share files', async () => {
 
 test('a dismissed share sheet is aborted, with no download after it', async () => {
   shareSheet({ share: async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); } });
-  await expect(shareImage(png())).resolves.toBe('aborted');
+  await expect(shareImage(png(), { text: 'Maya won' })).resolves.toBe('aborted');
   expect(clicked).toEqual([]);
+  expect(navigator.share).toHaveBeenCalledTimes(1);
 });
 
 test('a refused share sheet falls back to the download', async () => {
   shareSheet({ share: async () => { throw Object.assign(new Error('x'), { name: 'NotAllowedError' }); } });
-  await expect(shareImage(png())).resolves.toBe('downloaded');
+  await expect(shareImage(png(), { text: 'Maya won' })).resolves.toBe('downloaded');
   expect(clicked).toEqual([{ href: 'blob:card', download: 'friendly-result.png', attached: true }]);
+  expect(navigator.share).toHaveBeenCalledTimes(1);
 });
 
 test('a browser that cannot share files downloads the PNG', async () => {
@@ -75,20 +87,56 @@ test('no share sheet at all downloads the PNG and frees the URL later', async ()
   }
 });
 
-test('in the app, the file share sheet is used where the web view has one', async () => {
-  isNativeApp.mockReturnValue(true);
-  shareSheet();
-  await expect(shareImage(png())).resolves.toBe('shared');
-});
+describe('in the app', () => {
+  const MESSAGE = 'FRIENDLY · Closed · Maya won';
+  beforeEach(() => isNativeApp.mockReturnValue(true));
 
-test('in the app without a file share sheet, it fails: there is no download to fall back on', async () => {
-  isNativeApp.mockReturnValue(true);
-  shareSheet({ canShare: false });
-  await expect(shareImage(png())).resolves.toBe('failed');
-  delete navigator.share;
-  delete navigator.canShare;
-  await expect(shareImage(png())).resolves.toBe('failed');
-  expect(clicked).toEqual([]);
+  test('writes the PNG to the cache folder and shares its file:// URI through the native sheet', async () => {
+    await expect(shareImage(new Blob(['png'], { type: 'image/png' }), { text: MESSAGE })).resolves.toBe('shared');
+    expect(Filesystem.writeFile).toHaveBeenCalledWith({ path: 'friendly-result.png', data: btoa('png'), directory: 'CACHE' });
+    expect(Share.share).toHaveBeenCalledTimes(1);
+    expect(Share.share).toHaveBeenCalledWith({ title: 'FRIENDLY', files: [CACHE_URI], dialogTitle: 'Share as image' });
+    expect(clicked).toEqual([]);
+  });
+
+  test('uses the native sheet even where the web view can share files itself', async () => {
+    shareSheet();
+    await expect(shareImage(png())).resolves.toBe('shared');
+    expect(navigator.share).not.toHaveBeenCalled();
+    expect(Share.share.mock.calls[0][0].files).toEqual([CACHE_URI]);
+  });
+
+  test.each(['Share canceled', 'User dismissed the sheet', 'aborted'])('%s is aborted, with nothing after it', async (message) => {
+    Share.share.mockRejectedValue(new Error(message));
+    await expect(shareImage(png(), { text: MESSAGE })).resolves.toBe('aborted');
+    expect(Share.share).toHaveBeenCalledTimes(1);
+    expect(clicked).toEqual([]);
+  });
+
+  test.each([
+    ['the share fails', () => Share.share.mockRejectedValueOnce(new Error('Activity not found'))],
+    ['the cache write fails', () => Filesystem.writeFile.mockRejectedValue(new Error('disk full'))],
+  ])('when %s, the result text goes through the share sheet instead, never a download', async (_label, setUp) => {
+    setUp();
+    await expect(shareImage(png(), { text: MESSAGE })).resolves.toBe('shared');
+    const textShare = Share.share.mock.calls.at(-1)[0];
+    expect(textShare).toEqual({ title: 'FRIENDLY', text: MESSAGE, dialogTitle: 'Text the crew' });
+    expect(textShare.files).toBeUndefined();
+    expect(clicked).toEqual([]);
+  });
+
+  test('the text share cancelled after a failed image share is aborted', async () => {
+    Share.share.mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce(new Error('Share canceled'));
+    await expect(shareImage(png(), { text: MESSAGE })).resolves.toBe('aborted');
+  });
+
+  test('fails only once the text share has failed too, or there is no text', async () => {
+    Share.share.mockRejectedValue(new Error('boom'));
+    await expect(shareImage(png(), { text: MESSAGE })).resolves.toBe('failed');
+    await expect(shareImage(png())).resolves.toBe('failed');
+    await expect(shareImage(null, { text: MESSAGE })).resolves.toBe('failed');
+    expect(clicked).toEqual([]);
+  });
 });
 
 describe('canShareImageFiles', () => {
@@ -129,11 +177,30 @@ describe('canShareImageFiles', () => {
   });
 });
 
-test('no image, or no way to download it, fails quietly', async () => {
+test('no image, or no way to download it and no text, fails quietly', async () => {
   shareSheet({ canShare: false });
   await expect(shareImage(null)).resolves.toBe('failed');
   URL.createObjectURL = jest.fn(() => { throw new Error('no'); });
   await expect(shareImage(png())).resolves.toBe('failed');
+  expect(navigator.share).not.toHaveBeenCalled();
+});
+
+test('a refused file share with no download sends the result text through the share sheet', async () => {
+  shareSheet({ share: async ({ files }) => { if (files) throw Object.assign(new Error('x'), { name: 'NotAllowedError' }); } });
+  URL.createObjectURL = jest.fn(() => { throw new Error('no'); });
+  await expect(shareImage(png(), { text: 'Maya won' })).resolves.toBe('shared');
+  expect(navigator.share).toHaveBeenCalledTimes(2);
+  expect(navigator.share).toHaveBeenLastCalledWith({ text: 'Maya won' });
+  expect(Share.share).not.toHaveBeenCalled();
+});
+
+test('on the web, the text fallback dismissed is aborted, and with no sheet at all it fails', async () => {
+  URL.createObjectURL = jest.fn(() => { throw new Error('no'); });
+  shareSheet({ canShare: false, share: async () => { throw Object.assign(new Error('x'), { name: 'AbortError' }); } });
+  await expect(shareImage(png(), { text: 'Maya won' })).resolves.toBe('aborted');
+  delete navigator.share;
+  delete navigator.canShare;
+  await expect(shareImage(png(), { text: 'Maya won' })).resolves.toBe('failed');
 });
 
 test('canShare throwing is not fatal', async () => {

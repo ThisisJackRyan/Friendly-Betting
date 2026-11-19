@@ -110,6 +110,15 @@ test('skips votes with no voter id and voters who never gave a name', () => {
   expect(friends.map((friend) => friend.voterId)).toEqual(['uid-ana']);
 });
 
+test('voters whose names were cleared (deleted accounts) are left out, never merged into one row', () => {
+  const friends = friendStats([
+    settled('s1', 2, [me('a'), pick('uid-gone1', '', 'b'), pick('uid-gone2', '  ', 'b'), pick('uid-ana', 'Ana', 'b')]),
+    settled('s2', 1, [me('a'), pick('uid-gone1', '', 'a'), pick('uid-gone2', '', 'b')], 'b'),
+  ], 'uid-me');
+  expect(friends.map((friend) => friend.voterId)).toEqual(['uid-ana']);
+  expect(friends[0]).toMatchObject({ name: 'Ana', betsTogether: 1, wins: 1 });
+});
+
 test('one vote per voter per bet, the last recorded', () => {
   const [ana] = friendStats([settled('s1', 1, [pick('uid-ana', 'Ana', 'b'), pick('uid-ana', 'Ana', 'a'), me('a')])], 'uid-me');
   expect(ana).toMatchObject({ betsTogether: 1, wins: 0, losses: 0, none: 1 });

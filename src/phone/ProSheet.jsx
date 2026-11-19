@@ -5,13 +5,11 @@ import { createPortal } from 'react-dom';
 import { FiAward, FiRotateCcw, FiSlash, FiUsers, FiX, FiZap } from 'react-icons/fi';
 import { useModalBackground } from '../platform/modalBackground';
 import ProBadge from './ProBadge';
-import { requestMockPurchase } from './entitlementApi';
 import { badgeFor } from './entitlement';
 import { refreshEntitlement, useEntitlementState } from './useEntitlement';
 import {
   PRO_COPY,
   PRO_ROW,
-  proMockPurchaseEnabled,
   proPrivacyUrl,
   proTermsUrl,
 } from './proConfig';
@@ -29,13 +27,11 @@ export const RESTORE_MIN_BUSY_MS = 600;
 // row 1. onClose: the X, Maybe later, Escape or a tap on the scrim. onDone:
 // Back to my bets on the success screen.
 //
-// Only rendered with the paywall on (proPaywallEnabled). Buying only works
-// with NEXT_PUBLIC_PRO_MOCK_PURCHASE=1 (previews); otherwise the main button
-// is a disabled Coming soon. Restore purchase reads the entitlement again.
+// Only rendered with the paywall on (proPaywallEnabled). Nothing sells Pro
+// yet, so the main button is a disabled Coming soon until a real checkout
+// lands (docs/PRO.md). Restore purchase reads the entitlement again.
 export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone }) {
   const { entitlement, isPro } = useEntitlementState();
-  const purchasable = proMockPurchaseEnabled();
-  const [buying, setBuying] = useState(false);
   const [error, setError] = useState('');
   // '', 'busy' or 'nothing'.
   const [restore, setRestore] = useState('');
@@ -63,45 +59,27 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
     if (mounted) dialogRef.current?.focus();
   }, [mounted]);
 
-  const close = () => {
-    if (!buying) onClose?.();
-  };
+  const close = () => onClose?.();
 
   useEffect(() => {
     if (!mounted) return undefined;
     const onKey = (event) => {
-      if (event.key === 'Escape' && !buying) onClose?.();
+      if (event.key === 'Escape') onClose?.();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [mounted, buying, onClose]);
+  }, [mounted, onClose]);
 
   if (!mounted) return null;
 
   // A plan that loads later as Pro swaps in the success screen.
   const success = isPro || restored;
 
-  const buy = async () => {
-    if (buying || !purchasable) return;
-    setBuying(true);
-    setError('');
-    setRestore('');
-    try {
-      await requestMockPurchase('pro');
-      // Read the new plan now rather than wait for the listener.
-      await refreshEntitlement().catch(() => false);
-    } catch {
-      if (live.current) setError(PRO_COPY.error);
-    } finally {
-      if (live.current) setBuying(false);
-    }
-  };
-
   // Restoring… from the tap until the answer; Nothing to restore and the
   // error wait out RESTORE_MIN_BUSY_MS. A restored plan swaps in the success
   // screen at once.
   const runRestore = async () => {
-    if (restore === 'busy' || buying) return;
+    if (restore === 'busy') return;
     setRestore('busy');
     setError('');
     const started = Date.now();
@@ -127,16 +105,12 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
   const badge = badgeFor(entitlement) || { kind: 'pro' };
   const successLine = restored ? PRO_COPY.restored : PRO_COPY.owned;
 
-  let mainLabel = PRO_COPY.getPro;
-  if (buying) mainLabel = PRO_COPY.buying;
-  if (!purchasable) mainLabel = PRO_COPY.comingSoon;
-
   const links = [
     <button
       key="restore"
       type="button"
       className="pro-sheet-link"
-      disabled={restore === 'busy' || buying}
+      disabled={restore === 'busy'}
       aria-busy={restore === 'busy' || undefined}
       onClick={runRestore}
     >
@@ -174,7 +148,6 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
           type="button"
           className="overlay-close pro-sheet-close"
           aria-label="Close"
-          disabled={buying}
           onClick={close}
         >
           <FiX size={22} aria-hidden="true" />
@@ -245,16 +218,10 @@ export default function ProSheet({ highlight = PRO_ROW.noAds, onClose, onDone })
                   {PRO_COPY.nothingToRestore}
                 </p>
               )}
-              <button
-                type="button"
-                className="cta press pro-sheet-main"
-                disabled={!purchasable || buying}
-                aria-busy={buying || undefined}
-                onClick={buy}
-              >
-                {mainLabel}
+              <button type="button" className="cta press pro-sheet-main" disabled>
+                {PRO_COPY.comingSoon}
               </button>
-              <button type="button" className="pro-sheet-later" disabled={buying} onClick={close}>
+              <button type="button" className="pro-sheet-later" onClick={close}>
                 {PRO_COPY.later}
               </button>
             </div>
