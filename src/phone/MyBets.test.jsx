@@ -4,7 +4,6 @@ import { DELETE_WAIT_MS, MyBetsList, __resetDeletedBetsForTests } from './MyBets
 import { deleteBet, subscribeMyBets } from './api';
 import { signOutCreator } from './creatorAuth';
 import { PHONE_OFFLINE_ERROR } from './creatorSession';
-import { signOutCreator } from './creatorAuth';
 import { clearLocalAccountData, deleteAccount, markDeleteAccountResume, RESUME_KEY } from './accountApi';
 import { useEntitlementState } from './useEntitlement';
 import { navigation } from 'next/navigation';
