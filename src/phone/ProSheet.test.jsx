@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import Paywall from './Paywall';
 import ProSheet, { RESTORE_MIN_BUSY_MS } from './ProSheet';
 import EntitlementSync from './EntitlementSync';
-import { fetchEntitlement, requestMockPurchase, subscribeEntitlement } from './entitlementApi';
+import { fetchEntitlement, subscribeEntitlement } from './entitlementApi';
 import { __resetEntitlementForTests } from './useEntitlement';
 import { isPro as adServiceIsPro } from '../ads/pro';
 import { navigation } from 'next/navigation';
@@ -26,7 +26,6 @@ const SPEC = {
   proPrice: '$3/mo',
   proNote: 'Billed monthly. Cancel anytime.',
   getPro: 'Get Pro',
-  buying: 'Getting you set…',
   comingSoon: 'Coming soon',
   later: 'Maybe later',
   finePrint: 'Pro renews at $3/mo until you cancel in Settings.',
@@ -48,7 +47,7 @@ jest.mock('./identity', () => {
   return { useIdentity: () => jack, useSignedInUser: () => jack };
 });
 
-const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE', 'NEXT_PUBLIC_TERMS_URL', 'NEXT_PUBLIC_PRIVACY_URL'];
+const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_TERMS_URL', 'NEXT_PUBLIC_PRIVACY_URL'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
 let emitPlan;
 
@@ -62,8 +61,6 @@ beforeEach(() => {
   });
   fetchEntitlement.mockReset();
   fetchEntitlement.mockResolvedValue(null);
-  requestMockPurchase.mockReset();
-  requestMockPurchase.mockResolvedValue({ ok: true, plan: 'pro' });
   navigation.back.mockReset();
   navigation.push.mockReset();
   FLAGS.forEach((flag) => delete process.env[flag]);
@@ -189,84 +186,29 @@ describe('the sheet', () => {
     expect(dialog().querySelectorAll('input, label, .pro-plan, .pro-plans')).toHaveLength(0);
   });
 
-  test('nothing to load: no skeleton, and Get Pro is ready as soon as the sheet shows', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
+  test('nothing to load: no skeleton, and the main button is a disabled Coming soon at once', async () => {
     await openSheet();
     expect(document.querySelector('.pro-skeleton, .is-loading, [aria-busy]')).toBeNull();
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    expect(main()).toBeEnabled();
-    await userEvent.click(main());
-    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
-  });
-
-  test('purchases off: the main button is a disabled Coming soon and buys nothing', async () => {
-    await openSheet();
     expect(main()).toHaveTextContent(SPEC.comingSoon);
     expect(main()).toBeDisabled();
-    await userEvent.click(main());
-    expect(requestMockPurchase).not.toHaveBeenCalled();
   });
 
-  test('buying: Getting you set…, with the X disabled; then the success screen', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    let finish;
-    requestMockPurchase.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-    const { onClose } = await openSheet();
-    await userEvent.click(main());
-    expect(requestMockPurchase).toHaveBeenCalledWith('pro');
-    expect(main()).toHaveTextContent(SPEC.buying);
-    expect(main()).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled();
-    await userEvent.keyboard('{Escape}');
-    expect(onClose).not.toHaveBeenCalled();
-
-    fetchEntitlement.mockResolvedValue({ plan: 'pro', expiresAt: null });
-    await act(async () => finish({ ok: true, plan: 'pro' }));
-    expect(screen.getByRole('heading', { name: SPEC.owned })).toBeInTheDocument();
-  });
-
-  test('buying blocks the X, Maybe later, Escape and the scrim; a failure re-enables all four', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    let fail;
-    requestMockPurchase.mockReturnValue(new Promise((_resolve, reject) => { fail = reject; }));
-    const { onClose } = await openSheet();
-    await userEvent.click(main());
-    expect(main()).toHaveTextContent(SPEC.buying);
-    const x = screen.getByRole('button', { name: 'Close' });
-    const later = screen.getByRole('button', { name: SPEC.later });
-    expect(x).toBeDisabled();
-    expect(later).toBeDisabled();
-    await userEvent.click(x);
-    await userEvent.click(later);
-    await userEvent.keyboard('{Escape}');
-    await userEvent.click(document.querySelector('.pro-sheet-scrim'));
-    expect(onClose).not.toHaveBeenCalled();
-
-    await act(async () => fail(new Error('nope')));
-    expect(screen.getByRole('alert')).toHaveTextContent(SPEC.error);
-    expect(x).toBeEnabled();
-    expect(later).toBeEnabled();
-    await userEvent.click(x);
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await userEvent.click(later);
-    expect(onClose).toHaveBeenCalledTimes(2);
-    await userEvent.keyboard('{Escape}');
-    expect(onClose).toHaveBeenCalledTimes(3);
-    await userEvent.click(document.querySelector('.pro-sheet-scrim'));
-    expect(onClose).toHaveBeenCalledTimes(4);
-  });
-
-  test('a failed purchase: the red error above the button, and the button resets', async () => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-    requestMockPurchase.mockRejectedValue(new Error('nope'));
-    await openSheet();
-    await userEvent.click(main());
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(SPEC.error);
-    expect(alert).toHaveClass('form-error');
-    expect(alert.nextElementSibling).toBe(main());
-    expect(main()).toHaveTextContent(SPEC.getPro);
-    expect(main()).toBeEnabled();
+  test('nothing sells Pro yet: no Get Pro, and a tap on Coming soon calls nothing', async () => {
+    global.fetch = jest.fn();
+    try {
+      const { onClose, onDone } = await openSheet();
+      expect(within(dialog()).queryByRole('button', { name: SPEC.getPro })).toBeNull();
+      expect(dialog().textContent).not.toContain(SPEC.getPro);
+      await userEvent.click(main());
+      expect(fetch).not.toHaveBeenCalled();
+      expect(fetchEntitlement).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onDone).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(main()).toHaveTextContent(SPEC.comingSoon);
+    } finally {
+      delete global.fetch;
+    }
   });
 
   test('the X, Maybe later and Escape close it', async () => {

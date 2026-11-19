@@ -771,7 +771,29 @@ test('a tally opened from My bets backs out to My bets, and Home from Create unw
   await page.getByRole('button', { name: /Money Line/ }).click();
   await expect(page).toHaveURL(/\/new#step-2$/);
   expect(await appIndex(page)).toBe(2);
-  await page.locator('.create-pane:not(.is-leaving)').getByRole('link', { name: /friendly/i }).first().click();
+  const createHome = page.locator('.create-pane:not(.is-leaving)').getByRole('link', { name: 'Home', exact: true });
+  const homeColors = await createHome.evaluate((el) => {
+    const root = getComputedStyle(document.documentElement);
+    const probe = (value) => {
+      const span = document.createElement('span');
+      span.style.color = value;
+      document.body.appendChild(span);
+      const color = getComputedStyle(span).color;
+      span.remove();
+      return color;
+    };
+    return {
+      link: getComputedStyle(el).color,
+      icon: getComputedStyle(el.querySelector('svg')).color,
+      ink: probe(root.getPropertyValue('--ink').trim()),
+      accent: probe(root.getPropertyValue('--accent').trim()),
+    };
+  });
+  expect(homeColors.ink).toBe('rgb(32, 59, 46)');
+  expect(homeColors.link).toBe(homeColors.ink);
+  expect(homeColors.icon).toBe(homeColors.ink);
+  expect(homeColors.link).not.toBe(homeColors.accent);
+  await createHome.click();
   await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
   await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
   expect(await appIndex(page)).toBe(0);
@@ -841,8 +863,7 @@ async function mockEntitlement(page, { plan = null } = {}) {
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(uid === 'jack' ? plan : null); return () => {}; };
-      export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);
-      export const requestMockPurchase = async () => ({ ok: true });`,
+      export const fetchEntitlement = async (uid) => (uid === 'jack' ? plan : null);`,
   }));
 }
 

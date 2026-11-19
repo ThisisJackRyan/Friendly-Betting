@@ -1,4 +1,4 @@
-import { FiArrowUpRight, FiCheck, FiFlag, FiUsers } from 'react-icons/fi';
+import { FiFlag, FiUsers } from 'react-icons/fi';
 import { createStepOrder } from './creatorSession';
 import { tallyCounts } from './model';
 
@@ -17,7 +17,7 @@ export function Brand({ className = '' }) {
   );
 }
 
-export function PageIntro({ eyebrow, title, children, icon: Icon }) {
+export function PageIntro({ title, children, icon: Icon }) {
   return (
     <div className="page-intro">
       {Icon && (
@@ -25,7 +25,6 @@ export function PageIntro({ eyebrow, title, children, icon: Icon }) {
           <Icon size={24} aria-hidden="true" />
         </span>
       )}
-      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h2>{title}</h2>
       {children && <p className="intro-copy">{children}</p>}
     </div>
@@ -46,7 +45,6 @@ export function FlowProgress({ step = 1, user }) {
   return (
     <div className="flow-progress" aria-label="Create a bet progress">
       <div className="flow-progress-copy">
-        <span>MAKE IT FRIENDLY</span>
         <span>
           Step {current + 1} of {steps.length}
         </span>
@@ -94,16 +92,8 @@ export function ExampleBet() {
         ✳
       </span>
       <div className="example-ticket">
-        <div className="ticket-top">
-          <span>
-            <span className="live-dot" />
-            THE GROUP CHAT HAS SPOKEN
-          </span>
-          <FiArrowUpRight size={18} aria-hidden="true" />
-        </div>
         <div className="ticket-body">
           <div className="ticket-label">
-            <span>WEEKEND PLANS</span>
             <span>Example bet</span>
           </div>
           <h2>
@@ -132,14 +122,8 @@ export function ExampleBet() {
             <i>J</i>
             <i>M</i>
           </span>
-          <span>A little more on the line.</span>
+          <span className="ticket-footer-copy">A little more on the line.</span>
         </div>
-      </div>
-      <div className="scene-note">
-        <span>
-          <FiCheck size={16} aria-hidden="true" />
-        </span>
-        Bragging rights, secured.
       </div>
     </div>
   );

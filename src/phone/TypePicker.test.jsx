@@ -70,3 +70,14 @@ test('visibleEarlyTypes gates on both, and defaults to the shipped empty list', 
   act(() => { delete process.env.NEXT_PUBLIC_PRO_EARLY_TYPES; });
   expect(visibleEarlyTypes({ isPro: true, earlyTypes: FAKE })).toEqual([]);
 });
+
+test('standalone picker: New bet heading, no Friendly wordmark above it', () => {
+  asMember(null);
+  render(<TypePicker />);
+  const title = screen.getByRole('heading', { name: 'New bet' });
+  expect(title).toHaveClass('screen-title');
+  expect(title.previousElementSibling).toBeNull();
+  expect(document.querySelector('.wordmark')).toBeNull();
+  expect(screen.queryByText(/friendly/i)).not.toBeInTheDocument();
+  expect(document.title).toBe('New bet · Friendly');
+});
