@@ -15,8 +15,13 @@ export const PUSH_COPY = Object.freeze({
 });
 
 // Notification bodies. Every title is the bet question, so they group by bet;
-// only the body changes. Pick and closing-soon bodies land with their send PRs.
+// only the body changes. The closing-soon bodies land with their send PR.
 export const PUSH_NOTIFICATION_COPY = Object.freeze({
+  // To the creator, on a friend's first pick. {name} is the voter's cleaned
+  // name, {side} the picked option's vote label.
+  firstPickNamed: (name, side) => `${name} picked ${side}.`,
+  // Same, when the voter left no name.
+  firstPickUnnamed: (side) => `A friend picked ${side}.`,
   // To voters, after the undo window. {side} is the winning option's vote label.
   settled: (side) => `${side} won. See who called it.`,
   // To voters with a pick, right away.

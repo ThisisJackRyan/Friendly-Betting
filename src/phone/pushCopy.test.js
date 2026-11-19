@@ -35,6 +35,12 @@ test('settle and call-off bodies are the UX copy, verbatim', () => {
   expect(PUSH_NOTIFICATION_COPY.calledOff).toBe('This bet was called off. Nobody won this one.');
 });
 
+test('first-pick bodies are the UX copy, verbatim', () => {
+  expect(PUSH_NOTIFICATION_COPY.firstPickNamed('Sam', 'Over')).toBe('Sam picked Over.');
+  expect(PUSH_NOTIFICATION_COPY.firstPickNamed('Jack\u2019s mom', 'Over 7.5')).toBe('Jack\u2019s mom picked Over 7.5.');
+  expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Under')).toBe('A friend picked Under.');
+  expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Jack\u2019s team')).toBe('A friend picked Jack\u2019s team.');
+});
 test('the Android channel name and description are the UX copy, verbatim', () => {
   expect(PUSH_CHANNEL_COPY).toEqual({
     name: 'Bet updates',
@@ -43,7 +49,13 @@ test('the Android channel name and description are the UX copy, verbatim', () =>
 });
 
 test('notification and channel copy: no em dashes, emoji, placeholders or money language', () => {
-  const all = [PUSH_NOTIFICATION_COPY.settled('Over'), PUSH_NOTIFICATION_COPY.calledOff, ...Object.values(PUSH_CHANNEL_COPY)].join('\n');
+  const all = [
+    PUSH_NOTIFICATION_COPY.settled('Over'),
+    PUSH_NOTIFICATION_COPY.calledOff,
+    PUSH_NOTIFICATION_COPY.firstPickNamed('Sam', 'Over'),
+    PUSH_NOTIFICATION_COPY.firstPickUnnamed('Over'),
+    ...Object.values(PUSH_CHANNEL_COPY),
+  ].join('\n');
   expect(all).not.toMatch(/'/);
   expect(all).not.toMatch(/\u2014|\u2013/);
   expect(all).not.toMatch(/\p{Extended_Pictographic}/u);
