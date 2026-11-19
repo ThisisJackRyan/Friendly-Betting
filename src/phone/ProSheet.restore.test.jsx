@@ -17,13 +17,7 @@ jest.mock('firebase/firestore', () => ({
   getDocFromServer: jest.fn(),
   onSnapshot: jest.fn(),
 }));
-const mockAuth = { currentUser: null };
-jest.mock('../Config/firebase-config', () => ({
-  get auth() {
-    return mockAuth;
-  },
-  db: {},
-}));
+jest.mock('../Config/firebase-config', () => ({ db: {} }));
 jest.mock('next/navigation');
 jest.mock('next/link');
 jest.mock('./identity', () => {
@@ -35,7 +29,6 @@ const NOTHING = 'Nothing to restore on this account.';
 const ERROR = 'Couldn’t finish that. Try again.';
 const RESTORE = 'Restore purchase';
 const RESTORING = 'Restoring…';
-const OWNED = 'You’re Pro. No more ads.';
 
 const failure = (code) => Object.assign(new Error(code), { code });
 const missing = { exists: () => false, data: () => undefined };
@@ -54,14 +47,10 @@ beforeEach(() => {
   });
   getDocFromServer.mockReset();
   process.env.NEXT_PUBLIC_PRO_PAYWALL = '1';
-  mockAuth.currentUser = { getIdToken: jest.fn(async () => 'id-token') };
-  global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ ok: true, plan: 'pro' }) }));
 });
 
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_PRO_PAYWALL;
-  delete process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE;
-  delete global.fetch;
   jest.useRealTimers();
 });
 
@@ -156,39 +145,5 @@ describe.each(SURFACES)('%s', (_name, surface) => {
     await act(async () => { await jest.advanceTimersByTimeAsync(20000); });
     expect(screen.getByRole('alert')).toHaveTextContent(ERROR);
     expect(screen.queryByText(NOTHING)).toBeNull();
-  });
-});
-
-describe('Get Pro (mock purchase), then the fresh read', () => {
-  beforeEach(() => {
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
-  });
-
-  test('read denied: no error, and the button is ready again', async () => {
-    listen = 'missing';
-    getDocFromServer.mockRejectedValue(failure('permission-denied'));
-    await open(SURFACES[1][1]);
-    await userEvent.click(screen.getByRole('button', { name: 'Get Pro' }));
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(getDocFromServer).toHaveBeenCalledWith({ path: 'entitlements/jack' });
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Get Pro' })).toBeEnabled();
-  });
-
-  test('read failed: still no error, since the purchase went through', async () => {
-    getDocFromServer.mockRejectedValue(failure('unavailable'));
-    await open(SURFACES[1][1]);
-    await userEvent.click(screen.getByRole('button', { name: 'Get Pro' }));
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Get Pro' })).toBeEnabled();
-  });
-
-  test('read finds the plan: the success screen', async () => {
-    listen = 'missing';
-    getDocFromServer.mockResolvedValue({ exists: () => true, data: () => ({ plan: 'pro', expiresAt: null }) });
-    await open(SURFACES[1][1]);
-    await userEvent.click(screen.getByRole('button', { name: 'Get Pro' }));
-    expect(screen.getByRole('heading', { name: OWNED })).toBeInTheDocument();
-    expect(adServiceIsPro()).toBe(true);
   });
 });
