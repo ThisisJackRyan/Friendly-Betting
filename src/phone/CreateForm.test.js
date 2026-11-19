@@ -322,6 +322,75 @@ test('a failed save stays on the stake step with the error and can try again', a
   expect(saveBet).toHaveBeenCalledTimes(2);
 });
 
+test.each([
+  ['Firestore unavailable', { code: 'unavailable', message: 'Connection failed.' }],
+  ['offline', { code: 'offline', message: 'You are offline.' }],
+  ['timed out', { code: 'timeout', message: 'Couldn’t save this bet. Try again.' }],
+])('%s: the generic save line, the text kept, and the same button saves again', async (_name, failure) => {
+  saveBet.mockRejectedValueOnce(Object.assign(new Error(failure.message), { code: failure.code }));
+  renderForm('/new/money-line');
+  await goToStake('Who is late');
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByRole('button', { name: /^(Go Pro|Try again)$/ })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+  expect(saveBet).toHaveBeenCalledTimes(2);
+  expect(saveBet.mock.calls[1]).toEqual(saveBet.mock.calls[0]);
+});
+
+describe('a save the server refuses', () => {
+  const coded = (code) => Object.assign(new Error('Couldn’t save this bet. Try again.'), { code });
+
+  test('pro-required: the Pro line, and Go Pro opens the Pro sheet on row 3', async () => {
+    saveBet.mockRejectedValueOnce(coded('pro-required'));
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Your Pro ended, so Run it back is locked\.$/);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Go Pro' }));
+    expect(screen.getByRole('dialog', { name: 'All the bets. None of the\u00A0ads.' })).toBeInTheDocument();
+    const highlighted = Array.from(document.querySelectorAll('.pro-benefits li.is-highlighted')).map((li) => li.textContent);
+    expect(highlighted).toEqual(['Run it back in one tap']);
+    expect(saveBet).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).not.toHaveBeenCalledWith('/t/abc123');
+  });
+
+  test('not-configured: the check-Pro line, and Try again saves again', async () => {
+    saveBet.mockRejectedValueOnce(coded('not-configured'));
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Couldn’t check Pro right now\. Try again in a bit\.$/);
+    expect(screen.queryByRole('button', { name: 'Go Pro' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/t/abc123'));
+    expect(saveBet).toHaveBeenCalledTimes(2);
+    expect(saveBet.mock.calls[1]).toEqual(saveBet.mock.calls[0]);
+  });
+
+  test('anything else: the generic line with no extra button', async () => {
+    saveBet.mockRejectedValueOnce({ code: 'server' });
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+    expect(screen.queryByRole('button', { name: /^(Go Pro|Try again)$/ })).toBeNull();
+  });
+
+  test('a draft error after a refused save drops its button', async () => {
+    saveBet.mockRejectedValueOnce(coded('not-configured'));
+    renderForm('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/^stake$/i), 'x');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+});
+
 describe('the draft survives fast typing and taps', () => {
   const activePane = () => document.querySelector('.create-pane:not(.is-leaving)');
   const activeQuestion = () => activePane().querySelector('#question');
