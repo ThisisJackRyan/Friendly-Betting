@@ -3888,4 +3888,3 @@ html[data-arrive='home'] .landing-body.screen-fade {
 @media (prefers-reduced-motion: reduce) {
   .push-switch, .push-switch-thumb { transition: none; }
 }
-}
