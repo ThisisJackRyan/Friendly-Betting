@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
@@ -1054,6 +1054,21 @@ describe('adding or editing a name after picking', () => {
     expect(edit).toHaveAccessibleName('Edit your name, currently John');
     expect(edit).toHaveTextContent(NAME_EDIT_COPY.edit);
     expect(edit).toHaveFocus();
+  });
+
+  // Autofill and some mobile blur commits can put a name in the input
+  // without React onChange updating `name` before the pick is tapped.
+  // choose() reads the input itself, so the pick still carries the name.
+  test('a name already in the field goes out with the pick even if React has not seen the change yet', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const field = await screen.findByLabelText(/your name/i);
+    await userEvent.clear(field);
+    field.value = 'Alex';
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    });
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'Alex', optionId: 'a' });
+    expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Alex') })).toBeInTheDocument();
   });
 
   test('both name inputs stop at 30 characters', async () => {
