@@ -203,11 +203,12 @@ test('a double tap makes one bet', async () => {
   expect(navigation.push).toHaveBeenCalledTimes(1);
 });
 
-test('a failed save shows Create’s error and lets the creator try again', async () => {
+test('a failed save shows the shared fallback and lets the creator try again', async () => {
   saveBet.mockRejectedValueOnce({});
   await renderTally(creator);
   await userEvent.click(runItBack());
-  expect(screen.getByRole('alert')).toHaveTextContent('Could not save this bet.');
+  expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByRole('button', { name: /^(Go Pro|Try again)$/ })).toBeNull();
   expect(runItBack()).toBeEnabled();
   expect(runItBack()).toHaveTextContent('Run it back');
   expect(navigation.push).not.toHaveBeenCalled();
@@ -222,6 +223,20 @@ test('a failed save shows Create’s error and lets the creator try again', asyn
   saveBet.mockResolvedValueOnce('new456');
   await userEvent.click(runItBack());
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(navigation.push).toHaveBeenCalledWith('/t/new456');
+});
+
+test('offline or a dropped network shows the shared fallback, never the raw message, and retries', async () => {
+  // Firestore's own error when the network is gone.
+  saveBet.mockRejectedValueOnce(Object.assign(new Error('Connection failed.'), { code: 'unavailable' }));
+  await renderTally(creator);
+  await userEvent.click(runItBack());
+  expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t save this bet\. Try again\.$/);
+  expect(screen.queryByText(/Connection failed|offline/i)).toBeNull();
+  expect(runItBack()).toBeEnabled();
+
+  saveBet.mockResolvedValueOnce('new456');
+  await userEvent.click(runItBack());
   expect(navigation.push).toHaveBeenCalledWith('/t/new456');
 });
 
