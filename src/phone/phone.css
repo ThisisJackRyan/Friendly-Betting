@@ -765,46 +765,53 @@ body {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding: 48px 0 64px;
-}
-
-.friendly-load-mark {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #007a45;
+  padding: 8px 0 64px;
 }
 
 .friendly-load-bars {
-  width: 168px;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.friendly-load-bar {
+.friendly-load-title,
+.friendly-load-bar,
+.friendly-load-card {
   display: block;
-  height: 12px;
-  width: 100%;
-  border-radius: 999px;
-  background: #9dc9a4;
+  background: #e6e4e1;
   opacity: 1;
   animation: friendly-load-pulse 1.4s ease-in-out infinite;
 }
 
-.friendly-load-bar:nth-child(2) {
-  width: 74%;
+.friendly-load-title {
+  height: 28px;
+  width: 56%;
+  margin-bottom: 10px;
+  border-radius: 8px;
+}
+
+.friendly-load-bar {
+  height: 12px;
+  width: 100%;
+  border-radius: 999px;
   animation-delay: 0.18s;
 }
 
 .friendly-load-bar:nth-child(3) {
-  width: 48%;
+  width: 82%;
+}
+
+.friendly-load-bar:nth-child(4) {
+  width: 64%;
+}
+
+.friendly-load-card {
+  height: 96px;
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 16px;
   animation-delay: 0.36s;
 }
 
@@ -2428,9 +2435,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   padding: 0 22px;
   width: fit-content;
 }
-.friendly-load-mark {
-  font-family: inherit;
-}
 
 @media (min-width: 768px) {
   .app-shell {
@@ -3084,7 +3088,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .press,
   .nav-home,
   .bar-fill,
+  .friendly-load-title,
   .friendly-load-bar,
+  .friendly-load-card,
   .cta,
   .type-card,
   .bet-card,
