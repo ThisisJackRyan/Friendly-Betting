@@ -14,6 +14,7 @@ import { renderWinnerCard } from './winnerCardImage';
 import { saveResultText } from './resultTexts';
 import { RESULT_TEXT_COPY } from './resultTextCopy';
 import { PHONE_INVALID_ERROR, PHONE_OFFLINE_ERROR, phoneError } from './creatorSession';
+import { CACHE_MISS_GRACE_MS } from './useLiveBet';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -1276,5 +1277,99 @@ describe('adding or editing a name after picking', () => {
     renderAt('/b/abc123', <VoteScreen />);
     await screen.findByRole('heading', { name: 'Who is late' });
     expect(screen.queryByRole('button', { name: /name/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('a friend’s cold first load', () => {
+  let feeds;
+  const latest = () => feeds[feeds.length - 1];
+  const send = (bet, err, meta) => act(() => {
+    latest().onChange(bet, err, meta);
+  });
+  const wait = (ms) => act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+  const cacheMiss = { fromCache: true };
+  const server = { fromCache: false };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    feeds = [];
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      return feed.unsubscribe;
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+  });
+
+  afterEach(() => {
+    cleanup();
+    jest.useRealTimers();
+  });
+
+  test('a slow first load that answers inside the grace window shows the bet, not the error', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS - 1);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
+    expect(feeds).toHaveLength(1);
+  });
+
+  test('a first load that times out is retried once silently, then shows the bet', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS);
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a first load that errors is retried once silently, then shows the bet', () => {
+    wait(450);
+    send(undefined, Object.assign(new Error('unavailable'), { code: 'unavailable' }));
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a bet the server says is missing still shows not-found right away', () => {
+    wait(450);
+    send(null, undefined, cacheMiss);
+    send(null, undefined, server);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(feeds).toHaveLength(1);
+  });
+
+  test('a load that keeps failing still ends in the existing error', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS);
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS - 1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    wait(1);
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not open this bet.');
+  });
+
+  test('two errors in a row still end in the existing error', () => {
+    wait(450);
+    send(undefined, new Error('unavailable'));
+    send(undefined, new Error('unavailable'));
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not open this bet.');
   });
 });

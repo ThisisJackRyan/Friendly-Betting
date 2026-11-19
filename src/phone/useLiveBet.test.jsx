@@ -129,37 +129,130 @@ test('a first-load cache miss then a server miss is gone, not a load failure', (
   expect(result.current.failed).toBe(false);
 });
 
-test('a first-load cache miss is a load failure once the grace period runs out', () => {
+test('a first-load cache miss is a load failure once the grace period runs out twice', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));
   act(() => feeds[0].onChange(null, undefined, cacheMiss));
   act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS - 1));
   expect(result.current.bet).toBeUndefined();
   expect(result.current.failed).toBe(false);
+  // The first deadline opens one fresh listener, silently.
   act(() => jest.advanceTimersByTime(1));
+  expect(feeds).toHaveLength(2);
+  expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+  act(() => feeds[1].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS - 1));
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+  act(() => jest.advanceTimersByTime(1));
+  expect(feeds).toHaveLength(2);
   expect(result.current.bet).toBeNull();
   expect(result.current.failed).toBe(true);
-  act(() => feeds[0].onChange(null, undefined, serverMiss));
+  act(() => feeds[1].onChange(null, undefined, serverMiss));
   expect(result.current.bet).toBeNull();
   expect(result.current.failed).toBe(false);
 });
 
-test('a first-load snapshot error fails right away, without the grace period', () => {
+test('a first-load cache miss whose retry never answers still fails at the deadline', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS));
+  expect(feeds).toHaveLength(2);
+  expect(result.current.failed).toBe(false);
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(true);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('a slow cold load that answers inside the longer grace window shows the bet', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  // Past the old 1500ms window, still loading.
+  act(() => jest.advanceTimersByTime(3000));
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, serverMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+  expect(feeds).toHaveLength(1);
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test('a cache miss that outlasts the grace window is retried once, and the retry shows the bet', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS));
+  expect(feeds).toHaveLength(2);
+  act(() => feeds[1].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS - 1));
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, serverMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS * 2));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+});
+
+test('a first-load snapshot error is retried once silently, and the retry shows the bet', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(undefined, new Error('unavailable')));
+  expect(feeds).toHaveLength(2);
+  expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, serverMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS * 2));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  expect(result.current.failed).toBe(false);
+});
+
+test('a first-load snapshot error twice is a load failure', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));
   act(() => feeds[0].onChange(undefined, new Error('permission-denied')));
+  act(() => feeds[1].onChange(undefined, new Error('permission-denied')));
+  expect(feeds).toHaveLength(2);
   expect(result.current.bet).toBeNull();
   expect(result.current.failed).toBe(true);
 });
 
-test('a snapshot error during the grace period fails right away', () => {
+test('a snapshot error during the grace period retries, and a second error fails', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));
   act(() => feeds[0].onChange(null, undefined, cacheMiss));
   expect(result.current.failed).toBe(false);
   act(() => feeds[0].onChange(undefined, new Error('unavailable')));
+  expect(feeds).toHaveLength(2);
+  expect(result.current.bet).toBeUndefined();
+  expect(result.current.failed).toBe(false);
+  act(() => feeds[1].onChange(undefined, new Error('unavailable')));
   expect(result.current.bet).toBeNull();
   expect(result.current.failed).toBe(true);
+});
+
+test('a listener that errors synchronously is closed when the retry replaces it', () => {
+  subscribeBet.mockImplementation((code, onChange) => {
+    const feed = { code, onChange, unsubscribe: jest.fn() };
+    feeds.push(feed);
+    if (feeds.length === 1) onChange(undefined, new Error('unavailable'));
+    return feed.unsubscribe;
+  });
+  const { result, unmount } = renderHook(() => useLiveBet('aaa111'));
+  expect(feeds).toHaveLength(2);
+  expect(feeds[0].unsubscribe).toHaveBeenCalledTimes(1);
+  expect(feeds[1].unsubscribe).not.toHaveBeenCalled();
+  expect(result.current.failed).toBe(false);
+  unmount();
+  expect(feeds[1].unsubscribe).toHaveBeenCalledTimes(1);
 });
 
 test('a cache miss after a loaded bet is ignored, and a server miss then shows gone', () => {
