@@ -118,8 +118,11 @@ test('my bets is a tab with an empty state', () => {
       </AppShell>,
     );
     const loader = screen.getByRole('status', { name: 'Loading' });
-    expect(within(loader).getByText('Friendly')).toHaveClass('friendly-load-mark');
-    expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+    expect(loader).toHaveTextContent(/^$/);
+    expect(within(loader).queryByText(/friendly/i)).not.toBeInTheDocument();
+    expect(loader.querySelector('.friendly-load-mark')).toBeNull();
+    expect(loader.querySelector('.friendly-load-title')).toBeInTheDocument();
+    expect(loader.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
     expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
     act(() => {
@@ -312,6 +315,6 @@ test('a vote link stays focused and does not render the app nav', () => {
   render(<VoteScreen />);
   expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
   expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
+  expect(screen.getByRole('status', { name: 'Loading' })).toHaveTextContent(/^$/);
   expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
 });
