@@ -9,7 +9,8 @@ import * as sendModule from '../../app/api/bets/[code]/result-texts/send/route';
 import { DELETE as deleteRoute } from '../../app/api/bets/[code]/route';
 import * as deleteModule from '../../app/api/bets/[code]/route';
 import * as pushTokensModule from '../../app/api/push/tokens/route';
-import * as betPushModule from '../../app/api/bets/[code]/push/route';import { fakeDb } from './testing/fakeDb';
+import * as betPushModule from '../../app/api/bets/[code]/push/route';
+import { fakeDb } from './testing/fakeDb';
 
 jest.mock('firebase-admin/app', () => ({}));
 jest.mock('firebase-admin/auth', () => ({}));
@@ -52,7 +53,8 @@ function save(body, { token, code = 'abc123' } = {}) {
 }
 
 test('all routes run on Node and are never cached', () => {
-  [saveModule, sendModule, deleteModule, pushTokensModule, betPushModule].forEach((route) => {    expect(route.runtime).toBe('nodejs');
+  [saveModule, sendModule, deleteModule, pushTokensModule, betPushModule].forEach((route) => {
+    expect(route.runtime).toBe('nodejs');
     expect(route.dynamic).toBe('force-dynamic');
   });
 });

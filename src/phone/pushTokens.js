@@ -4,7 +4,8 @@ import { apiUrl } from './resultTexts';
 
 // Push token plumbing (docs/PUSH.md). The opt-in sheet and the Notifications
 // row (pushOptIn.js) call it, only after the user says yes. None of it asks
-// for notification permission. Every function is a no-op on the web, when NEXT_PUBLIC_PUSH_ENABLED// is not 1, or without a real Firebase user (the local fallback uid cannot
+// for notification permission. Every function is a no-op on the web, when NEXT_PUBLIC_PUSH_ENABLED
+// is not 1, or without a real Firebase user (the local fallback uid cannot
 // register). Never log the token, the uid or a phone number.
 
 const DEVICE_ID_KEY = 'fb.pushDeviceId';
@@ -12,12 +13,14 @@ const ROUTE = '/api/push/tokens';
 
 let deviceIdPending = null;
 
-export function pushAvailable() {  return pushEnabled() && Capacitor.isNativePlatform();
+export function pushAvailable() {
+  return pushEnabled() && Capacitor.isNativePlatform();
 }
 
 // Only a signed-in Firebase user (anonymous counts) has an ID token. The
 // identity module's local fallback never reaches auth.currentUser.
-export async function firebaseUser() {  const { auth } = await import('../Config/firebase-config');
+export async function firebaseUser() {
+  const { auth } = await import('../Config/firebase-config');
   const user = auth?.currentUser;
   if (!user || user.isLocal || typeof user.getIdToken !== 'function') return null;
   return user;

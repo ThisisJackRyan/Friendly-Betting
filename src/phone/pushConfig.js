@@ -13,6 +13,7 @@ export function pushEnabled() {
 // its name and description are PUSH_CHANNEL_COPY in pushCopy.js. Never
 // rename it: Android keeps a channel's settings under its id.
 export const PUSH_CHANNEL_ID = 'bet_updates';
+
 export const PUSH_PLATFORMS = ['ios', 'android'];
 
 // Devices kept per uid; registering one more evicts the oldest updatedAt.
