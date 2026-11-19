@@ -44,6 +44,37 @@ const TOAST_MS = 4000;
 // the delete error. A delete that lands later still closes the dialog.
 export const DELETE_WAIT_MS = 15000;
 
+// Bets deleted this session. The live list can still emit a deleted bet for a
+// while (a stale snapshot, or a vote listener re-sending the last rows), and a
+// screen opened again starts from such a list, so these stay hidden. The set
+// belongs to one account: a different account (or none) starts it empty, so a
+// reused bet code never hides another account's bet.
+const deletedBets = new Set();
+let deletedBetsUid = null;
+
+function clearDeletedBets() {
+  deletedBets.clear();
+  deletedBetsUid = null;
+}
+
+// The deleted set for this account, emptied first if it belonged to another.
+function deletedBetsFor(uid) {
+  if (!uid) {
+    clearDeletedBets();
+    return deletedBets;
+  }
+  if (uid !== deletedBetsUid) {
+    deletedBets.clear();
+    deletedBetsUid = uid;
+  }
+  return deletedBets;
+}
+
+// Tests only.
+export function __resetDeletedBetsForTests() {
+  clearDeletedBets();
+}
+
 // The card's last line, from the creator's side as the reveal puts it: their
 // own win (alone or with others) is "You called it.", never "A friend won"
 // for their own unnamed pick.
@@ -67,6 +98,8 @@ export function MyBetsList({ user }) {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  // The bet taken off the list while its delete is in flight.
+  const [removing, setRemoving] = useState(null);
   const [toast, setToast] = useState('');
   const [proSheet, setProSheet] = useState(false);
   const deleteTrigger = useRef(null);
@@ -180,15 +213,21 @@ export function MyBetsList({ user }) {
 
   const confirmDelete = async () => {
     if (!deleting || deleteBusy) return;
+    const code = deleting;
     setDeleteBusy(true);
     setDeleteError('');
+    setRemoving(code);
     try {
-      await removeBet(deleting);
+      await removeBet(code);
+      deletedBetsFor(uid).add(code);
       if (!alive.current) return;
+      setRemoving(null);
       setDeleting(null);
       setToast('Bet deleted.');
     } catch (err) {
       if (!alive.current) return;
+      // Back in its place: the list order comes from the live rows.
+      setRemoving(null);
       const offline = err?.code === 'offline'
         || (typeof navigator !== 'undefined' && navigator.onLine === false);
       setDeleteError(offline ? PHONE_OFFLINE_ERROR : DELETE_ERROR);
@@ -198,20 +237,22 @@ export function MyBetsList({ user }) {
   };
 
   // The live list without the bet: the delete is on the server (deleteBet
-  // only commits on the server, with no local-only removal). It finishes a
-  // waiting delete, and closes the dialog if a failed or timed out delete
-  // landed after all. A failed list load proves nothing.
+  // only commits on the server). It finishes a waiting delete, and closes the
+  // dialog if a failed or timed out delete landed after all. A failed list
+  // load proves nothing. This reads the live rows, not the shown list, which
+  // hides the bet as soon as the delete is confirmed.
   useEffect(() => {
     if (!bets || error) return;
     const gone = (code) => !bets.some((bet) => bet.id === code);
     const wait = deleteWait.current;
     if (wait && gone(wait.code)) wait.done();
     if (deleting && !deleteBusy && deleteError && gone(deleting)) {
+      deletedBetsFor(uid).add(deleting);
       setDeleting(null);
       setDeleteError('');
       setToast('Bet deleted.');
     }
-  }, [bets, error, deleting, deleteBusy, deleteError]);
+  }, [bets, error, deleting, deleteBusy, deleteError, uid]);
 
   useEffect(() => {
     if (!uid) return undefined;
@@ -233,12 +274,20 @@ export function MyBetsList({ user }) {
     if (friendsLocked && filter === 'Friends') setFilter('All');
   }, [friendsLocked, filter]);
 
-  const friends = useMemo(() => friendStats(bets, uid), [bets, uid]);
-  const counts = { All: bets?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
-  (bets || []).forEach((bet) => {
+  const shown = useMemo(
+    () => {
+      if (!bets) return bets;
+      const deleted = deletedBetsFor(uid);
+      return bets.filter((bet) => bet.id !== removing && !deleted.has(bet.id));
+    },
+    [bets, removing, uid],
+  );
+  const friends = useMemo(() => friendStats(shown, uid), [shown, uid]);
+  const counts = { All: shown?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
+  (shown || []).forEach((bet) => {
     counts[statusLabel(bet)] += 1;
   });
-  const visible = (bets || []).filter(
+  const visible = (shown || []).filter(
     (bet) =>
       (filter === 'All' || statusLabel(bet) === filter) &&
       `${questionOf(bet)} ${typeLabelOf(bet)} ${bet.stake || ''}`
@@ -347,7 +396,7 @@ export function MyBetsList({ user }) {
               </div>
               {filter === 'Friends' ? (
                 <FriendsView friends={friends} />
-              ) : bets.length === 0 ? (
+              ) : shown.length === 0 ? (
                 <div className="empty bets-empty">
                   <span className="empty-mark" aria-hidden="true">
                     <FiPlus size={28} />
@@ -406,6 +455,9 @@ export function MyBetsList({ user }) {
                           <button
                             type="button"
                             className="bet-delete press"
+                            // A bet put back after a failed delete is a new
+                            // button; this keeps focus return pointed at it.
+                            ref={bet.id === deleting ? deleteTrigger : undefined}
                             aria-describedby={`bet-q-${bet.id}`}
                             onClick={(event) => openDelete(bet, event)}
                           >
@@ -429,6 +481,7 @@ export function MyBetsList({ user }) {
             type="button"
             className="logout-link"
             onClick={async () => {
+              clearDeletedBets();
               try {
                 await signOutCreator();
               } catch {

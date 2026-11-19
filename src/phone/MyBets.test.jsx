@@ -1,7 +1,8 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DELETE_WAIT_MS, MyBetsList } from './MyBets';
+import { DELETE_WAIT_MS, MyBetsList, __resetDeletedBetsForTests } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
+import { signOutCreator } from './creatorAuth';
 import { PHONE_OFFLINE_ERROR } from './creatorSession';
 import { signOutCreator } from './creatorAuth';
 import { clearLocalAccountData, deleteAccount, markDeleteAccountResume, RESUME_KEY } from './accountApi';
@@ -78,6 +79,7 @@ beforeEach(() => {
     return () => {};
   });
   deleteBet.mockReset();
+  __resetDeletedBetsForTests();
 });
 
 test('filters real bets by status, including expired bets, and preserves tally links', async () => {
@@ -357,6 +359,90 @@ describe('delete a bet', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+  });
+
+  describe('the list after a confirmed delete', () => {
+    const questions = () => [...document.querySelectorAll('.bet-card-question')].map((h) => h.textContent);
+    const allCount = () => within(screen.getByRole('group', { name: 'Filter bets by status' }))
+      .getByRole('button', { name: /^All/ }).textContent;
+
+    test('the bet leaves the list as soon as Delete bet is pressed', async () => {
+      deleteBet.mockImplementation(() => new Promise(() => {}));
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(questions()).toEqual(['Will Alex break 90?', 'Total points tonight?']);
+      expect(allCount()).toBe('All2');
+    });
+
+    test('a failed delete puts the bet back in its place with the existing error', async () => {
+      let fail;
+      deleteBet.mockImplementation(() => new Promise((_resolve, reject) => {
+        fail = reject;
+      }));
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      await act(async () => fail(Object.assign(new Error('Could not delete this bet.'), { code: 'server' })));
+      expect(questions()).toEqual(['Will Alex break 90?', 'Who wins game night?', 'Total points tonight?']);
+      expect(allCount()).toBe('All3');
+      expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(GENERIC);
+      expect(screen.getByRole('status')).toHaveTextContent('');
+      await userEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+      expect(deleteButtons()[1]).toHaveFocus();
+    });
+
+    test('a stale live list does not bring a deleted bet back, here or on coming back', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      // The listener re-sends its last rows (a vote change), still with the bet.
+      await act(async () => publishBets(bets.map((bet) => ({ ...bet }))));
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(allCount()).toBe('All2');
+      unmount();
+      // Back to My bets: the first list still has the deleted bet.
+      render(<MyBetsList user={user} />);
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(questions()).toEqual(['Will Alex break 90?', 'Total points tonight?']);
+    });
+
+    test('another account with the same bet code still sees its bet', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      unmount();
+      const other = { ...user, uid: 'other-creator' };
+      subscribeMyBets.mockImplementation((_uid, publish) => {
+        publish(bets.map((bet) => ({ ...bet, createdByID: 'other-creator' })));
+        return () => {};
+      });
+      render(<MyBetsList user={other} />);
+      expect(questions()).toEqual(['Will Alex break 90?', 'Who wins game night?', 'Total points tonight?']);
+      expect(allCount()).toBe('All3');
+    });
+
+    test('logging out forgets the deleted bets', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+      expect(signOutCreator).toHaveBeenCalled();
+      unmount();
+      // Same account again, with a list that still has the bet.
+      render(<MyBetsList user={user} />);
+      expect(screen.getByText('Who wins game night?')).toBeInTheDocument();
+      expect(allCount()).toBe('All3');
+    });
   });
 });
 
