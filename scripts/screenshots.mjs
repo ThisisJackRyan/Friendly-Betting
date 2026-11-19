@@ -222,7 +222,7 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
     contentType: 'application/javascript',
     body: `const plan = ${JSON.stringify(plan)};
       export const subscribeEntitlement = (uid, cb) => { cb(plan); return () => {}; };
-      export const requestMockPurchase = async () => ({ ok: true });`,
+      export const fetchEntitlement = async () => plan;`,
   }));
   if (paywall) {
     await page.route('**/src/phone/proConfig.js*', async (route) => {

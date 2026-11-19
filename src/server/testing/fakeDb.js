@@ -17,8 +17,27 @@ export function fakeDb(initial = {}) {
   };
   const children = (path) =>
     Array.from(store.keys()).filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'));
+  // A query's matching docs: a collection, optionally filtered with
+  // where(field, '==', value) and capped with limit(n).
+  const matches = (target) => {
+    const keys = children(target.path).filter((key) =>
+      (target.filters || []).every(([field, value]) => store.get(key)?.data?.[field] === value));
+    return target.max === undefined ? keys : keys.slice(0, target.max);
+  };
   // A query's "version" is its membership plus each member's version.
-  const queryVersion = (path) => children(path).map((key) => `${key}@${version(key)}`).join(',');
+  const queryVersion = (target) => matches(target).map((key) => `${key}@${version(key)}`).join(',');
+  function query(path, filters = [], max = undefined) {
+    const target = { path, query: true, filters, max };
+    return {
+      ...target,
+      where: (field, op, value) => {
+        if (op !== '==') throw new Error(`fakeDb supports only ==, not ${op}`);
+        return query(path, [...filters, [field, value]], max);
+      },
+      limit: (n) => query(path, filters, n),
+      get: async () => ({ docs: matches(target).map(snap) }),
+    };
+  }
   function ref(path) {
     return {
       path,
@@ -40,17 +59,17 @@ export function fakeDb(initial = {}) {
     data: (path) => clone(store.get(path)?.data),
     paths: (prefix) => Array.from(store.keys()).filter((key) => key.startsWith(prefix)),
     doc: ref,
-    collection: (path) => ({ path, query: true, get: async () => ({ docs: children(path).map(snap) }) }),
+    collection: (path) => query(path),
     runTransaction: async (run) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const reads = [];
         const ops = [];
         const tx = {
           get: async (target) => {
-            const current = target.query ? () => queryVersion(target.path) : () => version(target.path);
+            const current = target.query ? () => queryVersion(target) : () => version(target.path);
             reads.push([current, current()]);
             await Promise.resolve();
-            return target.query ? { docs: children(target.path).map(snap) } : snap(target.path);
+            return target.query ? { docs: matches(target).map(snap) } : snap(target.path);
           },
           set: (target, data) => ops.push(['set', target.path, clone(data)]),
           delete: (target) => ops.push(['delete', target.path]),

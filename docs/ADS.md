@@ -30,8 +30,8 @@ None of these block merging the infrastructure. All of them block shipping ads.
   `pwa73g5rt2` (no longer on Google's list). No mediation partners are configured, so nothing else
   is listed. Re-check the page before each release; `src/ads/config.test.js` checks the count and
   the format, so update it with the list.
-- **TODO: app-ads.txt.** Publish `https://www.friendly-bets.com/app-ads.txt` with the AdMob
-  publisher line, and set that domain as the developer website in both stores.
+- **TODO: app-ads.txt.** The route is live; it needs Jack's publisher ID and the store listings.
+  See [app-ads.txt](#app-adstxt) for the steps.
 - **Done in code: consent (UMP).** `initAds()` asks UMP before anything else and only initializes
   AdMob and requests ads when `canRequestAds` is true (see [Consent and ATT](#consent-and-att)).
   The messages themselves are configured in AdMob, below.
@@ -58,7 +58,74 @@ None of this can be done from the repo.
    (Google lists it for the SDK), and answer "Yes" to tracking if ATT can be granted.
 4. **Google Play**: the Data safety form (advertising ID, the ads SDK's data) and the "Contains
    ads" declaration in the Play Console (App content).
-5. **app-ads.txt** (a later launch step, above).
+5. **app-ads.txt** (see [app-ads.txt](#app-adstxt)): set the publisher ID and store listings.
+
+## app-ads.txt
+
+`GET /app-ads.txt` is served by `app/app-ads.txt/route.js` (body built in
+`src/server/appAdsTxt.js`): status 200, `Content-Type: text/plain; charset=utf-8`, no auth, no
+redirect, never the SPA or `not-found`. It reads the env on every request.
+
+**Until a publisher ID is set** the body is:
+
+```
+# Friendly Bets has no authorized ad sellers yet.
+placeholder.example.com, placeholder, DIRECT, placeholder
+```
+
+That is valid and authorizes nobody. The second line is the reserved placeholder record from the
+IAB ads.txt v1.1 spec (section 3.2.1), which app-ads.txt follows: a file with no sellers should
+carry it so crawlers can tell it from an error page (a comment-only or empty file is the
+deprecated form). It is not a seller and has no publisher ID.
+
+**Once a publisher ID is set** the body is exactly one line:
+
+```
+google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+```
+
+`f08c47fec0942fa0` is Google's certification authority ID, the same for every AdMob account.
+
+The ID is read from these env vars, first valid one wins:
+
+1. `ADMOB_PUBLISHER_ID` (server only; preferred)
+2. `NEXT_PUBLIC_ADMOB_PUBLISHER_ID`
+
+A value counts only if it is `pub-` plus 16 digits (surrounding spaces are trimmed, and the
+`ca-app-pub-...` form the AdMob console shows is accepted). Anything else (empty, a typo, an app ID
+with `~`, an ad unit ID with `/`, Google's test publisher `pub-3940256099942544`) is ignored, and
+if neither var holds a valid ID the placeholder body is served. The route never invents an ID.
+
+### Steps for Jack
+
+1. In AdMob, open **Apps > View all apps > app-ads.txt > How to set up app-ads.txt** (or
+   **Settings > Account information**) and copy the **Publisher ID** (`pub-` plus 16 digits).
+   Only the `pub-...` part goes in the env var, not the whole snippet.
+2. In Vercel, **Settings > Environment Variables**, add `ADMOB_PUBLISHER_ID` = that ID for
+   **Production**. Redeploy production (env changes only apply to a new deployment).
+3. Set the developer website to `https://www.friendly-bets.com` (the same host that serves
+   `/app-ads.txt`) in both listings:
+   - App Store Connect: the **Marketing URL** field of the app's App Store listing.
+   - Play Console: **Store settings > Store listing contact details > Website**.
+4. Verify after the deploy:
+
+   ```sh
+   curl -sI https://www.friendly-bets.com/app-ads.txt   # 200, content-type: text/plain; charset=utf-8
+   curl -s  https://www.friendly-bets.com/app-ads.txt   # the google.com line (or the placeholder before step 2)
+   curl -sIL https://friendly-bets.com/app-ads.txt      # apex: a redirect to www, then the same 200
+   ```
+
+   AdMob can take a day or more to crawl it (**Apps > View all apps > app-ads.txt** tab).
+
+### The apex redirect
+
+Crawlers drop the `www.` from the developer website (the spec excludes `www.` and `m.`), so they
+request `https://friendly-bets.com/app-ads.txt`. The apex already redirects to
+`www.friendly-bets.com` at the Vercel domain layer, path preserved (docs/DEVELOPMENT.md, Deploy on
+Vercel), and both the spec and Google allow a redirect within the same root domain, including to
+`www.`. So the apex request lands on this route.
+There is deliberately no Next redirect for this path; do not add one. If the apex redirect is ever
+changed, keep it path-preserving and on `friendly-bets.com`.
 
 ## Consent and ATT
 
