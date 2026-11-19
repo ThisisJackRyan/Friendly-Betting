@@ -1,9 +1,9 @@
 // Test-only in-memory Firestore stand-in for the Admin SDK surface the server
 // modules use. Transactions are optimistic like Firestore: if a doc read in
 // the transaction (or a query's result set) changed before commit, the callback runs again.
-// Queries run on a collection or a collection group. `failCollectionGroup:
-// { votes: err }` makes every collectionGroup('votes') query reject with err
-// (a missing index).
+// Queries work on a collection or a collection group, in or out of a transaction.
+// `failCollectionGroup: { votes: err }` makes every collectionGroup('votes')
+// query reject with err (a missing index).
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
 
 export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
@@ -34,42 +34,6 @@ export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
     if (op === '==') return actual !== undefined && actual === value;
     return actual !== undefined && actual !== null && typeof actual === typeof value && TESTS[op](actual, value);
   };
-  // collection(path).where(...).orderBy(...).limit(n): one field per orderBy.
-  // A doc without the orderBy field is left out, like Firestore. `scope` is a
-  // collection path or a match function over doc paths (a collection group).
-  function query(scope, filters = [], order = null, max = null, fail = null) {
-    const keys = () => {
-      if (fail) throw fail;
-      const candidates = typeof scope === 'function' ? Array.from(store.keys()).filter(scope) : children(scope);
-      let found = candidates.filter((key) => filters.every((filter) => matches(store.get(key)?.data, filter)));
-      if (order) {
-        const [field, dir] = order;
-        const sign = dir === 'desc' ? -1 : 1;
-        found = found
-          .filter((key) => store.get(key)?.data?.[field] != null)
-          .sort((a, b) => {
-            const x = store.get(a).data[field];
-            const y = store.get(b).data[field];
-            return x === y ? 0 : (x < y ? -sign : sign);
-          });
-      }
-      return max == null ? found : found.slice(0, max);
-    };
-    return {
-      path: typeof scope === 'string' ? scope : undefined,
-      query: true,
-      keys,
-      where: (field, op, value) => {
-        if (!TESTS[op]) throw new Error(`fakeDb: unsupported op ${op}`);
-        return query(scope, [...filters, [field, op, value]], order, max, fail);
-      },
-      orderBy: (field, dir = 'asc') => query(scope, filters, [field, dir], max, fail),
-      limit: (n) => query(scope, filters, order, n, fail),
-      get: async () => ({ docs: keys().map(snap) }),
-    };
-  }
-  // A query's "version" is its membership plus each member's version.
-  const queryVersion = (target) => target.keys().map((key) => `${key}@${version(key)}`).join(',');
   // A shallow update with dotted field paths ('settlement.winners'), like Firestore's update().
   const applyUpdate = (path, fields) => {
     if (!store.has(path)) throw Object.assign(new Error('no doc to update'), { code: 'not-found' });
@@ -85,6 +49,41 @@ export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
     });
     put(path, next);
   };
+  // source: { path, candidates() } for a collection, or { candidates(), fail }
+  // for a collection group. where(...).orderBy(...).limit(n): one field per
+  // orderBy. A doc without the orderBy field is left out, like Firestore.
+  function query(source, filters = [], order = null, max = null) {
+    const keys = () => {
+      if (source.fail) throw source.fail;
+      let found = source.candidates().filter((key) => filters.every((filter) => matches(store.get(key)?.data, filter)));
+      if (order) {
+        const [field, dir] = order;
+        const sign = dir === 'desc' ? -1 : 1;
+        found = found
+          .filter((key) => store.get(key)?.data?.[field] != null)
+          .sort((a, b) => {
+            const x = store.get(a).data[field];
+            const y = store.get(b).data[field];
+            return x === y ? 0 : (x < y ? -sign : sign);
+          });
+      }
+      return max == null ? found : found.slice(0, max);
+    };
+    return {
+      path: source.path,
+      query: true,
+      keys,
+      where: (field, op, value) => {
+        if (!TESTS[op]) throw new Error(`fakeDb: unsupported op ${op}`);
+        return query(source, [...filters, [field, op, value]], order, max);
+      },
+      orderBy: (field, dir = 'asc') => query(source, filters, [field, dir], max),
+      limit: (n) => query(source, filters, order, n),
+      get: async () => ({ docs: keys().map(snap) }),
+    };
+  }
+  // A query's "version" is its membership plus each member's version.
+  const queryVersion = (target) => target.keys().map((key) => `${key}@${version(key)}`).join(',');
   function ref(path) {
     return {
       path,
@@ -110,12 +109,15 @@ export function fakeDb(initial = {}, { failCollectionGroup = {} } = {}) {
     data: (path) => clone(store.get(path)?.data),
     paths: (prefix) => Array.from(store.keys()).filter((key) => key.startsWith(prefix)),
     doc: ref,
-    collection: (path) => query(path),
+    collection: (path) => query({ path, candidates: () => children(path) }),
     // Every collection named `id`, at any depth.
-    collectionGroup: (id) => query((key) => {
-      const parts = key.split('/');
-      return parts.length % 2 === 0 && parts.at(-2) === id;
-    }, [], null, null, failCollectionGroup[id] || null),
+    collectionGroup: (id) => query({
+      candidates: () => Array.from(store.keys()).filter((key) => {
+        const parts = key.split('/');
+        return parts.length % 2 === 0 && parts.at(-2) === id;
+      }),
+      fail: failCollectionGroup[id] || null,
+    }),
     runTransaction: async (run) => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const reads = [];

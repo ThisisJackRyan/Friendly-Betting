@@ -194,6 +194,7 @@ Preflight never touches auth or the database.
 | `NEXT_PUBLIC_PUSH_ENABLED` | Vercel and native builds | `1` turns on the push token route (`/api/push/tokens`), the native token plumbing and the server send helper. Off (unset) by default: the route is a 404 and nothing sends. No UI or bet event uses it yet. See [docs/PUSH.md](PUSH.md). |
 | `NEXT_PUBLIC_PRO_PAYWALL` | Vercel only | `1` turns on the paywall at `/pro` and the Go Pro link on My bets, and sends new bets through `POST /api/bets` (needs `FIREBASE_SERVICE_ACCOUNT`). Always off in native builds until store In-App Purchase is wired (`mobile/vite.config.mjs` ignores it). See [docs/PRO.md](PRO.md). |
 | `NEXT_PUBLIC_PRO_EARLY_TYPES` | Vercel and native builds | `1` shows early-access bet types (none yet) to Pro members. |
+| `ADMOB_PUBLISHER_ID` | Vercel, server only | The AdMob publisher ID (`pub-` plus 16 digits) for `/app-ads.txt`. Unset or invalid serves the no-sellers placeholder. Wins over `NEXT_PUBLIC_ADMOB_PUBLISHER_ID` (also accepted). See [docs/ADS.md](ADS.md#app-adstxt). |
 
 `NEXT_PUBLIC_RESULT_TEXTS`, `NEXT_PUBLIC_ADS_ENABLED`, `NEXT_PUBLIC_PUSH_ENABLED` and the `NEXT_PUBLIC_PRO_*` flags (except `NEXT_PUBLIC_PRO_PAYWALL`, which the app always leaves off) are read by both builds: Next inlines it for the web, and `mobile/vite.config.mjs` defines it for the app from the shell environment or the repo-root `.env*` files (the shell wins). Set it before `npm run mobile:build`/`mobile:sync` if the app should show the field.
 

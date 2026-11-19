@@ -598,7 +598,6 @@ function notifyAfterFirstPick(code) {
     // Push is a bonus.
   }
 }
-
 export async function settleBet(code, winnerId) {
   const ref = doc(db, 'bets', code);
   const settled = await runTransaction(db, async (tx) => {
