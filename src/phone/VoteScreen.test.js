@@ -726,7 +726,7 @@ test('the vote screen header carries the Results menu', async () => {
   expect(within(await screen.findByRole('banner')).getByTestId('results-menu')).toBeInTheDocument();
 });
 
-describe('your own pick counts right away', () => {
+describe('your own pick counts once castVote saves it', () => {
   let feeds;
   let settle;
   const live = () => feeds.filter((feed) => !feed.unsubscribe.mock.calls.length);
@@ -763,12 +763,58 @@ describe('your own pick counts right away', () => {
 
   test('the results view shows your pick before any snapshot has it', async () => {
     await vote();
+    await act(async () => settle.resolve());
     expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     expect(widths()).toEqual(['100%', '0%']);
     expect(screen.queryByText('0 · 0%', { selector: '.mine .bar-count' })).not.toBeInTheDocument();
+  });
+
+  test('a pick is not shown as made until castVote resolves', async () => {
+    await vote();
+    expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
+    expect(counts()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Yes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'No' })).toBeDisabled();
+
     await act(async () => settle.resolve());
-    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
+    expect(screen.queryByRole('button', { name: 'No' })).not.toBeInTheDocument();
+  });
+
+  test.each([
+    ['resolves', () => settle.resolve()],
+    ['fails', () => settle.reject(new Error('This bet is closed.'))],
+  ])('the browser is asked to hold the tab while the pick saves, until castVote %s', async (_label, finish) => {
+    const add = jest.spyOn(window, 'addEventListener');
+    const remove = jest.spyOn(window, 'removeEventListener');
+    try {
+      await vote();
+      const added = add.mock.calls.filter(([type]) => type === 'beforeunload');
+      expect(added).toHaveLength(1);
+      const handler = added[0][1];
+      const event = new Event('beforeunload', { cancelable: true });
+      handler(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(remove.mock.calls.some(([type, fn]) => type === 'beforeunload' && fn === handler)).toBe(false);
+
+      await act(async () => finish());
+      expect(remove.mock.calls.some(([type, fn]) => type === 'beforeunload' && fn === handler)).toBe(true);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  test('leaving the screen mid-save drops the beforeunload hold', async () => {
+    const remove = jest.spyOn(window, 'removeEventListener');
+    try {
+      await vote();
+      cleanup();
+      expect(remove.mock.calls.some(([type]) => type === 'beforeunload')).toBe(true);
+    } finally {
+      remove.mockRestore();
+    }
   });
 
   test('a snapshot with your pick is used as-is, never double counted', async () => {
@@ -783,16 +829,15 @@ describe('your own pick counts right away', () => {
   test('another pick landing first adds to yours', async () => {
     await vote();
     await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }] });
+    await act(async () => settle.resolve());
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(widths()).toEqual(['50%', '50%']);
-    await act(async () => settle.resolve());
     await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }, mine] });
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
   });
 
-  test('a failed pick drops the optimistic count and shows the usual error', async () => {
+  test('a failed pick shows the usual error and brings the buttons back', async () => {
     await vote();
-    expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     await act(async () => settle.reject(new Error('This bet is closed.')));
     expect(screen.getByRole('alert')).toHaveTextContent('This bet is closed.');
     expect(screen.queryByText(/you’re on/i)).not.toBeInTheDocument();
@@ -801,6 +846,8 @@ describe('your own pick counts right away', () => {
 
     // A later pick that lands still counts only once.
     await userEvent.click(screen.getByRole('button', { name: 'No' }));
+    await act(async () => settle.resolve());
+    expect(screen.getByText(/you’re on/i)).toHaveTextContent('No');
     expect(counts()).toEqual(['0 · 0%', '1 · 100%']);
   });
 
@@ -814,13 +861,12 @@ describe('your own pick counts right away', () => {
   test('a snapshot error or offline miss keeps your pick and the last tally', async () => {
     await vote();
     await push({ ...openBet, votes: [{ voterId: 'kim', name: 'Kim', optionId: 'b' }] });
+    await act(async () => settle.resolve());
     await push(undefined, new Error('offline'));
     await push(null, undefined, { fromCache: true });
     expect(screen.getByText(/you’re on/i)).toHaveTextContent('Yes');
     expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    await act(async () => settle.resolve());
-    expect(counts()).toEqual(['1 · 50%', '1 · 50%']);
   });
 
   test('a delete the server confirms still shows the not-found screen', async () => {
