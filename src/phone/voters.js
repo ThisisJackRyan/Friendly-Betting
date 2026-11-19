@@ -1,6 +1,8 @@
 // Every on-screen string for the voter lists under the bars.
+// An unnamed voter (no name given, or a deleted account) is "a friend";
+// two or more collapse into one count.
 export const VOTER_LIST_COPY = {
-  friends: (count) => (count === 1 ? '1 friend' : `${count} friends`),
+  friends: (count) => (count === 1 ? 'a friend' : `${count} friends`),
   more: (count) => `+${count} more`,
   pickedBy: (list) => `Picked by ${list}`,
 };

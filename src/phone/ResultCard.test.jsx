@@ -66,7 +66,7 @@ test.each([
   ['with one other', [{ voterId: 'maya', name: 'Maya', optionId: 'a' }], 'You & Maya won. Coffee’s on everyone else.'],
   ['with two others', [{ voterId: 'maya', name: 'Maya', optionId: 'a' }, { voterId: 'sam', name: 'Sam', optionId: 'a' }],
     'You, Maya & Sam won. Coffee’s on everyone else.'],
-  ['with an unnamed other', [{ voterId: 'x', name: '', optionId: 'a' }], 'You & 1 other won. Coffee’s on everyone else.'],
+  ['with an unnamed other', [{ voterId: 'x', name: '', optionId: 'a' }], 'You & a friend won. Coffee’s on everyone else.'],
 ])('the creator among several winners (%s) reads as the reveal does', (_label, others, subline) => {
   const votes = [{ voterId: 'jack', name: '', optionId: 'a' }, ...others, { voterId: 'lee', name: 'Lee', optionId: 'b' }];
   expect(renderPreview(previewOf({ stake: 'Coffee', votes }))).toMatchObject({ headline: 'You called it.', oneLiner: subline });
