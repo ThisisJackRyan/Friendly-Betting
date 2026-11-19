@@ -18,7 +18,8 @@ let package = Package(
         .package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
         .package(name: "CapacitorFilesystem", path: "../../../node_modules/@capacitor/filesystem"),
         .package(name: "CapacitorPreferences", path: "../../../node_modules/@capacitor/preferences"),
-        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share")
+        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
+        .package(name: "CapacitorNativeSettings", path: "../../../node_modules/capacitor-native-settings")
     ],
     targets: [
         .target(
@@ -32,7 +33,8 @@ let package = Package(
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorFilesystem", package: "CapacitorFilesystem"),
                 .product(name: "CapacitorPreferences", package: "CapacitorPreferences"),
-                .product(name: "CapacitorShare", package: "CapacitorShare")
+                .product(name: "CapacitorShare", package: "CapacitorShare"),
+                .product(name: "CapacitorNativeSettings", package: "CapacitorNativeSettings")
             ]
         )
     ]

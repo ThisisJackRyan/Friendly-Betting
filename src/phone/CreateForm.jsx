@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter } from '../platform/navigation';
 import { FiChevronLeft, FiFlag, FiHome, FiMessageCircle, FiShield, FiX } from 'react-icons/fi';
 import { FlowProgress, PageIntro } from './ProductUI';
 import { saveBet } from './api';
+import { isOnlyBetBy } from './firstBet';
 import {
   CodeBody,
   PersonCheck,
@@ -26,6 +27,7 @@ import CreateSaveError from './CreateSaveError';
 import ProSheet from './ProSheet';
 import { PRO_ROW } from './proConfig';
 import { markFreshBet } from './freshBet';
+import { checkFirstBet, firstBetCheckPossible } from './pushOptIn';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
 import AppHeader from './AppHeader';
@@ -271,7 +273,12 @@ const CreateForm = () => {
       const id = await saveBet(null, fields);
       // Left Create mid-save: the bet is in My bets, and no tally opens.
       if (!mountedRef.current) return;
-      markFreshBet(id);
+      // Only with push on (native, flag on): was this the creator's first
+      // bet? The tally then offers notifications once. A failed or slow
+      // lookup says no. With push off there is no lookup and no wait.
+      const first = firstBetCheckPossible() ? await checkFirstBet(isOnlyBetBy, creator.uid, id) : false;
+      if (!mountedRef.current) return;
+      markFreshBet(id, { first });
       leaveForTally(id);
     } catch (err) {
       savingRef.current = false;
