@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.NEXT_PUBLIC_RESULT_TEXTS': JSON.stringify(env.NEXT_PUBLIC_RESULT_TEXTS ?? ''),
       'process.env.NEXT_PUBLIC_ADS_ENABLED': JSON.stringify(env.NEXT_PUBLIC_ADS_ENABLED ?? ''),
+      'process.env.NEXT_PUBLIC_PUSH_ENABLED': JSON.stringify(env.NEXT_PUBLIC_PUSH_ENABLED ?? ''),
       // Always off in the native app until store IAP is wired (docs/PRO.md):
       // the store builds must not sell Pro outside In-App Purchase.
       'process.env.NEXT_PUBLIC_PRO_PAYWALL': JSON.stringify(''),
