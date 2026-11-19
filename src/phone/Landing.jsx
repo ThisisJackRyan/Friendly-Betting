@@ -45,17 +45,12 @@ const Landing = ({ quiet = false }) => {
     >
       <div className="home-heading">
         <div>
-          <p className="eyebrow">WELCOME TO FRIENDLY</p>
           <h1>Good times. Better stakes.</h1>
         </div>
         <span className="home-heading-note">Keep it light. Make it interesting.</span>
       </div>
       <section className="home-hero" aria-labelledby="hero-title">
         <div className="landing-copy">
-          <p className="hero-eyebrow">
-            <span className="live-dot" />
-            FOR THE LOVE OF THE GAME. AND THE GROUP CHAT.
-          </p>
           <h2 id="hero-title" className="landing-title">
             A little rivalry.
             <br />
@@ -80,7 +75,6 @@ const Landing = ({ quiet = false }) => {
       <section className="home-types" aria-labelledby="home-types-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">YOUR CALL</p>
             <h2 id="home-types-title">There’s a bet for that.</h2>
           </div>
           <span>Big games. Small disagreements. Anything goes.</span>
@@ -132,7 +126,6 @@ const Landing = ({ quiet = false }) => {
       </section>
       <section className="how-section" id="how-it-works" aria-labelledby="how-title">
         <div className="how-heading">
-          <p className="eyebrow">LESS SETUP. MORE GAME ON.</p>
           <h2 id="how-title">From “bet?” to “told you.”</h2>
         </div>
         <div className="how-steps">

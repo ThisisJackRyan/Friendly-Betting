@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from '../platform/Link';
 import { useParams, usePathname, useRouter } from '../platform/navigation';
-import { FiChevronLeft, FiFlag, FiMessageCircle, FiShield, FiX } from 'react-icons/fi';
+import { FiChevronLeft, FiFlag, FiHome, FiMessageCircle, FiShield, FiX } from 'react-icons/fi';
 import { FlowProgress, PageIntro } from './ProductUI';
 import { saveBet } from './api';
 import {
@@ -418,7 +418,7 @@ const CreateForm = () => {
     if (stepNumber === 2 && meta) {
       body = (
         <>
-          <PageIntro eyebrow={meta.label} title="Put it on the record.">
+          <PageIntro title="Put it on the record.">
             Ask the question. Give your friends something to pick.
           </PageIntro>
           <label className="field" htmlFor="question">
@@ -658,8 +658,8 @@ const CreateForm = () => {
             <FiChevronLeft size={28} />
           </button>
           <h1 className="nav-title">{titleFor(stepNumber)}</h1>
-          <Link href="/" className="nav-home wordmark" onClick={onHomeClick}>
-            Friendly
+          <Link href="/" className="nav-home" aria-label="Home" onClick={onHomeClick}>
+            <FiHome size={20} aria-hidden="true" />
           </Link>
         </div>
         <div className="scroll">

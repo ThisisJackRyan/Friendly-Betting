@@ -88,18 +88,38 @@ async function goToStake(question = 'Who is late') {
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 }
 
+// The sign-in slides share the create header: back, title, then a dark Home icon.
+function expectAuthHeaderHome(pane, title) {
+  const row = pane.querySelector('.nav-row');
+  expect(row.querySelector('h1.nav-title')).toHaveTextContent(title);
+  expect(row.querySelector('button.icon-btn')).toHaveAttribute('aria-label', 'Back');
+  const home = row.lastElementChild;
+  expect(home.tagName).toBe('A');
+  expect(home).toHaveClass('nav-home');
+  expect(home).not.toHaveClass('wordmark');
+  expect(home).toHaveAttribute('aria-label', 'Home');
+  expect(home).toHaveAttribute('href', '/');
+  expect(home).toHaveTextContent(/^$/);
+  expect(home.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(row.textContent).not.toMatch(/friendly/i);
+  expect(pane.querySelector('.wordmark')).toBeNull();
+}
+
 test('step 1 is the type picker and back returns home', async () => {
   renderForm();
-  const home = screen.getByRole('link', { name: 'Friendly' });
+  const home = screen.getByRole('link', { name: 'Home', exact: true });
   const row = home.closest('.nav-row');
   expect(home).toHaveClass('nav-home');
+  expect(home).not.toHaveClass('wordmark');
   expect(home).toHaveAttribute('href', '/');
-  expect(home.querySelector('svg')).not.toBeInTheDocument();
+  expect(home).toHaveTextContent(/^$/);
+  expect(home.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.queryByText('Friendly', { exact: false, selector: '.nav-row *' })).not.toBeInTheDocument();
   expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByRole('heading', { name: 'New bet' })).toHaveClass('nav-title');
   expect(document.querySelector('.stack .wordmark')).not.toBeInTheDocument();
   expect(document.querySelector('h1.screen-title')).not.toBeInTheDocument();
-  expect(screen.getByText('Pick a type')).toBeInTheDocument();
+  expect(screen.queryByText('Pick a type')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /over-under/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /prop/i })).toBeInTheDocument();
@@ -411,17 +431,23 @@ test('phone tabs hide after step 1 and return when the walkthrough is back on pi
   });
 });
 
-test('Friendly in the create nav returns home from every later step', async () => {
+test('the Home link in the create nav returns home from every later step', async () => {
   renderForm('/new/prop');
 
   const homeInNav = () => {
-    const link = screen.getByRole('link', { name: 'Friendly' });
+    const link = screen.getByRole('link', { name: 'Home', exact: true });
     expect(link).toHaveClass('nav-home');
+    expect(link).not.toHaveClass('wordmark');
+    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveTextContent(/^$/);
+    expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(link.closest('.nav-row')).toContainElement(screen.getByRole('button', { name: 'Back' }));
     return link;
   };
 
-  expect(screen.getByRole('heading', { name: 'Prop' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Prop' })).toHaveClass('nav-title');
+  expect(screen.getAllByText('Prop')).toHaveLength(1);
+  expect(document.querySelector('.page-intro .eyebrow')).not.toBeInTheDocument();
   homeInNav();
 
   await userEvent.type(screen.getByLabelText(/question/i), 'Who is last');
@@ -452,7 +478,7 @@ test('reduced motion skips the home slide', async () => {
   }));
   try {
     renderForm('/new/money-line');
-    await userEvent.click(screen.getByRole('link', { name: 'Friendly' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Home', exact: true }));
     expect(navigation.push).toHaveBeenCalledWith('/');
     expect(document.querySelector('.create-pane.is-leaving')).not.toBeInTheDocument();
     expect(saveBet).not.toHaveBeenCalled();
@@ -512,6 +538,7 @@ test('create slides run type, details, stake, phone, code, then the bet opens it
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.getByText('Step 4 of 5')).toBeInTheDocument();
+  expectAuthHeaderHome(document.querySelector('.create-pane[data-step="4"]'), 'Phone');
   expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
   expect(document.querySelector('.create-pane.is-entering')).toHaveAttribute('data-step', '4');
   expect(screen.getByText(AUTH_COPY.textLine)).toBeInTheDocument();
@@ -541,6 +568,7 @@ test('create slides run type, details, stake, phone, code, then the bet opens it
   expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verify' })).toBeInTheDocument();
   const codePane = document.querySelector('.create-pane[data-step="5"]:not(.is-leaving)');
+  expectAuthHeaderHome(codePane, 'Code');
   expect(codePane.querySelector('.person-check')).toBeNull();
   expect(document.querySelector('.create-pane.is-leaving .person-check')).toBeNull();
   // The one check is parked off screen, still rendered, for Resend to reuse.
@@ -1261,6 +1289,18 @@ test('the person check slot is in the phone step and is not clipped shut', () =>
   const enteringEnd = entering.indexOf('@keyframes create-out-forward');
   expect(entering.slice(0, enteringEnd)).toContain('transform: none');
   expect(entering.slice(0, enteringEnd)).not.toContain('translateX(0)');
+});
+
+test('the create header Home icon is dark ink, not the green CTA accent', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const blocks = [...css.matchAll(/(^|\n)\.nav-home \{([^}]*)\}/g)].map((m) => m[2]);
+  expect(blocks.length).toBeGreaterThan(0);
+  const colors = blocks.flatMap((block) =>
+    [...block.matchAll(/(?:^|[;\s])color:\s*([^;]+);/g)].map((m) => m[1].trim()),
+  );
+  expect(colors).toEqual(['var(--ink)']);
+  expect(blocks.join('\n')).not.toContain('--accent');
+  expect(css).toMatch(/\n\s*--ink: #203b2e;/);
 });
 
 test('an unknown create route leaves the walkthrough', () => {
