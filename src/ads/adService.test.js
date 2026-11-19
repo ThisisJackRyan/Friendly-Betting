@@ -15,6 +15,8 @@ jest.mock('@capacitor-community/admob', () => {
   return {
     AdMob: {
       listeners,
+      requestConsentInfo: jest.fn(),
+      showConsentForm: jest.fn(),
       initialize: jest.fn(),
       trackingAuthorizationStatus: jest.fn(),
       requestTrackingAuthorization: jest.fn(),
@@ -45,6 +47,17 @@ jest.mock('./pro', () => ({ isPro: jest.fn(() => false) }));
 const flag = process.env.NEXT_PUBLIC_ADS_ENABLED;
 const shown = { shown: true, skipped: false, reason: 'shown' };
 const skipped = (reason) => ({ shown: false, skipped: true, reason });
+const ready = { ok: true, canRequestAds: true };
+const noAds = { ok: false, canRequestAds: false };
+// A UMP consent info result.
+const consent = (status, canRequestAds, isConsentFormAvailable = false) => ({ status, canRequestAds, isConsentFormAvailable });
+// The order the plugin was called in, by method name.
+function adMobCalls() {
+  return ['requestConsentInfo', 'showConsentForm', 'trackingAuthorizationStatus', 'requestTrackingAuthorization', 'initialize']
+    .flatMap((name) => AdMob[name].mock.invocationCallOrder.map((order) => [order, name]))
+    .sort((a, b) => a[0] - b[0])
+    .map(([, name]) => name);
+}
 // Moves the clock Date.now() sees past the minimum interval.
 let clock;
 const nextSlot = () => { clock += AD_LIMITS.minIntervalMs; };
@@ -73,6 +86,8 @@ beforeEach(() => {
   isPro.mockReset().mockReturnValue(false);
   showHouseAd.mockReset().mockResolvedValue(undefined);
   Object.keys(AdMob.listeners).forEach((key) => delete AdMob.listeners[key]);
+  AdMob.requestConsentInfo.mockReset().mockResolvedValue(consent('NOT_REQUIRED', true));
+  AdMob.showConsentForm.mockReset().mockResolvedValue(consent('OBTAINED', true));
   AdMob.initialize.mockReset().mockResolvedValue(undefined);
   AdMob.trackingAuthorizationStatus.mockReset().mockResolvedValue({ status: 'notDetermined' });
   AdMob.requestTrackingAuthorization.mockReset().mockResolvedValue(undefined);
@@ -105,13 +120,27 @@ describe('gates', () => {
     expect(AdMob.prepareInterstitial).not.toHaveBeenCalled();
   });
 
+  test.each(['ios', 'android'])('flag off on %s: no consent request, form, ATT, init or ad', async (os) => {
+    onPlatform(os);
+    process.env.NEXT_PUBLIC_ADS_ENABLED = 'true';
+    await expect(initAds()).resolves.toEqual(noAds);
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('disabled'));
+    Object.values(AdMob).forEach((fn) => {
+      if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled();
+    });
+  });
+
   test('Pro members never see an ad, on web or native', async () => {
     isPro.mockReturnValue(true);
     await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('pro'));
     onPlatform('ios');
     await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('pro'));
-    await expect(initAds()).resolves.toEqual({ ok: false });
+    await expect(initAds()).resolves.toEqual(noAds);
     expect(showHouseAd).not.toHaveBeenCalled();
+    expect(AdMob.requestConsentInfo).not.toHaveBeenCalled();
+    expect(AdMob.showConsentForm).not.toHaveBeenCalled();
+    expect(AdMob.trackingAuthorizationStatus).not.toHaveBeenCalled();
+    expect(AdMob.requestTrackingAuthorization).not.toHaveBeenCalled();
     expect(AdMob.initialize).not.toHaveBeenCalled();
   });
 
@@ -133,6 +162,15 @@ describe('web fallback', () => {
     close();
     await expect(pending).resolves.toEqual(shown);
     expect(AdMob.prepareInterstitial).not.toHaveBeenCalled();
+  });
+
+  test('the web never asks for consent or tracking, and initAds does nothing', async () => {
+    await expect(initAds()).resolves.toEqual(noAds);
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    expect(showHouseAd).toHaveBeenCalledTimes(1);
+    Object.values(AdMob).forEach((fn) => {
+      if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled();
+    });
   });
 
   test('a house ad that fails to mount is skipped, not thrown', async () => {
@@ -160,6 +198,7 @@ describe('native AdMob', () => {
     nextSlot();
     await showInterstitial({ placement: 'b' });
     await initAds();
+    expect(AdMob.requestConsentInfo).toHaveBeenCalledTimes(1);
     expect(AdMob.initialize).toHaveBeenCalledTimes(1);
     expect(AdMob.trackingAuthorizationStatus).toHaveBeenCalledTimes(1);
     expect(AdMob.requestTrackingAuthorization).toHaveBeenCalledTimes(1);
@@ -183,14 +222,14 @@ describe('native AdMob', () => {
     AdMob.initialize.mockRejectedValueOnce(new Error('init failed'));
     await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
     expect(AdMob.prepareInterstitial).toHaveBeenCalledTimes(1);
-    await expect(initAds()).resolves.toEqual({ ok: true });
+    await expect(initAds()).resolves.toEqual(ready);
     expect(AdMob.initialize).toHaveBeenCalledTimes(2);
   });
 
   test('a failed ATT check does not fail init', async () => {
     onPlatform('ios');
     AdMob.trackingAuthorizationStatus.mockRejectedValue(new Error('nope'));
-    await expect(initAds()).resolves.toEqual({ ok: true });
+    await expect(initAds()).resolves.toEqual(ready);
   });
 
   test('an ad that fails to load is skipped as not-loaded', async () => {
@@ -229,6 +268,111 @@ describe('native AdMob', () => {
       setTimeout(() => AdMob.listeners.interstitialAdFailedToShow?.({ code: 1 }), 0);
     });
     await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('error'));
+  });
+});
+
+describe('consent (UMP) and ATT order', () => {
+  test('iOS: consent info, then ATT if undetermined, then initialize', async () => {
+    onPlatform('ios');
+    await expect(initAds()).resolves.toEqual(ready);
+    expect(adMobCalls()).toEqual(['requestConsentInfo', 'trackingAuthorizationStatus', 'requestTrackingAuthorization', 'initialize']);
+    expect(AdMob.showConsentForm).not.toHaveBeenCalled();
+  });
+
+  test('Android: consent info, then initialize; never ATT', async () => {
+    onPlatform('android');
+    await expect(initAds()).resolves.toEqual(ready);
+    expect(adMobCalls()).toEqual(['requestConsentInfo', 'initialize']);
+  });
+
+  test.each(['ios', 'android'])('%s: a required consent shows the form before ATT and initialize', async (os) => {
+    onPlatform(os);
+    AdMob.requestConsentInfo.mockResolvedValue(consent('REQUIRED', false, true));
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    const ios = os === 'ios' ? ['trackingAuthorizationStatus', 'requestTrackingAuthorization'] : [];
+    expect(adMobCalls()).toEqual(['requestConsentInfo', 'showConsentForm', ...ios, 'initialize']);
+    expect(AdMob.prepareInterstitial).toHaveBeenCalledTimes(1);
+  });
+
+  test('no form when consent is required but no form is available, or when it is not required', async () => {
+    onPlatform('android');
+    AdMob.requestConsentInfo.mockResolvedValue(consent('REQUIRED', false, false));
+    await expect(initAds()).resolves.toEqual(noAds);
+    __resetAdsForTests();
+    AdMob.requestConsentInfo.mockResolvedValue(consent('OBTAINED', true, true));
+    await expect(initAds()).resolves.toEqual(ready);
+    expect(AdMob.showConsentForm).not.toHaveBeenCalled();
+  });
+
+  test.each(['ios', 'android'])('%s: consent denied (canRequestAds false) means no ATT, no init and no ad', async (os) => {
+    onPlatform(os);
+    AdMob.requestConsentInfo.mockResolvedValue(consent('REQUIRED', false, true));
+    AdMob.showConsentForm.mockResolvedValue(consent('REQUIRED', false, true));
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('consent'));
+    expect(AdMob.showConsentForm).toHaveBeenCalledTimes(1);
+    expect(AdMob.trackingAuthorizationStatus).not.toHaveBeenCalled();
+    expect(AdMob.requestTrackingAuthorization).not.toHaveBeenCalled();
+    expect(AdMob.initialize).not.toHaveBeenCalled();
+    expect(AdMob.prepareInterstitial).not.toHaveBeenCalled();
+    expect(AdMob.showInterstitial).not.toHaveBeenCalled();
+    // Not counted: the next try is not capped or held back by the interval.
+    expect(canShowInterstitial('settle')).toBe(true);
+    // The answer holds for this launch: the form is not shown again before every ad.
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('consent'));
+    expect(AdMob.requestConsentInfo).toHaveBeenCalledTimes(1);
+    expect(AdMob.showConsentForm).toHaveBeenCalledTimes(1);
+  });
+
+  test('ATT already answered (by UMP or earlier) is not asked again', async () => {
+    onPlatform('ios');
+    for (const status of ['authorized', 'denied', 'restricted']) {
+      __resetAdsForTests();
+      AdMob.trackingAuthorizationStatus.mockResolvedValue({ status });
+      await expect(initAds()).resolves.toEqual(ready);
+    }
+    expect(AdMob.trackingAuthorizationStatus).toHaveBeenCalledTimes(3);
+    expect(AdMob.requestTrackingAuthorization).not.toHaveBeenCalled();
+    expect(AdMob.initialize).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([
+    ['requestConsentInfo', () => AdMob.requestConsentInfo.mockRejectedValueOnce(new Error('offline'))],
+    ['showConsentForm', () => {
+      AdMob.requestConsentInfo.mockResolvedValueOnce(consent('REQUIRED', false, true));
+      AdMob.showConsentForm.mockRejectedValueOnce(new Error('form failed'));
+    }],
+  ])('a throwing %s fails soft: no ad now, and the next call asks again', async (_name, arrange) => {
+    onPlatform('ios');
+    arrange();
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(skipped('consent'));
+    expect(AdMob.initialize).not.toHaveBeenCalled();
+    expect(AdMob.trackingAuthorizationStatus).not.toHaveBeenCalled();
+    expect(AdMob.prepareInterstitial).not.toHaveBeenCalled();
+    await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
+    expect(AdMob.requestConsentInfo).toHaveBeenCalledTimes(2);
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+  });
+
+  test('a consent result with nothing in it counts as no consent', async () => {
+    onPlatform('android');
+    AdMob.requestConsentInfo.mockResolvedValue(undefined);
+    await expect(initAds()).resolves.toEqual(noAds);
+    expect(AdMob.initialize).not.toHaveBeenCalled();
+  });
+
+  test('a consent form left open past the timeout skips the ad as timeout', async () => {
+    onPlatform('ios');
+    jest.useFakeTimers();
+    AdMob.requestConsentInfo.mockResolvedValue(consent('REQUIRED', false, true));
+    let answer;
+    AdMob.showConsentForm.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const pending = showInterstitial({ placement: 'settle' });
+    await jest.advanceTimersByTimeAsync(AD_LIMITS.timeoutMs);
+    await expect(pending).resolves.toEqual(skipped('timeout'));
+    answer(consent('OBTAINED', true));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+    expect(AdMob.prepareInterstitial).not.toHaveBeenCalled();
   });
 });
 
@@ -444,9 +588,13 @@ describe('startAdsOnAppActive, at native app start', () => {
     AdMob.requestTrackingAuthorization.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
     await startAdsOnAppActive();
     await flush();
-    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
+    expect(AdMob.requestConsentInfo).toHaveBeenCalledTimes(1);
     expect(AdMob.requestTrackingAuthorization).toHaveBeenCalledTimes(1);
+    // ATT comes before initialize, so the SDK starts once it is answered.
+    expect(AdMob.initialize).not.toHaveBeenCalled();
     answer();
+    await flush();
+    expect(AdMob.initialize).toHaveBeenCalledTimes(1);
     await flush();
     await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual(shown);
     expect(AdMob.initialize).toHaveBeenCalledTimes(1);

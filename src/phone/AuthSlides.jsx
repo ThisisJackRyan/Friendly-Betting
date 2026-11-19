@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from '../platform/Link';
-import { FiChevronLeft } from 'react-icons/fi';
+import { FiChevronLeft, FiHome } from 'react-icons/fi';
 import { mountPhoneCheck, releasePhoneCheck, sendPhoneCode, verifyPhoneCode } from './creatorAuth';
 import { SLIDE_MS } from './createMotion';
 import { isNativeApp } from '../platform/runtime';
@@ -505,13 +505,12 @@ function AuthChrome({ title, onBack, children, cta }) {
           <FiChevronLeft size={28} />
         </button>
         <h1 className="nav-title">{title}</h1>
-        <Link href="/" className="nav-home wordmark">
-          Friendly
+        <Link href="/" className="nav-home" aria-label="Home">
+          <FiHome size={20} aria-hidden="true" />
         </Link>
       </div>
       <div className="scroll">
         <div className="page-intro auth-intro">
-          <p className="eyebrow">YOUR FRIENDLY CLUBHOUSE</p>
           <h2>
             {title === AUTH_COPY.phoneTitle
               ? 'Welcome to your side of the bet.'

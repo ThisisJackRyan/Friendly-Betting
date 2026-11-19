@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => {
       // the store builds must not sell Pro outside In-App Purchase.
       'process.env.NEXT_PUBLIC_PRO_PAYWALL': JSON.stringify(''),
       'process.env.NEXT_PUBLIC_PRO_EARLY_TYPES': JSON.stringify(env.NEXT_PUBLIC_PRO_EARLY_TYPES ?? ''),
-      'process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE': JSON.stringify(env.NEXT_PUBLIC_PRO_MOCK_PURCHASE ?? ''),
       // The Pro sheet's Terms and Privacy links (each only when set).
       'process.env.NEXT_PUBLIC_TERMS_URL': JSON.stringify(env.NEXT_PUBLIC_TERMS_URL ?? ''),
       'process.env.NEXT_PUBLIC_PRIVACY_URL': JSON.stringify(env.NEXT_PUBLIC_PRIVACY_URL ?? ''),
