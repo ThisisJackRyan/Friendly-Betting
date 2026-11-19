@@ -41,7 +41,6 @@ test('first-pick bodies are the UX copy, verbatim', () => {
   expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Under')).toBe('A friend picked Under.');
   expect(PUSH_NOTIFICATION_COPY.firstPickUnnamed('Jack\u2019s team')).toBe('A friend picked Jack\u2019s team.');
 });
-
 test('the Android channel name and description are the UX copy, verbatim', () => {
   expect(PUSH_CHANNEL_COPY).toEqual({
     name: 'Bet updates',

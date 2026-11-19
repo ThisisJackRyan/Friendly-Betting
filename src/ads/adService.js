@@ -48,33 +48,68 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-// Initializes AdMob once, then asks for tracking permission once on iOS.
-// Never rejects: a failed init resolves { ok: false } and the next call retries.
+// Google UMP: refresh the consent info (every launch), show the form only when
+// one is available and consent is required, then report Google's decision.
+// Throws if the consent API throws; initAds treats that as no ads for now.
+async function gatherConsent(AdMob) {
+  let info = await AdMob.requestConsentInfo();
+  if (info?.isConsentFormAvailable && info?.status === 'REQUIRED') {
+    info = await AdMob.showConsentForm();
+  }
+  return Boolean(info?.canRequestAds);
+}
+
+// iOS App Tracking Transparency, after UMP. When IDFA messages are set up in
+// AdMob, UMP has already shown the prompt, so only ask if it is still undecided.
+async function askTracking(AdMob) {
+  try {
+    const { status } = await AdMob.trackingAuthorizationStatus();
+    if (status === 'notDetermined') await AdMob.requestTrackingAuthorization();
+  } catch {
+    // No answer means non-personalized ads, which is fine.
+  }
+}
+
+const NO_ADS = { ok: false, canRequestAds: false };
+
+// Native start-up, once per launch, in this order:
+//   1. UMP consent (requestConsentInfo, then showConsentForm if required)
+//   2. iOS only: ATT, if UMP left it notDetermined
+//   3. AdMob.initialize()
+// Steps 2 and 3 run only when UMP says canRequestAds; otherwise no ads load
+// this launch. Resolves { ok, canRequestAds } and never rejects: a consent API
+// that throws, or a failed initialize, is retried on the next call.
 export function initAds() {
   const os = platform();
-  if (os === 'web' || !adsEnabled() || proMember()) return Promise.resolve({ ok: false });
+  if (os === 'web' || !adsEnabled() || proMember()) return Promise.resolve(NO_ADS);
   if (!initPromise) {
     initPromise = (async () => {
       const AdMob = await loadAdMob();
-      await AdMob.initialize();
-      if (os === 'ios') {
-        try {
-          const { status } = await AdMob.trackingAuthorizationStatus();
-          if (status === 'notDetermined') await AdMob.requestTrackingAuthorization();
-        } catch {
-          // No answer means non-personalized ads, which is fine.
-        }
+      let canRequestAds;
+      try {
+        canRequestAds = await gatherConsent(AdMob);
+      } catch {
+        initPromise = null;
+        return NO_ADS;
       }
-      return { ok: true };
+      if (!canRequestAds) return NO_ADS;
+      if (os === 'ios') await askTracking(AdMob);
+      try {
+        await AdMob.initialize();
+      } catch {
+        initPromise = null;
+        return { ok: false, canRequestAds: true };
+      }
+      return { ok: true, canRequestAds: true };
     })().catch(() => {
       initPromise = null;
-      return { ok: false };
+      return NO_ADS;
     });
   }
   return initPromise;
 }
 
-// Native app start: runs initAds() (and so the iOS tracking prompt) as soon as
+// Native app start: runs initAds() (the consent form and iOS tracking prompt) as soon as
 // the app is active, not inside the first ad's timeoutMs. Also starts a new ad
 // session after a long background gap. Once per launch; does nothing on the
 // web or with the flag off, and never loads the SDK for Pro. Never rejects.
@@ -110,9 +145,11 @@ async function showNative(os, placement, state) {
   if (!adId) return result(false, 'error');
   const AdMob = await loadAdMob();
   // Usually already done at app start (startAdsOnAppActive); this is the
-  // backstop. Init failing is not fatal: try the ad anyway, and skip it if that fails.
-  await initAds();
+  // backstop. No consent (or no consent answer yet) means no ad request at all.
+  // A failed initialize is not fatal: try the ad anyway, and skip it if that fails.
+  const init = await initAds();
   if (state.cancelled) return result(false, 'timeout');
+  if (!init?.canRequestAds) return result(false, 'consent');
   try {
     await AdMob.prepareInterstitial({ adId, isTesting: adId.startsWith(GOOGLE_TEST_PUBLISHER) });
   } catch {

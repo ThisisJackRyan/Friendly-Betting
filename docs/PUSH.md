@@ -1,7 +1,6 @@
 # Push notifications
 
 Status: **infra, opt-in UX, settle and call-off sends, and the first-pick send, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, a friend's first pick tells the bet's creator, and the Android app creates its one notification channel at start. The closing-soon cron is a later PR. Nothing is sent while the flag is off, and it is off.
-
 ## The flag
 
 `NEXT_PUBLIC_PUSH_ENABLED`. Only the exact value `1` turns it on; unset, empty, `0`, `true` and anything else are off. It is read by both builds: Next inlines it for the web and API routes, and `mobile/vite.config.mjs` defines it for the app from the shell or the repo-root `.env*` files (the shell wins). It is unset in the repo. Helper: `pushEnabled()` in `src/phone/pushConfig.js`.
@@ -17,7 +16,6 @@ With the flag off (and always on the web):
 - settle and call-off do not post to `/api/bets/{code}/push`, and that route answers a plain 404 (no CORS) without checking auth, reading the bet, a token or calling Messaging;
 - a pick does not post to `/api/bets/{code}/push/pick` (no ID token is read), and that route answers the same plain 404;
 - no Android notification channel is created.
-
 To stop server sends, set the flag off and redeploy the server: the send helper and the token route then go quiet even for installed apps built with it on (their register calls get a 404). Installed apps still run their own client plumbing until a new native build ships with the flag off.
 
 ## What this infra adds
@@ -40,11 +38,9 @@ To stop server sends, set the flag off and redeploy the server: the send helper 
 | Rules | `privatePushTokens`, `privatePushDevices` and `privatePushSends` deny all client access in `firestore.rules` |
 | Plugins | `@capacitor-firebase/messaging` v8, `@capacitor/preferences` (per-install device id, opt-in state) and `capacitor-native-settings` v8 (Open Settings) |
 | Native | Android `POST_NOTIFICATIONS`; iOS `UIBackgroundModes: remote-notification`; FCM auto-init off on both; `AppDelegate.swift` forwards the APNs token to the plugin |
-
 ### Client plumbing
 
 Every function is a no-op unless the flag is on **and** `Capacitor.isNativePlatform()`. Register and unregister also need a real Firebase user (anonymous counts); the local fallback uid cannot register. None of them asks for notification permission: the opt-in sheet or the Notifications row asks first, in context, then calls `registerPushToken()`. They never throw; they return `{ ok: true }` or `{ ok: false, skipped | error }`. They never log the token, uid or a phone number.
-
 - `getPushDeviceId()`: a UUID kept in Preferences under `fb.pushDeviceId`. Stable per install, never the raw token.
 - `getPushToken()`: `FirebaseMessaging.getToken()`.
 - `registerPushToken()`: `POST /api/push/tokens` with `{ deviceId, token, platform }` and `Authorization: Bearer <ID token>`.
@@ -146,7 +142,6 @@ In `src/phone/pushCopy.js` (`PUSH_NOTIFICATION_COPY`), asserted verbatim in `pus
 | Called off | `{question}` | `This bet was called off. Nobody won this one.` |
 
 The first-pick bodies are below. The closing-soon bodies are approved too and land with their send PR.
-
 Payload `data` (strings only): `code`, `route` = `/b/{code}`, `event` = `settle` or `calloff`. No phone numbers, tokens, uids or names. Options: `collapseKey` and `threadId` = the bet code, `channelId` = `bet_updates`.
 
 ### Who gets it
@@ -232,7 +227,6 @@ Then it calls `deliverPickPush`:
 The body is ignored, so a patched client cannot choose the recipient, the name or the side: the server sends the live vote to the creator. Only a uid with a recorded pick on the bet gets past the 403, and the claim bounds it to one push per voter per bet. The per-bet cap bounds it to 10 per bet per 10 minutes however many uids pick. Logs hold at most the bet code and an error code; the ID token, uid, name and phone are never logged or echoed.
 
 **Tradeoffs (same shape as settle):** if the voter's POST never reaches the server (offline right after picking, app killed) or the function dies mid-send, that first pick sends no push, and nothing retries it later. If a first pick's POST was lost and the same voter later changes sides, this app does not post again (a side change is not a first pick), so nothing goes out. If some later POST does arrive for that voter while nothing is claimed (a first pick whose send failed and released the claim, or a POST from another client), it notifies with whatever side and name the live vote holds then, within the 10-minute limit. The server never trusts the client's idea of "first": the claim is what makes it once only.
-
 ## Android notification channel
 
 UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
@@ -249,7 +243,6 @@ UX final (Nov 16 2026), in `src/phone/pushCopy.js` (`PUSH_CHANNEL_COPY`):
 1. **Closing-soon cron**: once per bet, to the creator and voters who have not picked; needs `vercel.json` and `CRON_SECRET`.
 
 It ships with the flag off. Its bodies (already approved) arrive with that PR.
-
 ## What Jack must do himself
 
 None of this is in the repo, and none of it goes in a PR.

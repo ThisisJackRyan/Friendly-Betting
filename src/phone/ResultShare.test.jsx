@@ -6,11 +6,16 @@ import { shareImage } from './imageShare';
 import { renderWinnerCard } from './winnerCardImage';
 import { buildSettlement } from './settlement';
 import { isNativeApp } from '../platform/runtime';
+import { Share } from '@capacitor/share';
+import { Filesystem } from '@capacitor/filesystem';
 
-jest.mock('./share', () => ({ shareMessage: jest.fn(async () => 'shared') }));
+// openShareSheet stays real: shareImage's text fallback uses it.
+jest.mock('./share', () => ({ ...jest.requireActual('./share'), shareMessage: jest.fn(async () => 'shared') }));
 // canShareImageFiles stays real; the native tests run shareImage for real too.
 jest.mock('./imageShare', () => ({ ...jest.requireActual('./imageShare'), shareImage: jest.fn(async () => 'shared') }));
 jest.mock('../platform/runtime', () => ({ ...jest.requireActual('../platform/runtime'), isNativeApp: jest.fn(() => false) }));
+jest.mock('@capacitor/share', () => ({ Share: { share: jest.fn() } }));
+jest.mock('@capacitor/filesystem', () => ({ Directory: { Cache: 'CACHE' }, Filesystem: { writeFile: jest.fn() } }));
 const realShareImage = jest.requireActual('./imageShare').shareImage;
 
 const OPTIONS = [{ id: 'a', label: 'Chiefs -3' }, { id: 'b', label: 'Bills +3' }];
@@ -21,6 +26,7 @@ const open = {
 };
 const settledBet = { ...open, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(open, 'a') };
 const png = new Blob(['png'], { type: 'image/png' });
+const withText = { text: expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/) };
 
 beforeEach(() => {
   shareMessage.mockClear();
@@ -70,7 +76,7 @@ test('the card is drawn for the viewer, and one drawn for another viewer is neve
   await userEvent.click(imageButton());
   expect(renderWinnerCard).toHaveBeenCalledTimes(2);
   expect(renderWinnerCard).toHaveBeenLastCalledWith(settledBet, 'zed');
-  expect(shareImage).toHaveBeenCalledWith(forZed);
+  expect(shareImage).toHaveBeenCalledWith(forZed, withText);
   rerender(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(imageButton());
   expect(renderWinnerCard).toHaveBeenLastCalledWith(settledBet, null);
@@ -84,7 +90,7 @@ test('without requestIdleCallback the card is drawn shortly after, and tapping s
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
   jest.useRealTimers();
   await userEvent.click(imageButton());
-  expect(shareImage).toHaveBeenCalledWith(png);
+  expect(shareImage).toHaveBeenCalledWith(png, withText);
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
 });
 
@@ -94,7 +100,7 @@ test('a tap before the card is drawn draws it then, and only once', async () => 
   render(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(imageButton());
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
-  expect(shareImage).toHaveBeenCalledWith(png);
+  expect(shareImage).toHaveBeenCalledWith(png, withText);
   const [[idle]] = window.requestIdleCallback.mock.calls;
   idle();
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
@@ -114,7 +120,7 @@ test.each([
 test('tapping it shares the drawn PNG', async () => {
   render(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(imageButton());
-  expect(shareImage).toHaveBeenCalledWith(png);
+  expect(shareImage).toHaveBeenCalledWith(png, withText);
   expect(renderWinnerCard).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');
   expect(shareMessage).not.toHaveBeenCalled();
@@ -136,7 +142,7 @@ test('a card that could not be drawn hands nothing on, and ends in the failed no
   shareImage.mockImplementation(async (blob) => (blob ? 'shared' : 'failed'));
   render(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(imageButton());
-  expect(shareImage).toHaveBeenCalledWith(null);
+  expect(shareImage).toHaveBeenCalledWith(null, withText);
   expect(screen.getByRole('status')).toHaveTextContent('Couldn’t make the image. Share the result instead.');
   expect(imageButton()).toBeEnabled();
 });
@@ -168,40 +174,60 @@ test('Share the result still sends the text', async () => {
 });
 
 describe('in the app', () => {
+  const CACHE_URI = 'file:///data/user/0/com.friendlybetting.app/cache/friendly-result.png';
   beforeEach(() => {
     isNativeApp.mockReturnValue(true);
     shareImage.mockImplementation(realShareImage);
-  });
-
-  test('with a share sheet that takes a PNG file: Share as image, and a tap shares the file', async () => {
-    navigator.canShare = jest.fn(() => true);
-    navigator.share = jest.fn(async () => {});
-    render(<ResultShare bet={settledBet} code="abc123" />);
-    // Asked once, on mount, with a probe PNG since the card is not drawn yet.
-    expect(navigator.canShare).toHaveBeenCalledTimes(1);
-    expect(navigator.canShare.mock.calls[0][0].files[0].type).toBe('image/png');
-    await userEvent.click(imageButton());
-    const [{ files }] = navigator.share.mock.calls[0];
-    expect(files).toHaveLength(1);
-    expect(files[0]).toBeInstanceOf(File);
-    expect(files[0].name).toBe('friendly-result.png');
-    expect(files[0].type).toBe('image/png');
-    expect(files[0].size).toBe(png.size);
-    expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');
+    Share.share.mockReset();
+    Share.share.mockResolvedValue({});
+    Filesystem.writeFile.mockReset();
+    Filesystem.writeFile.mockResolvedValue({ uri: CACHE_URI });
   });
 
   test.each([
+    ['takes a PNG file', () => { navigator.canShare = jest.fn(() => true); navigator.share = jest.fn(async () => {}); }],
     ['refuses a PNG file', () => { navigator.canShare = jest.fn(() => false); navigator.share = jest.fn(); }],
-    ['has no canShare', () => { navigator.share = jest.fn(); }],
+    ['has no share sheet at all (the Android web view)', () => {}],
     ['throws from canShare', () => { navigator.canShare = jest.fn(() => { throw new TypeError('bad'); }); navigator.share = jest.fn(); }],
-  ])('a share sheet that %s: no Share as image, and no card drawn', async (_label, setUp) => {
-    jest.useFakeTimers();
+  ])('a web view that %s: Share as image shares the PNG from the cache folder through the native sheet', async (_label, setUp) => {
     setUp();
     render(<ResultShare bet={settledBet} code="abc123" />);
-    await act(async () => jest.advanceTimersByTime(1000));
-    expect(screen.getByRole('button', { name: 'Share the result' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
-    expect(renderWinnerCard).not.toHaveBeenCalled();
+    await userEvent.click(imageButton());
+    await screen.findByRole('status');
+    expect(Filesystem.writeFile).toHaveBeenCalledWith({ path: 'friendly-result.png', data: btoa('png'), directory: 'CACHE' });
+    expect(Share.share).toHaveBeenCalledWith({ title: 'FRIENDLY', files: [CACHE_URI], dialogTitle: 'Share as image' });
+    expect(navigator.share || jest.fn()).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('The group chat gets the final word.');
+  });
+
+  test('the native sheet closed is aborted', async () => {
+    Share.share.mockRejectedValue(new Error('Share canceled'));
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    await userEvent.click(imageButton());
+    await screen.findByRole('status');
+    expect(Share.share).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('status')).toHaveTextContent('All good. The result’s here when you’re ready.');
+  });
+
+  test('a native image share that fails sends the result text instead', async () => {
+    Share.share.mockRejectedValueOnce(new Error('No Activity found'));
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    await userEvent.click(imageButton());
+    await screen.findByRole('status');
+    expect(Share.share).toHaveBeenCalledTimes(2);
+    expect(Share.share.mock.calls[1][0]).toEqual({
+      title: 'FRIENDLY', text: expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/), dialogTitle: 'Text the crew',
+    });
+    expect(shareMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');
+  });
+
+  test('only when the text share fails too does it say so', async () => {
+    Share.share.mockRejectedValue(new Error('No Activity found'));
+    render(<ResultShare bet={settledBet} code="abc123" />);
+    await userEvent.click(imageButton());
+    expect(await screen.findByRole('status')).toHaveTextContent('Couldn’t make the image. Share the result instead.');
+    expect(imageButton()).toBeEnabled();
   });
 });
 
