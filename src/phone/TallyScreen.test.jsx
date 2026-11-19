@@ -535,8 +535,8 @@ describe('live tally', () => {
 
     const votes = [named('v1', 'Jake', 'a'), named('v2', 'Maya', 'b'), named('v3', '', 'b')];
     await push({ ...openBet, votes });
-    expect(list(1)).toHaveAttribute('aria-label', 'Picked by Maya and 1 friend');
-    expect(list(1)).toHaveTextContent('Maya1 friend');
+    expect(list(1)).toHaveAttribute('aria-label', 'Picked by Maya and a friend');
+    expect(list(1)).toHaveTextContent('Mayaa friend');
 
     const voted = { ...openBet, votes };
     await push({ ...voted, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(voted, 'a') });
@@ -641,12 +641,34 @@ describe('live tally', () => {
       return feed.unsubscribe;
     });
     await renderTally();
-    // Same as any failed first load: the existing load error, no claim it was deleted.
-    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the crew’s picks. Try again in a bit.');
+    // A cache miss is not an answer: the loader stays up until the server answers.
+    // renderTally only runs the 450ms min-hold, so this covers the server-hit path
+    // before the cache-miss grace period ends. No load error, no claim it was deleted.
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
 
     await push({ ...openBet, votes: [vote('v1', 'a')] });
     expect(counts()).toEqual(['1 · 100%', '0 · 0%']);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a first-load cache miss then a server-confirmed miss shows the gone screen, not the load error', async () => {
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      onChange(null, undefined, { fromCache: true });
+      return feed.unsubscribe;
+    });
+    await renderTally();
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
+
+    await push(null, undefined, { fromCache: false });
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
   });
 
   test('the creator’s pick landing live hides Wanna vote?', async () => {

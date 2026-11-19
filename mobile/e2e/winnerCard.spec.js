@@ -127,13 +127,62 @@ test('settled with no share sheet: Share as image downloads the PNG', async ({ p
   await expect(page.getByRole('status').filter({ hasText: 'Image saved. Drop it in the group chat.' })).toBeVisible();
 });
 
-test('in the app without a file share sheet, there is no Share as image', async ({ page }) => {
+// The app as Capacitor runs it on Android: no navigator.share in the web
+// view, and the Filesystem and Share plugins recording what they get.
+async function nativeShare(page, { fail = false } = {}) {
   await page.addInitScript(() => { window.CapacitorCustomPlatform = { name: 'android' }; });
+  await page.route('**/node_modules/.vite/deps/@capacitor_filesystem.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `export const Directory = { Cache: 'CACHE' };
+      export const Filesystem = {
+        writeFile: async (options) => {
+          window.written = options;
+          return { uri: 'file:///data/user/0/com.friendlybetting.app/cache/' + options.path };
+        },
+      };`,
+  }));
+  await page.route('**/node_modules/.vite/deps/@capacitor_share.js*', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: `window.nativeShares = [];
+      export const Share = {
+        share: async (options) => {
+          window.nativeShares.push(options);
+          if (${JSON.stringify(fail)} && options.files) throw new Error('No Activity found');
+          return {};
+        },
+      };`,
+  }));
+}
+
+test('in the app with no web view share sheet, Share as image hands the native sheet a cached 1080x1350 PNG', async ({ page }) => {
+  await nativeShare(page);
   await mockBet(page);
   await noShareSheet(page);
   await page.goto('/t/crew123');
-  await expect(page.getByRole('button', { name: 'Share the result', exact: true })).toBeVisible();
-  await expect(imageButton(page)).toHaveCount(0);
+  await imageButton(page).click();
+  await expect(page.getByRole('status').filter({ hasText: 'The group chat gets the final word.' })).toBeVisible();
+  const { written, shares } = await page.evaluate(() => ({ written: window.written, shares: window.nativeShares }));
+  expect(written.path).toBe('friendly-result.png');
+  expect(written.directory).toBe('CACHE');
+  const bytes = Buffer.from(written.data, 'base64');
+  expect(bytes.subarray(1, 4).toString()).toBe('PNG');
+  expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1080, 1350]);
+  expect(shares).toEqual([{
+    title: 'FRIENDLY', files: ['file:///data/user/0/com.friendlybetting.app/cache/friendly-result.png'], dialogTitle: 'Share as image',
+  }]);
+});
+
+test('in the app, a native image share that fails sends the result text instead', async ({ page }) => {
+  await nativeShare(page, { fail: true });
+  await mockBet(page);
+  await noShareSheet(page);
+  await page.goto('/t/crew123');
+  await imageButton(page).click();
+  await expect(page.getByRole('status').filter({ hasText: 'The group chat gets the final word.' })).toBeVisible();
+  const shares = await page.evaluate(() => window.nativeShares);
+  expect(shares).toHaveLength(2);
+  expect(shares[1].files).toBeUndefined();
+  expect(shares[1].text).toMatch(/^FRIENDLY · Closed · .* won the \$20 pot/);
 });
 
 for (const [state, route] of ['called-off', 'called-off-flag'].flatMap((name) => [[name, '/t/crew123'], [name, '/b/crew123']])) {

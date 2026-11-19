@@ -133,6 +133,42 @@ describe('Run it back', () => {
     expect(saveBet).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  // The lock said Pro, but the server says it ended (the lock had not caught
+  // up): the save is refused with pro-required.
+  test('the server refuses a lapsed Pro: the line, then Go Pro opens the sheet on row 3', async () => {
+    setup({ pro: true });
+    // A fresh read finds the plan ended, as the server did.
+    fetchEntitlement.mockResolvedValue({ plan: 'pro', source: 'mock', expiresAt: Date.now() - 1000 });
+    saveBet.mockRejectedValueOnce(Object.assign(new Error('Couldn’t save this bet. Try again.'), { code: 'pro-required' }));
+    await show(<RunItBack bet={SETTLED} code="old123" user={MAYA} />);
+    await userEvent.click(button());
+    expect(fetchEntitlement).toHaveBeenCalledWith('creator-1');
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Your Pro ended, so Run it back is locked\.$/);
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go Pro' }));
+    expect(screen.getByRole('dialog', { name: SHEET })).toBeInTheDocument();
+    expect(highlighted()).toEqual([ROW_3]);
+    expect(saveBet).toHaveBeenCalledTimes(1);
+  });
+
+  test('the server can\'t check Pro: the line, then Try again saves again', async () => {
+    setup({ pro: true });
+    saveBet.mockRejectedValueOnce(Object.assign(new Error('Couldn’t save this bet. Try again.'), { code: 'not-configured' }));
+    await show(<RunItBack bet={SETTLED} code="old123" user={MAYA} />);
+    await userEvent.click(button());
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Couldn’t check Pro right now\. Try again in a bit\.$/);
+    expect(screen.queryByRole('button', { name: 'Go Pro' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(saveBet).toHaveBeenCalledTimes(2);
+    expect(navigation.push).toHaveBeenCalledWith('/t/new123');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });
 
 describe('head-to-head stats (Friends on My bets)', () => {
@@ -178,27 +214,23 @@ describe('head-to-head stats (Friends on My bets)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  test('the page behind is inert while the sheet is up, and focus goes back to Friends after a purchase', async () => {
+  test('the page behind is inert while the sheet is up, and focus goes back to Friends after a restore', async () => {
     setup();
-    process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE = '1';
     fetchEntitlement.mockResolvedValue(PRO);
-    try {
-      const root = await showInRoot(<MyBetsList user={MAYA} />);
-      expect(root).not.toHaveAttribute('inert');
-      await userEvent.click(friends());
-      const sheet = screen.getByRole('dialog', { name: SHEET });
-      expect(root.contains(sheet)).toBe(false);
-      expect(root).toHaveAttribute('inert');
-      expect(sheet).toHaveFocus();
+    const root = await showInRoot(<MyBetsList user={MAYA} />);
+    expect(root).not.toHaveAttribute('inert');
+    await userEvent.click(friends());
+    const sheet = screen.getByRole('dialog', { name: SHEET });
+    expect(root.contains(sheet)).toBe(false);
+    expect(root).toHaveAttribute('inert');
+    expect(sheet).toHaveFocus();
+    expect(within(sheet).getByRole('button', { name: 'Coming soon' })).toBeDisabled();
 
-      await userEvent.click(within(sheet).getByRole('button', { name: 'Get Pro' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Back to my bets' }));
-      expect(screen.queryByRole('dialog')).toBeNull();
-      expect(root).not.toHaveAttribute('inert');
-      expect(friends()).toHaveFocus();
-    } finally {
-      delete process.env.NEXT_PUBLIC_PRO_MOCK_PURCHASE;
-    }
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Restore purchase' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Back to my bets' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(root).not.toHaveAttribute('inert');
+    expect(friends()).toHaveFocus();
   });
 
   test.each([

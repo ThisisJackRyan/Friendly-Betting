@@ -51,8 +51,10 @@ export const REVEAL_COPY = {
   stake: (stake) => `Stakes: ${stake}`,
   startBet: 'Start a bet',
   others: (count) => (count === 1 ? '1 other' : `${count} others`),
-  // Every winner skipped their name.
-  friends: (count) => (count === 1 ? 'One friend called it.' : `${count} friends called it.`),
+  // Winners with no name (skipped, or a deleted account), after a name.
+  unnamed: (count) => (count === 1 ? 'a friend' : `${count} friends`),
+  // Every winner is unnamed.
+  friends: (count) => (count === 1 ? 'A friend called it.' : `${count} friends called it.`),
 };
 
 // Names shown before "& N others".
@@ -63,12 +65,15 @@ function joinNames(parts) {
   return `${parts.slice(0, -1).join(', ')} & ${parts.at(-1)}`;
 }
 
-// "Jack", "Jack & Maya", "Jack, Maya & Sam", "Jack, Maya & 3 others",
-// "Jack & 1 other". Unnamed winners only ever count toward the others.
+// "Jack", "Jack & Maya", "Jack, Maya & Sam", "Jack, Maya & 3 others".
+// With up to 3 winners, unnamed ones follow the names as one count ("Jack &
+// a friend", "Jack & 2 friends"); with more, they count toward the others.
+// '' when nobody has a name.
 export function winnerPhrase(winners) {
   const names = winners.map((winner) => String(winner.name || '').trim()).filter(Boolean);
   if (!winners.length || !names.length) return '';
-  if (names.length === winners.length && winners.length <= 3) return joinNames(names);
+  const unnamed = winners.length - names.length;
+  if (winners.length <= 3) return joinNames(unnamed ? [...names, REVEAL_COPY.unnamed(unnamed)] : names);
   const shown = names.slice(0, NAMED);
   return joinNames([...shown, REVEAL_COPY.others(winners.length - shown.length)]);
 }
@@ -107,8 +112,8 @@ export function buildReveal({ bet, viewerId }) {
   if (recipient?.won) {
     const others = winners.filter((winner) => winner.voterId !== viewerId);
     if (!others.length) return { ...base, kind: 'you-solo', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youSolo(line) };
-    const named = winnerPhrase(others) || REVEAL_COPY.others(others.length);
-    const names = others.length === 1 ? `You & ${named}` : `You, ${named}`;
+    const named = winnerPhrase(others);
+    const names = named ? `${others.length === 1 ? 'You & ' : 'You, '}${named}` : `You & ${REVEAL_COPY.unnamed(others.length)}`;
     return { ...base, kind: 'you-won', headline: REVEAL_COPY.youWon, subline: REVEAL_COPY.youWonWith(names, line) };
   }
 

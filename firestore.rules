@@ -335,6 +335,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Push tokens and send claims (docs/PUSH.md). Only the Admin SDK in the
+    // push API routes touches them, and it bypasses rules, so no client may
+    // read or write them, not even under its own uid. Like the rest of this
+    // file, these rules are not auto-deployed (see the top of the file).
+    match /privatePushTokens/{uid}/{document=**} {
+      allow read, write: if false;
+    }
+    match /privatePushSends/{document=**} {
+      allow read, write: if false;
+    }
+    // Which uid owns each install's device id, so an account switch can move
+    // a leftover token off the old uid. Admin SDK only, like the two above.
+    match /privatePushDevices/{document=**} {
+      allow read, write: if false;
+    }
+
     // Pro entitlements (docs/PRO.md). A member reads their own plan; nobody
     // else can. Only the Admin SDK writes them (the mock purchase route on
     // previews today, store billing later), so no client can grant, extend or

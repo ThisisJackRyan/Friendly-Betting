@@ -1,0 +1,60 @@
+name: Closing-soon reminder
+
+# Lives at ci/push-closing.yml until Jack moves it to
+# .github/workflows/push-closing.yml (the token that opened this PR lacks
+# GitHub's workflow scope, which is required to create files there).
+# Scheduled workflows only run from the default branch, and only once the
+# file is under .github/workflows/.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: push-closing
+  cancel-in-progress: false
+
+jobs:
+  closing-soon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the closing-soon route
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PUSH_CRON_URL: ${{ vars.PUSH_CRON_URL }}
+        run: |
+          set +x
+          # Missing or blank: skip quietly so the schedule does not fail
+          # every 15 minutes before the secret is added.
+          if [ -z "${CRON_SECRET//[[:space:]]/}" ]; then
+            echo "CRON_SECRET is not set; skipping the closing-soon reminder."
+            exit 0
+          fi
+          url="${PUSH_CRON_URL:-https://www.friendly-bets.com/api/cron/push-closing}"
+          tmp="$(mktemp)"
+          set +e
+          http_code="$(curl --fail-with-body -sS -o "$tmp" -w '%{http_code}' \
+            --max-time 60 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "$url")"
+          curl_exit=$?
+          set -e
+          # Flag off: the route is supposed to look like it does not exist.
+          if [ "$http_code" = "404" ]; then
+            rm -f "$tmp"
+            exit 0
+          fi
+          if [ "$curl_exit" -ne 0 ]; then
+            if [ -z "$http_code" ] || [ "$http_code" = "000" ]; then
+              echo "closing-soon reminder failed: network error (curl exit ${curl_exit})"
+            else
+              echo "closing-soon reminder failed: HTTP ${http_code}"
+              cat "$tmp" || true
+            fi
+            rm -f "$tmp"
+            exit 1
+          fi
+          rm -f "$tmp"

@@ -447,6 +447,93 @@ describe('private result texts', () => {
   });
 });
 
+describe('push tokens, device owners and send claims', () => {
+  const ownDevice = 'privatePushTokens/creator-1/devices/device-1';
+  const anonDevice = 'privatePushTokens/anon-1/devices/device-2';
+  const device = { token: 'fcm-token-1', platform: 'ios', createdAt: 1, updatedAt: 1 };
+  const sendClaim = 'privatePushSends/settle:abc123:2';
+  const ownerRecord = 'privatePushDevices/device-1';
+
+  // Signed out, anonymous voter, another phone user, and the owner (creator-1).
+  const contexts = () => [guest(), anon(), otherPhone(), creator()];
+
+  beforeEach(async () => {
+    await seed({
+      'privatePushTokens/creator-1': { windowStart: 1, count: 1 },
+      [ownDevice]: device,
+      [anonDevice]: { ...device, token: 'fcm-token-2', platform: 'android' },
+      [sendClaim]: { at: 2 },
+      [ownerRecord]: { uid: 'creator-1', updatedAt: 1 },
+    });
+  });
+
+  test('no client can get or list push tokens, not even its own', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc(ownDevice).get());
+      await assertFails(db.doc(anonDevice).get());
+      await assertFails(db.doc('privatePushTokens/creator-1').get());
+      await assertFails(db.collection('privatePushTokens/creator-1/devices').get());
+      await assertFails(db.collection('privatePushTokens/anon-1/devices').get());
+      await assertFails(db.collection('privatePushTokens').get());
+      await assertFails(db.collectionGroup('devices').get());
+    }
+  });
+
+  test('no client can create, update or delete push tokens, not even its own', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc('privatePushTokens/creator-1/devices/device-9').set(device));
+      await assertFails(db.doc('privatePushTokens/anon-1/devices/device-9').set(device));
+      await assertFails(db.doc(ownDevice).update({ token: 'fcm-token-9' }));
+      await assertFails(db.doc(anonDevice).update({ token: 'fcm-token-9' }));
+      await assertFails(db.doc(ownDevice).delete());
+      await assertFails(db.doc(anonDevice).delete());
+      await assertFails(db.doc('privatePushTokens/creator-1').set({ count: 0 }));
+      await assertFails(db.doc('privatePushTokens/creator-1').delete());
+    }
+  });
+
+  test('the owner uid is denied under its own path for every operation', async () => {
+    const owner = creator();
+    const own = anon('anon-1');
+    await assertFails(owner.doc('privatePushTokens/creator-1/devices/new').set(device));
+    await assertFails(own.doc('privatePushTokens/anon-1/devices/new').set(device));
+    await assertFails(own.doc(anonDevice).get());
+    await assertFails(own.doc(anonDevice).update({ updatedAt: 2 }));
+    await assertFails(own.doc(anonDevice).delete());
+  });
+
+  test('no client can get, list, create, update or delete send claims', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc(sendClaim).get());
+      await assertFails(db.collection('privatePushSends').get());
+      await assertFails(db.doc('privatePushSends/vote:abc123:anon-1:a').set({ at: 3 }));
+      await assertFails(db.doc(sendClaim).update({ at: 4 }));
+      await assertFails(db.doc(sendClaim).delete());
+    }
+  });
+
+  test('no client can get, list, create, update or delete device owner records, not even its own', async () => {
+    for (const db of contexts()) {
+      await assertFails(db.doc(ownerRecord).get());
+      await assertFails(db.doc('privatePushDevices/device-missing').get());
+      await assertFails(db.collection('privatePushDevices').get());
+      await assertFails(db.collection('privatePushDevices').where('uid', '==', 'creator-1').get());
+      await assertFails(db.collectionGroup('privatePushDevices').get());
+      await assertFails(db.doc('privatePushDevices/device-9').set({ uid: 'creator-1', updatedAt: 2 }));
+      await assertFails(db.doc('privatePushDevices/device-9').set({ uid: 'anon-1', updatedAt: 2 }));
+      await assertFails(db.doc(ownerRecord).set({ uid: 'anon-1', updatedAt: 2 }));
+      await assertFails(db.doc(ownerRecord).update({ uid: 'anon-1' }));
+      await assertFails(db.doc(ownerRecord).update({ updatedAt: 3 }));
+      await assertFails(db.doc(ownerRecord).delete());
+    }
+    // The owner uid named in the record is denied too.
+    const owner = creator();
+    await assertFails(owner.doc(ownerRecord).get());
+    await assertFails(owner.doc(ownerRecord).update({ updatedAt: 4 }));
+    await assertFails(owner.doc(ownerRecord).delete());
+  });
+});
+
 describe('pro entitlements', () => {
   const own = 'entitlements/creator-1';
   const pro = { plan: 'pro', source: 'mock', since: 1, expiresAt: 4102444800000 };
@@ -536,5 +623,31 @@ describe('meta', () => {
     await assertFails(guest().collection('meta').get());
     await assertFails(creator().doc('meta/other').get());
     await assertFails(creator().doc('meta/other').set({ secret: false }));
+  });
+});
+
+describe('account deletion tombstones', () => {
+  const own = 'accountDeletions/creator-1';
+
+  beforeEach(async () => {
+    await seed({ [own]: { at: 1 }, 'accountDeletions/creator-9': { at: 2 } });
+  });
+
+  test('no client can read a tombstone, their own included', async () => {
+    for (const db of [guest(), anon(), anon('creator-1'), otherPhone(), creator()]) {
+      await assertFails(db.doc(own).get());
+      await assertFails(db.collection('accountDeletions').get());
+    }
+  });
+
+  test('no client can write, change or remove a tombstone', async () => {
+    for (const db of [guest(), anon(), otherPhone(), creator()]) {
+      await assertFails(db.doc(own).set({ at: 3 }));
+      await assertFails(db.doc(own).update({ at: 3 }));
+      await assertFails(db.doc(own).delete());
+      await assertFails(db.doc('accountDeletions/someone-new').set({ at: 3 }));
+    }
+    await testEnv.clearFirestore();
+    await assertFails(creator().doc(own).set({ at: 3 }));
   });
 });

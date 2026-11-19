@@ -10,6 +10,7 @@ import TallyScreen from '../src/phone/TallyScreen';
 import NotFound from '../src/phone/NotFound';
 import NativeLifecycle from './NativeLifecycle';
 import EntitlementSync from '../src/phone/EntitlementSync';
+import PushSync from '../src/phone/PushSync';
 import Paywall from '../src/phone/Paywall';
 
 function Chrome() {
@@ -20,6 +21,7 @@ export default function App() {
   return <>
     <NativeLifecycle />
     <EntitlementSync />
+    <PushSync />
     <div className="app-frame">
       <Routes>
         <Route element={<Chrome />}>

@@ -22,5 +22,5 @@ afterEach(() => {
 
 test('a plugin that cannot load is skipped as error, never thrown', async () => {
   await expect(showInterstitial({ placement: 'settle' })).resolves.toEqual({ shown: false, skipped: true, reason: 'error' });
-  await expect(initAds()).resolves.toEqual({ ok: false });
+  await expect(initAds()).resolves.toEqual({ ok: false, canRequestAds: false });
 });

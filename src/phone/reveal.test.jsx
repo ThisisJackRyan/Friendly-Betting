@@ -113,7 +113,7 @@ describe('buildReveal copy', () => {
   test('a single unnamed winner gets the plain stake line, not "The only one who called it"', () => {
     for (const name of ['', '   ']) {
       const reveal = buildReveal({ bet: settled({ winners: [['u1', name]], losers: [['zed', 'Zed']] }), viewerId: 'outsider' });
-      expect(lines(reveal)).toEqual(['Chiefs -3 won', 'One friend called it.', 'Time for everyone else to pay up.', '$20']);
+      expect(lines(reveal)).toEqual(['Chiefs -3 won', 'A friend called it.', 'Time for everyone else to pay up.', '$20']);
     }
   });
 
@@ -123,17 +123,17 @@ describe('buildReveal copy', () => {
   });
 
   test.each([
-    [[['jack', 'Jack'], ['u1', '']], 'Jack & 1 other won.'],
-    [[['jack', 'Jack'], ['u1', ''], ['u2', '']], 'Jack & 2 others won.'],
-    [[['jack', 'Jack'], ['maya', 'Maya'], ['u1', '']], 'Jack, Maya & 1 other won.'],
+    [[['jack', 'Jack'], ['u1', '']], 'Jack & a friend won.'],
+    [[['jack', 'Jack'], ['u1', ''], ['u2', '']], 'Jack & 2 friends won.'],
+    [[['jack', 'Jack'], ['maya', 'Maya'], ['u1', '']], 'Jack, Maya & a friend won.'],
     [[['u1', ''], ['jack', 'Jack'], ['u2', ''], ['maya', 'Maya'], ['sam', 'Sam']], 'Jack, Maya & 3 others won.'],
-    [[['jack', '  Jack  '], ['u1', '   ']], 'Jack & 1 other won.'],
+    [[['jack', '  Jack  '], ['u1', '   ']], 'Jack & a friend won.'],
   ])('mixed named and unnamed winners: %j', (winners, headline) => {
     expect(buildReveal({ bet: settled({ winners }) }).headline).toBe(headline);
   });
 
   test.each([
-    [1, 'One friend called it.', 'Time for everyone else to pay up.'],
+    [1, 'A friend called it.', 'Time for everyone else to pay up.'],
     [3, '3 friends called it.', 'Time for everyone else to pay up.'],
   ])('all %i winners unnamed get the friends count line', (count, headline, subline) => {
     const winners = Array.from({ length: count }, (_, index) => [`u${index}`, index ? '' : '   ']);
@@ -160,8 +160,9 @@ describe('buildReveal copy', () => {
       'Chiefs -3 won', 'You called it.', 'You, Jack & Maya won. Time for everyone else to pay up.', '$20',
     ]);
     expect(view([me, ['jack', 'Jack']]).subline).toBe('You & Jack won. Time for everyone else to pay up.');
-    expect(view([me, ['u1', '']]).subline).toBe('You & 1 other won. Time for everyone else to pay up.');
-    expect(view([me, ['jack', 'Jack'], ['u1', '']]).subline).toBe('You, Jack & 1 other won. Time for everyone else to pay up.');
+    expect(view([me, ['u1', '']]).subline).toBe('You & a friend won. Time for everyone else to pay up.');
+    expect(view([me, ['jack', 'Jack'], ['u1', '']]).subline).toBe('You, Jack & a friend won. Time for everyone else to pay up.');
+    expect(view([me, ['u1', ''], ['u2', '']]).subline).toBe('You & 2 friends won. Time for everyone else to pay up.');
     expect(view([me, ['jack', 'Jack'], ['maya', 'Maya'], ['sam', 'Sam'], ['kim', 'Kim']]).subline)
       .toBe('You, Jack, Maya & 2 others won. Time for everyone else to pay up.');
     expect(view([me]).startBet).toBe(false);
@@ -220,6 +221,13 @@ describe('buildReveal copy', () => {
   test('winnerPhrase never names more than two', () => {
     expect(winnerPhrase([])).toBe('');
     expect(winnerPhrase([{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }])).toBe('A, B & 2 others');
+  });
+
+  test('winnerPhrase: cleared names (deleted accounts) are a friend, two or more a count', () => {
+    expect(winnerPhrase([{ name: '' }])).toBe('');
+    expect(winnerPhrase([{ name: 'Maya' }, { name: '' }])).toBe('Maya & a friend');
+    expect(winnerPhrase([{ name: '' }, { name: 'Maya' }, { name: ' ' }])).toBe('Maya & 2 friends');
+    expect(winnerPhrase([{ name: 'A' }, { name: '' }, { name: '' }, { name: 'D' }])).toBe('A, D & 2 others');
   });
 
   test('reveal strings have no em dashes and no TODO_UX', () => {
@@ -344,7 +352,7 @@ describe('settled screens', () => {
     as('outsider');
     feed({ ...makeBet(crew), status: 'closed', winnerId: 'b' });
     await renderAt('/b/abc123', <VoteScreen />);
-    expect(region()).toHaveTextContent('Bills +3 wonBart & 1 other won.Time for everyone else to pay up.Stakes: $20');
+    expect(region()).toHaveTextContent('Bills +3 wonBart & a friend won.Time for everyone else to pay up.Stakes: $20');
   });
 
   test('a legacy count-only bet falls back to the plain result card without crashing', async () => {
@@ -383,7 +391,7 @@ describe('settled screens', () => {
     expect(screen.queryByRole('region', { name: 'Settled result' })).not.toBeInTheDocument();
     expect(screen.getByText('Updated live')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Picked by Jack, Maya, and Sam' })).toBeInTheDocument();
-    expect(screen.getByRole('list', { name: 'Picked by Bart and 1 friend' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Picked by Bart and a friend' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Text the crew' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Share as image' })).not.toBeInTheDocument();
   });

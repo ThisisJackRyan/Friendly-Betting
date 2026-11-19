@@ -5,8 +5,21 @@ import { useEffect, useId, useRef } from 'react';
 // Confirm before a step the creator can't take back (deleting or calling off
 // a bet). "Keep it" takes focus on open; Escape and the backdrop keep the
 // bet. While the action is in flight both buttons are disabled so the outcome
-// always lands in this dialog.
-const ConfirmDialog = ({ title, copy, confirmLabel, busyLabel, busy, error, onConfirm, onCancel }) => {
+// always lands in this dialog. `copy` is one line of text; `body` takes any
+// content (a list) instead. `confirmClassName` swaps the red confirm for
+// another button style.
+const ConfirmDialog = ({
+  title,
+  copy,
+  body = null,
+  confirmLabel,
+  confirmClassName = 'danger',
+  busyLabel,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}) => {
   const titleId = useId();
   const keepRef = useRef(null);
   const confirmRef = useRef(null);
@@ -57,9 +70,9 @@ const ConfirmDialog = ({ title, copy, confirmLabel, busyLabel, busy, error, onCo
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId} className="dialog-title">{title}</h2>
-        {copy && <p className="dialog-copy">{copy}</p>}
+        {body ? <div className="dialog-copy">{body}</div> : copy && <p className="dialog-copy">{copy}</p>}
         <div className="dialog-actions">
-          <button ref={confirmRef} type="button" className="danger press" disabled={busy} onClick={onConfirm}>
+          <button ref={confirmRef} type="button" className={`${confirmClassName} press`} disabled={busy} onClick={onConfirm}>
             {busy ? busyLabel : confirmLabel}
           </button>
           <button ref={keepRef} type="button" className="dialog-keep press" disabled={busy} onClick={onCancel}>

@@ -17,8 +17,19 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
 import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
-import { useProBadge } from './useEntitlement';
+import { useEntitlementState, useProBadge } from './useEntitlement';
+import DeleteAccountDialog from './DeleteAccountDialog';
+import { DELETE_ACCOUNT_COPY, proBulletFor } from './deleteAccountCopy';
+import {
+  REQUIRES_RECENT_LOGIN,
+  clearDeleteAccountResume,
+  clearLocalAccountData,
+  deleteAccount,
+  markDeleteAccountResume,
+  takeDeleteAccountResume,
+} from './accountApi';
 import GoProLink from './GoProLink';
+import PushSettingsRow from './PushSettingsRow';
 import FriendsView from './FriendsView';
 import { friendStats } from './friendStats';
 import ProSheet from './ProSheet';
@@ -43,8 +54,12 @@ function cardOutcome(bet, result, uid) {
   return resultHeadline(result);
 }
 
+const isOfflineError = (err) => err?.code === 'offline'
+  || (typeof navigator !== 'undefined' && navigator.onLine === false);
+
 export function MyBetsList({ user }) {
   const uid = isCreator(user) ? user.uid : '';
+  const router = useRouter();
   const [bets, setBets] = useState(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('All');
@@ -62,6 +77,11 @@ export function MyBetsList({ user }) {
   // Head-to-head stats (the Friends filter) are Pro with the paywall on.
   const friendsLocked = useProLocked();
   const proBadge = useProBadge(uid);
+  const entitlementState = useEntitlementState();
+  const proBullet = uid && entitlementState.uid === uid ? proBulletFor(entitlementState.entitlement) : '';
+  // Delete account: { busy, error, reauth } while the confirm is open.
+  const [account, setAccount] = useState(null);
+  const accountTrigger = useRef(null);
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
 
@@ -81,6 +101,54 @@ export function MyBetsList({ user }) {
     setDeleting(null);
     setDeleteError('');
     deleteTrigger.current?.focus();
+  };
+
+  // Back from "Sign in again": reopen the confirm.
+  useEffect(() => {
+    if (uid && takeDeleteAccountResume(uid)) setAccount({ busy: false, error: '', reauth: false });
+  }, [uid]);
+
+  const openAccount = (event) => {
+    accountTrigger.current = event.currentTarget;
+    setAccount({ busy: false, error: '', reauth: false });
+  };
+
+  const closeAccount = () => {
+    setAccount(null);
+    accountTrigger.current?.focus();
+  };
+
+  const confirmAccountDelete = async () => {
+    if (!account || account.busy) return;
+    setAccount({ busy: true, error: '', reauth: false });
+    try {
+      await deleteAccount();
+    } catch (err) {
+      if (!alive.current) return;
+      if (err?.code === REQUIRES_RECENT_LOGIN) setAccount({ busy: false, error: '', reauth: true });
+      else setAccount({ busy: false, error: isOfflineError(err) ? DELETE_ACCOUNT_COPY.offline : DELETE_ACCOUNT_COPY.error, reauth: false });
+      return;
+    }
+    // The account is gone on the server. Everything from here is best effort.
+    await clearLocalAccountData(uid);
+    try {
+      await signOutCreator();
+    } catch {
+      // The Auth user is deleted; the session can't refresh anyway.
+    }
+    router.replace('/');
+  };
+
+  // Sends them through phone sign-in (My bets shows it to anyone signed
+  // out), and My bets reopens the confirm when they are back.
+  const reauthForAccount = async () => {
+    markDeleteAccountResume(uid);
+    try {
+      await signOutCreator();
+    } catch {
+      clearDeleteAccountResume();
+      if (alive.current) setAccount({ busy: false, error: DELETE_ACCOUNT_COPY.error, reauth: false });
+    }
   };
 
   useEffect(() => {
@@ -185,7 +253,6 @@ export function MyBetsList({ user }) {
         <>
           <div className="bets-heading">
             <div>
-              <p className="eyebrow">YOUR SIDE OF THE STORY</p>
               <div className="bets-title-row">
                 <h1 className="screen-title">
                   My bets
@@ -352,6 +419,12 @@ export function MyBetsList({ user }) {
               )}
             </>
           )}
+          <PushSettingsRow uid={uid} />
+          {uid && (
+            <button type="button" className="logout-link delete-account-link press" onClick={openAccount}>
+              {DELETE_ACCOUNT_COPY.row}
+            </button>
+          )}
           <button
             type="button"
             className="logout-link"
@@ -380,6 +453,17 @@ export function MyBetsList({ user }) {
       {deleting && (
         <DeleteBetDialog busy={deleteBusy} error={deleteError} onConfirm={confirmDelete} onCancel={closeDelete} />
       )}
+      {account && (
+        <DeleteAccountDialog
+          proBullet={proBullet}
+          reauth={account.reauth}
+          busy={account.busy}
+          error={account.error}
+          onConfirm={confirmAccountDelete}
+          onReauth={reauthForAccount}
+          onCancel={closeAccount}
+        />
+      )}
       <div className="toast-region" role="status">
         {toast && <p className="toast">{toast}</p>}
       </div>
@@ -396,7 +480,10 @@ const MyBets = () => {
   if (user && !isCreator(user)) {
     return (
       <CreatorAuthFlow
-        onCancel={() => router.push('/')}
+        onCancel={() => {
+          clearDeleteAccountResume();
+          router.push('/');
+        }}
         phoneFooter={<GoProLink />}
         renderDone={(next) => <MyBetsList key={next.uid} user={next} />}
       />

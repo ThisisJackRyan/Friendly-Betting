@@ -58,7 +58,9 @@ jest.mock('firebase/firestore', () => {
     where: () => null,
     serverTimestamp: () => 'SERVER_TIME',
     deleteField: () => 'DELETE_FIELD',
-    onSnapshot: (ref, next, error) => {
+    // onSnapshot(ref, next, error) or onSnapshot(ref, options, next, error).
+    onSnapshot: (ref, ...rest) => {
+      const [next, error] = typeof rest[0] === 'function' ? rest : rest.slice(1);
       const item = { ...ref, next };
       if (isVotePath(ref.path) && !fake.voteRules) {
         Promise.resolve().then(() => error(denied()));

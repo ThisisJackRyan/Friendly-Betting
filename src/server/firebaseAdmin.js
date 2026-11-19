@@ -1,6 +1,7 @@
 import { cert, getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
 // Server only. Never import this from client code. Initialised lazily inside
 // request handlers so `next build` never needs the service account.
@@ -34,4 +35,9 @@ export function adminDb() {
 
 export function adminAuth() {
   return getAuth(adminApp());
+}
+
+// Push sends (docs/PUSH.md). Lazy like the others.
+export function adminMessaging() {
+  return getMessaging(adminApp());
 }
