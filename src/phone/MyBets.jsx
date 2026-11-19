@@ -36,12 +36,33 @@ export const DELETE_WAIT_MS = 15000;
 
 // Bets deleted this session. The live list can still emit a deleted bet for a
 // while (a stale snapshot, or a vote listener re-sending the last rows), and a
-// screen opened again starts from such a list, so these stay hidden.
+// screen opened again starts from such a list, so these stay hidden. The set
+// belongs to one account: a different account (or none) starts it empty, so a
+// reused bet code never hides another account's bet.
 const deletedBets = new Set();
+let deletedBetsUid = null;
+
+function clearDeletedBets() {
+  deletedBets.clear();
+  deletedBetsUid = null;
+}
+
+// The deleted set for this account, emptied first if it belonged to another.
+function deletedBetsFor(uid) {
+  if (!uid) {
+    clearDeletedBets();
+    return deletedBets;
+  }
+  if (uid !== deletedBetsUid) {
+    deletedBets.clear();
+    deletedBetsUid = uid;
+  }
+  return deletedBets;
+}
 
 // Tests only.
 export function __resetDeletedBetsForTests() {
-  deletedBets.clear();
+  clearDeletedBets();
 }
 
 // The card's last line, from the creator's side as the reveal puts it: their
@@ -131,7 +152,7 @@ export function MyBetsList({ user }) {
     setRemoving(code);
     try {
       await removeBet(code);
-      deletedBets.add(code);
+      deletedBetsFor(uid).add(code);
       if (!alive.current) return;
       setRemoving(null);
       setDeleting(null);
@@ -159,12 +180,12 @@ export function MyBetsList({ user }) {
     const wait = deleteWait.current;
     if (wait && gone(wait.code)) wait.done();
     if (deleting && !deleteBusy && deleteError && gone(deleting)) {
-      deletedBets.add(deleting);
+      deletedBetsFor(uid).add(deleting);
       setDeleting(null);
       setDeleteError('');
       setToast('Bet deleted.');
     }
-  }, [bets, error, deleting, deleteBusy, deleteError]);
+  }, [bets, error, deleting, deleteBusy, deleteError, uid]);
 
   useEffect(() => {
     if (!uid) return undefined;
@@ -187,8 +208,12 @@ export function MyBetsList({ user }) {
   }, [friendsLocked, filter]);
 
   const shown = useMemo(
-    () => bets && bets.filter((bet) => bet.id !== removing && !deletedBets.has(bet.id)),
-    [bets, removing],
+    () => {
+      if (!bets) return bets;
+      const deleted = deletedBetsFor(uid);
+      return bets.filter((bet) => bet.id !== removing && !deleted.has(bet.id));
+    },
+    [bets, removing, uid],
   );
   const friends = useMemo(() => friendStats(shown, uid), [shown, uid]);
   const counts = { All: shown?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
@@ -384,6 +409,7 @@ export function MyBetsList({ user }) {
             type="button"
             className="logout-link"
             onClick={async () => {
+              clearDeletedBets();
               try {
                 await signOutCreator();
               } catch {

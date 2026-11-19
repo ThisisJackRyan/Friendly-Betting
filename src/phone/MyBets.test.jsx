@@ -2,6 +2,7 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DELETE_WAIT_MS, MyBetsList, __resetDeletedBetsForTests } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
+import { signOutCreator } from './creatorAuth';
 import { PHONE_OFFLINE_ERROR } from './creatorSession';
 
 jest.mock('next/navigation');
@@ -396,6 +397,38 @@ describe('delete a bet', () => {
       render(<MyBetsList user={user} />);
       expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
       expect(questions()).toEqual(['Will Alex break 90?', 'Total points tonight?']);
+    });
+
+    test('another account with the same bet code still sees its bet', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      unmount();
+      const other = { ...user, uid: 'other-creator' };
+      subscribeMyBets.mockImplementation((_uid, publish) => {
+        publish(bets.map((bet) => ({ ...bet, createdByID: 'other-creator' })));
+        return () => {};
+      });
+      render(<MyBetsList user={other} />);
+      expect(questions()).toEqual(['Will Alex break 90?', 'Who wins game night?', 'Total points tonight?']);
+      expect(allCount()).toBe('All3');
+    });
+
+    test('logging out forgets the deleted bets', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+      expect(signOutCreator).toHaveBeenCalled();
+      unmount();
+      // Same account again, with a list that still has the bet.
+      render(<MyBetsList user={user} />);
+      expect(screen.getByText('Who wins game night?')).toBeInTheDocument();
+      expect(allCount()).toBe('All3');
     });
   });
 });
