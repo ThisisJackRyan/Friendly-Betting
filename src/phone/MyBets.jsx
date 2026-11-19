@@ -186,7 +186,6 @@ export function MyBetsList({ user }) {
         <>
           <div className="bets-heading">
             <div>
-              <p className="eyebrow">YOUR SIDE OF THE STORY</p>
               <div className="bets-title-row">
                 <h1 className="screen-title">
                   My bets

@@ -17,8 +17,7 @@ import {
   shouldOfferPushOptIn,
   syncPushForUser,
   unregisterBeforeSignOut,
-} from './pushOptIn';
-import {
+} from './pushOptIn';import {
   getPushDeviceId,
   getPushToken,
   registerPushToken,
@@ -53,8 +52,7 @@ jest.mock('capacitor-native-settings', () => ({
   NativeSettings: { open: jest.fn(async () => ({ status: true })) },
   AndroidSettings: { AppNotification: 'app_notification' },
   IOSSettings: { App: 'app' },
-}));
-jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
+}));jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
 jest.mock('../platform/runtime', () => ({
   isNativeApp: () => jest.requireMock('@capacitor/core').Capacitor.isNativePlatform(),
   PROD_ORIGIN: 'https://www.friendly-bets.com',
@@ -72,8 +70,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   Preferences.store.clear();
   resetPushDeviceIdForTests();
-  resetPushOptInForTests();
-  Capacitor.isNativePlatform.mockReturnValue(false);
+  resetPushOptInForTests();  Capacitor.isNativePlatform.mockReturnValue(false);
   Capacitor.getPlatform.mockReturnValue('web');
   auth.currentUser = user();
   global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }));
@@ -133,7 +130,6 @@ const OPT_IN_OFF = {
   signOut: undefined,
   open: false,
 };
-
 async function runAll() {
   return {
     deviceId: await getPushDeviceId(),
@@ -171,7 +167,6 @@ test('on the web the opt-in module does nothing, even with the flag on', async (
   expect(await runOptIn()).toEqual(OPT_IN_OFF);
   expectNothingTouched();
 });
-
 test('on the web the flag changes nothing: no plugin calls, no fetch', async () => {
   process.env.NEXT_PUBLIC_PUSH_ENABLED = '1';
   expect(await runAll()).toEqual({
@@ -251,8 +246,7 @@ test('failures resolve with an error code and never throw', async () => {
   expect(await registerPushToken()).toEqual({ ok: false, error: 'no-token' });
 });
 
-function appSources() {
-  const fs = require('fs');
+function appSources() {  const fs = require('fs');
   const path = require('path');
   const repo = path.join(__dirname, '..', '..');
   const files = [];
@@ -297,5 +291,4 @@ test('the opt-in module is only used by the first-bet path, the row, the auth sy
   ]);
   // Never the vote page.
   const vote = appSources().find(({ file }) => file === 'src/phone/VoteScreen.jsx');
-  expect(vote.text).not.toMatch(/push/i);
-});
+  expect(vote.text).not.toMatch(/push/i);});

@@ -91,6 +91,15 @@ test('opens the clubhouse with a primary creation action and shortcuts for each 
     '/new/prop',
   );
   expect(screen.getByText('Example bet')).toBeInTheDocument();
+  expect(screen.queryByText(/group chat has spoken/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/weekend plans/i)).not.toBeInTheDocument();
+  expect(document.querySelector('.example-ticket .ticket-top')).not.toBeInTheDocument();
+  expect(screen.getByText('Coffee on the loser')).toBeInTheDocument();
+  const footer = screen.getByText('A little more on the line.');
+  expect(footer).toHaveClass('ticket-footer-copy');
+  expect(footer.closest('.ticket-footer')).toContainElement(document.querySelector('.sample-avatars'));
+  expect(screen.queryByText(/bragging rights, secured/i)).not.toBeInTheDocument();
+  expect(document.querySelector('.example-scene .scene-note')).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   expect(screen.queryByRole('button', { name: /money line/i })).not.toBeInTheDocument();
   expect(document.querySelector('.app-shell')).toHaveClass('shell-landing');
@@ -138,7 +147,7 @@ test('my bets is a tab with an empty state', () => {
   }
 });
 
-test('Start a bet slides forward into Pick a type', async () => {
+test('Start a bet slides forward into the type picker', async () => {
   navigation.pathname = '/';
   render(
     <CreateChromeProvider>
@@ -156,7 +165,7 @@ test('Start a bet slides forward into Pick a type', async () => {
   const leaving = document.querySelector('.create-pane.is-leaving');
   expect(entering).toHaveClass('slide-forward');
   expect(leaving).toHaveClass('slide-forward');
-  expect(entering).toHaveTextContent('Pick a type');
+  expect(within(entering).getByRole('button', { name: /money line/i })).toBeInTheDocument();
   expect(leaving.querySelector('.landing-title')).toHaveTextContent('A little rivalry.');
   expect(document.querySelector('.app-shell')).toHaveClass('shell-tabs');
   expect(navigation.push).not.toHaveBeenCalled();
@@ -210,7 +219,7 @@ test.each(['/', '/bets'])(
     expect(document.querySelector('.create-pane.is-leaving')).toContainElement(current);
     expect(document.querySelector('.create-pane.is-leaving')).toHaveAttribute('inert');
     expect(document.querySelector('.create-pane.is-entering')).toHaveClass('slide-forward');
-    expect(document.querySelector('.create-pane.is-entering')).toHaveTextContent('Pick a type');
+    expect(within(document.querySelector('.create-pane.is-entering')).getByRole('button', { name: /money line/i })).toBeInTheDocument();
     expect(create).toHaveAttribute('aria-current', 'page');
     expect(navigation.push).not.toHaveBeenCalled();
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/new'));
@@ -269,6 +278,22 @@ test('choosing another tab cancels a pending mobile Create transition', () => {
   } finally {
     jest.useRealTimers();
   }
+});
+
+test('sample ticket footer words are muted sentence-case body text, not a kicker or pill', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone/phone.css'), 'utf8');
+  const blocks = [...css.matchAll(/(^|\n)\s*\.ticket-footer(?:-copy)? \{([^}]*)\}/g)].map((m) => m[2]);
+  const copy = css.match(/\n\.ticket-footer-copy \{([^}]*)\}/)[1];
+  expect(copy).toContain('color: var(--muted);');
+  expect(copy).toContain('font-size: 14px;');
+  expect(blocks.length).toBeGreaterThan(1);
+  const all = blocks.join('\n');
+  expect(all).not.toContain('uppercase');
+  expect(all).not.toMatch(/letter-spacing:\s*0?\.\d/);
+  expect(all).not.toMatch(/border-radius|background/);
+  expect(all).not.toMatch(/font-size:\s*[0-9]px/);
+  expect(css).not.toContain('.scene-note');
+  expect(css).not.toContain('.wordmark');
 });
 
 test('reduced motion fades create slides instead of translating them', () => {

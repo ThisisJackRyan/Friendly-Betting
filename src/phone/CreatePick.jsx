@@ -1,7 +1,7 @@
 'use client';
 
 import Link from '../platform/Link';
-import { FiChevronLeft } from 'react-icons/fi';
+import { FiChevronLeft, FiHome } from 'react-icons/fi';
 import TypePicker from './TypePicker';
 import { FlowProgress, PageIntro } from './ProductUI';
 
@@ -12,8 +12,8 @@ const CreatePick = ({ onBack, onHomeClick, onPick, error = '', user }) => (
         <FiChevronLeft size={28} />
       </button>
       <h1 className="nav-title">New bet</h1>
-      <Link href="/" className="nav-home wordmark" onClick={onHomeClick}>
-        Friendly
+      <Link href="/" className="nav-home" aria-label="Home" onClick={onHomeClick}>
+        <FiHome size={20} aria-hidden="true" />
       </Link>
     </div>
     <div className="scroll">

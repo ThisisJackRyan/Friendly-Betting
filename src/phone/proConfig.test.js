@@ -2,13 +2,12 @@ import {
   EARLY_ACCESS_TYPES,
   PRO_COPY,
   proEarlyTypesEnabled,
-  proMockPurchaseEnabled,
   proPaywallEnabled,
   proPrivacyUrl,
   proTermsUrl,
 } from './proConfig';
 
-const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES', 'NEXT_PUBLIC_PRO_MOCK_PURCHASE'];
+const FLAGS = ['NEXT_PUBLIC_PRO_PAYWALL', 'NEXT_PUBLIC_PRO_EARLY_TYPES'];
 const saved = Object.fromEntries(FLAGS.map((flag) => [flag, process.env[flag]]));
 
 afterEach(() => {
@@ -45,11 +44,11 @@ test('Terms and Privacy URLs: each its own, blank when unset', () => {
 
 test('every flag is off by default and on only for "1"', () => {
   FLAGS.forEach((flag) => delete process.env[flag]);
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect([proPaywallEnabled(), proEarlyTypesEnabled()]).toEqual([false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = 'true'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([false, false, false]);
+  expect([proPaywallEnabled(), proEarlyTypesEnabled()]).toEqual([false, false]);
   FLAGS.forEach((flag) => { process.env[flag] = '1'; });
-  expect([proPaywallEnabled(), proEarlyTypesEnabled(), proMockPurchaseEnabled()]).toEqual([true, true, true]);
+  expect([proPaywallEnabled(), proEarlyTypesEnabled()]).toEqual([true, true]);
 });
 
 test('no real early-access types ship yet', () => {
