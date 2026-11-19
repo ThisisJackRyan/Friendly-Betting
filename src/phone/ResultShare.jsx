@@ -4,11 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { FiImage, FiShare2 } from 'react-icons/fi';
 import { voteUrl } from './routes';
 import { shareMessage } from './share';
-import { canShareImageFiles, shareImage } from './imageShare';
+import { shareImage } from './imageShare';
 import { formatResultMessage } from './settlement';
 import { winnerCardText } from './winnerCard';
 import { renderWinnerCard } from './winnerCardImage';
-import { isNativeApp } from '../platform/runtime';
 
 // Draws the card when the page is idle, or shortly after where there is no
 // requestIdleCallback (Safari). Returns the cancel.
@@ -24,13 +23,13 @@ function whenIdle(work) {
 // Share the result as text, and for a settled bet with a known result, as
 // the winner card image too. The card is drawn once the screen is idle, so a
 // tap can usually open the share sheet straight away; a tap before that
-// draws it first. In the app the image is only offered when its share sheet
-// takes a PNG file: the app has no download to fall back on. The card is
-// the one `voterId`, the viewer, would share (winnerCardText).
+// draws it first. The app shares the PNG through its native share sheet,
+// whatever its web view can do; where the image cannot go, shareImage falls
+// back to the result text. The card is the one `voterId`, the viewer, would
+// share (winnerCardText).
 export default function ResultShare({ bet, code, voterId = null }) {
   const [state, setState] = useState('');
   const [busy, setBusy] = useState('');
-  const [imageShareable, setImageShareable] = useState(() => !isNativeApp());
   const card = useRef(null);
   const message = formatResultMessage(bet, voteUrl(bet.code || code));
   const viewerId = voterId || null;
@@ -43,15 +42,11 @@ export default function ResultShare({ bet, code, voterId = null }) {
   };
 
   useEffect(() => {
-    if (isNativeApp()) setImageShareable(canShareImageFiles());
-  }, []);
-
-  useEffect(() => {
     card.current = null;
-    if (!cardKey || !imageShareable) return undefined;
+    if (!cardKey) return undefined;
     return whenIdle(drawCard);
     // The card only changes when its text or its viewer does.
-  }, [cardKey, imageShareable]);
+  }, [cardKey]);
 
   const share = async () => {
     if (busy) return;
@@ -68,7 +63,7 @@ export default function ResultShare({ bet, code, voterId = null }) {
     if (busy) return;
     setBusy('image');
     try {
-      const outcome = await shareImage(await drawCard());
+      const outcome = await shareImage(await drawCard(), { text: message });
       setState(`image-${outcome}`);
     } catch {
       setState('image-failed');
@@ -93,7 +88,7 @@ export default function ResultShare({ bet, code, voterId = null }) {
         <FiShare2 size={18} aria-hidden="true" />
         {busy === 'text' ? 'Getting it ready…' : 'Share the result'}
       </button>
-      {cardText && imageShareable && (
+      {cardText && (
         <button type="button" className="secondary press result-share-image" disabled={Boolean(busy)} onClick={shareCard}>
           <FiImage size={18} aria-hidden="true" />
           {busy === 'image' ? 'Getting it ready…' : 'Share as image'}

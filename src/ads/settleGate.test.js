@@ -15,6 +15,8 @@ jest.mock('@capacitor/core', () => ({
 
 jest.mock('@capacitor-community/admob', () => ({
   AdMob: {
+    requestConsentInfo: jest.fn(async () => ({ status: 'NOT_REQUIRED', canRequestAds: true })),
+    showConsentForm: jest.fn(),
     initialize: jest.fn(),
     trackingAuthorizationStatus: jest.fn(),
     requestTrackingAuthorization: jest.fn(),
@@ -51,6 +53,7 @@ beforeEach(() => {
   isPro.mockReset().mockReturnValue(false);
   showHouseAd.mockReset().mockResolvedValue(undefined);
   Object.values(AdMob).forEach((fn) => fn.mockReset());
+  AdMob.requestConsentInfo.mockResolvedValue({ status: 'NOT_REQUIRED', canRequestAds: true });
   AdMob.initialize.mockResolvedValue(undefined);
   AdMob.trackingAuthorizationStatus.mockResolvedValue({ status: 'authorized' });
   AdMob.addListener.mockResolvedValue({ remove: jest.fn() });

@@ -14,21 +14,17 @@ import { auth, db } from '../Config/firebase-config';
 import { getCollectionName } from '../Config/base';
 import { isCalledOff, isFinished, isSettled, votingOpen } from './betStatus';
 import { isBetCreator, isCreator } from './creatorSession';
+import { makeCode, newBetDoc } from './newBet';
+import { proPaywallEnabled } from './proConfig';
+import { CREATE_ERROR_COPY, isCreateNetworkError } from './createErrors';
 import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
+import { requestBetPush, requestPickPush } from './betPush';
 import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
 import { cleanName, mergeVotes, voteFromDoc, withVotes } from './votes';
 
-const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
-
-function makeCode(length = 6) {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => ALPHABET[byte % ALPHABET.length]).join('');
-}
-
-export async function createBet(fields) {
+async function createBetHere(fields) {
   let lastError = null;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = makeCode();
@@ -41,15 +37,7 @@ export async function createBet(fields) {
           collision.code = 'collision';
           throw collision;
         }
-        tx.set(ref, {
-          ...fields,
-          schemaVersion: 2,
-          code,
-          status: 'open',
-          winnerId: null,
-          votes: [],
-          createdAt: Date.now(),
-        });
+        tx.set(ref, newBetDoc(fields, code));
       });
       return code;
     } catch (err) {
@@ -58,7 +46,157 @@ export async function createBet(fields) {
       throw err;
     }
   }
-  throw lastError || new Error('Could not create a bet. Try again.');
+  throw lastError || new Error(CREATE_ERROR_COPY.failed);
+}
+
+// With the paywall on, every new bet (Create and Run it back) goes through
+// POST /api/bets, which checks Pro for Run it back and early-access types on
+// the server (src/server/createBet.js, docs/PRO.md). Creating is not capped. With it off, nothing changes: the
+// client writes bets/{code} itself, as firestore.rules allow, and the route
+// is never called.
+//
+// Either way a save that can't reach the network fails fast with the generic
+// save line (CREATE_ERROR_COPY.failed) and a network code (createErrors.js,
+// CREATE_NETWORK_CODES): at once when the browser reports offline, and after
+// CREATE_TIMEOUT_MS when the write hangs. Offline, a Firestore transaction
+// otherwise retries for ~35s and then rejects with "Connection failed.".
+//
+// A save that timed out may still land. Only a retry of the same bet
+// (createKey) waits for it, so the same bet is never made twice: if it
+// landed, that's the bet. A create with other fields starts at once and never
+// waits on a hung save; if the earlier save lands late anyway (a retry with
+// different fields, or no retry at all), it is a separate bet in My bets.
+// After CREATE_STALL_CAP_MS from the save's start the stalled save is dropped
+// (and its POST /api/bets aborted, paywall on), so a hang can't block later
+// creates, the same bet's retry included, until the page is reloaded.
+export async function createBet(fields) {
+  if (isOffline()) throw createNetworkError('offline');
+  const key = createKey(fields);
+  const prior = stalledCreate;
+  if (prior && prior.key === key) {
+    const wait = Math.min(CREATE_TIMEOUT_MS, Math.max(0, prior.dropAt - Date.now()));
+    const earlier = await settleWithin(prior.promise, wait);
+    if (earlier.pending && Date.now() < prior.dropAt) throw createNetworkError('timeout');
+    dropStall(prior);
+    if (earlier.ok) return earlier.value;
+  }
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const startedAt = Date.now();
+  const run = proPaywallEnabled() ? createBetOnServer(fields, controller?.signal) : createBetHere(fields);
+  const outcome = await settleWithin(run, CREATE_TIMEOUT_MS);
+  if (outcome.pending) {
+    const entry = { key, promise: run, dropAt: startedAt + CREATE_STALL_CAP_MS, controller, timer: null };
+    entry.timer = setTimeout(() => dropStall(entry), Math.max(0, entry.dropAt - Date.now()));
+    stalledCreate = entry;
+    throw createNetworkError('timeout');
+  }
+  if (outcome.ok) return outcome.value;
+  const err = outcome.error;
+  if (isCreateNetworkError(err) || isOffline()) {
+    throw createNetworkError(isCreateNetworkError(err) ? err.code : 'offline', err);
+  }
+  throw err;
+}
+
+// How long a new bet's save may take before Create and Run it back give up
+// and offer the retry.
+export const CREATE_TIMEOUT_MS = 12000;
+
+// How long after its start a save that timed out is still waited on by the
+// same bet's retry. At the cap it is dropped: a hung POST /api/bets is
+// aborted (an abort before the token comes back means no request is sent),
+// and the next create starts fresh. A Firestore transaction can't be aborted,
+// so if it lands after the cap it is a separate bet.
+export const CREATE_STALL_CAP_MS = 60000;
+
+// The last save that timed out, while it might still land:
+// { key, promise, dropAt, controller, timer }.
+let stalledCreate = null;
+
+// Stops waiting on a stalled save; aborts its request if it's still out.
+function dropStall(entry) {
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  if (stalledCreate === entry) stalledCreate = null;
+  if (Date.now() >= entry.dropAt) entry.controller?.abort();
+}
+
+export function __resetCreateForTests() {
+  if (stalledCreate) clearTimeout(stalledCreate.timer);
+  stalledCreate = null;
+}
+
+// The same bet, give or take its close time (Run it back's moves with the
+// clock). That holds for Create too: a retry with only closesAt changed is
+// still the same bet.
+function createKey(fields) {
+  const { closesAt, ...rest } = fields || {};
+  return JSON.stringify(rest);
+}
+
+// { ok: true, value } or { ok: false, error } if the promise settles within
+// ms, else { pending: true }; the promise is never left unhandled.
+function settleWithin(promise, ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ pending: true }), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve({ ok: true, value });
+      },
+      (error) => {
+        clearTimeout(timer);
+        resolve({ ok: false, error });
+      },
+    );
+  });
+}
+
+// A create that couldn't reach the network: the generic save line, never
+// "You are offline." or the raw cause's message.
+function createNetworkError(code, cause) {
+  const err = new Error(CREATE_ERROR_COPY.failed);
+  err.code = code;
+  if (cause) err.cause = cause;
+  return err;
+}
+
+// Fails closed: a 503 (no Admin credentials) is an error, never a fallback
+// to the client write, which would skip the server's Pro checks. The error's
+// code is the route's (pro-required, not-configured, ...); its message is the
+// generic save fallback. Create and Run it back pick the line for a coded
+// error with createSaveError (createErrors.js).
+//
+// signal aborts the request when a stalled save is dropped at
+// CREATE_STALL_CAP_MS; aborted before the token comes back, nothing is sent.
+async function createBetOnServer(fields, signal) {
+  const user = auth?.currentUser;
+  if (!user) throw new Error('Not signed in.');
+  let token;
+  try {
+    token = await user.getIdToken();
+  } catch (cause) {
+    if (cause?.code === 'auth/network-request-failed' || isOffline()) throw createNetworkError('offline', cause);
+    throw cause;
+  }
+  if (signal?.aborted) throw createNetworkError('timeout');
+  let res;
+  try {
+    res = await fetch(apiUrl('/api/bets'), {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ fields }),
+    });
+  } catch (cause) {
+    throw createNetworkError('offline', cause);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (res.ok && typeof body?.code === 'string' && body.code) return body.code;
+  if (!res.ok && isOffline()) throw createNetworkError('offline');
+  const err = new Error(CREATE_ERROR_COPY.failed);
+  err.code = (!res.ok && body?.error) || 'create-failed';
+  throw err;
 }
 
 export async function saveBet(existingCode, fields) {
@@ -329,38 +467,60 @@ async function readPickBet(tx, code, pick) {
 // they can write. A new side moves them to the end of the list, as before.
 // Rules from before per-voter docs deny that write, so a denied one is made
 // the old way, in the bet's `votes` array; once the session knows that
-// (voteDocsDenied), picks skip the doc and go there directly.
+// (voteDocsDenied), picks skip the doc and go there directly. A friend's first
+// pick (no recorded pick before this write, in the array or their doc) asks
+// the server to tell the creator, after the commit; a side change does not.
 export async function castVote(code, vote) {
   const pick = { voterId: vote.voterId, name: cleanName(vote.name), optionId: vote.optionId };
   if (voteDocsDenied) {
-    await castLegacyVote(code, pick);
+    const first = await castLegacyVote(code, pick);
     rememberBet(pick.voterId, code);
+    if (first) notifyAfterFirstPick(code);
     return;
   }
+  let first = false;
   try {
     await runTransaction(db, async (tx) => {
-      await readPickBet(tx, code, pick);
+      const data = await readPickBet(tx, code, pick);
+      // A denied read of the voter's own doc is a sure sign of the old rules;
+      // the catch below takes the array path.
+      const own = await tx.get(voteRef(code, pick.voterId));
+      const prior = own.exists() ? voteFromDoc(pick.voterId, own.data()) : null;
+      first = isFirstPick(data, mergeVotes(data.votes, prior ? [prior] : []), pick.voterId);
       tx.set(voteRef(code, pick.voterId), { ...pick, at: serverTimestamp() });
     });
   } catch (err) {
     if (!isDenied(err)) throw err;
-    await castLegacyVote(code, pick);
+    first = await castLegacyVote(code, pick);
     noteVoteDocsDenied();
   }
   rememberBet(pick.voterId, code);
+  if (first) notifyAfterFirstPick(code);
+}
+
+// True when this write is a friend's first pick: no recorded pick (a truthy
+// optionId) for them in the live votes before it, and they are not the
+// creator (the server skips the creator too).
+function isFirstPick(data, votes, voterId) {
+  if (!voterId || data?.createdByID === voterId) return false;
+  return !(votes || []).some((item) => item?.voterId === voterId && item.optionId);
 }
 
 // castVote's write for rules without per-voter docs: the voter's entry in the
-// bet's `votes` array, replaced and moved to the end.
+// bet's `votes` array, replaced and moved to the end. Resolves to whether it
+// was the voter's first pick (see isFirstPick).
 async function castLegacyVote(code, pick) {
   const ref = doc(db, 'bets', code);
+  let first = false;
   await runTransaction(db, async (tx) => {
     const data = await readPickBet(tx, code, pick);
     const votes = Array.isArray(data.votes) ? data.votes : [];
+    first = isFirstPick(data, votes, pick.voterId);
     const next = votes.filter((item) => item.voterId !== pick.voterId);
     next.push({ ...pick, at: Date.now() });
     tx.update(ref, { votes: next });
   });
+  return first;
 }
 
 // Changes only the name on a voter's own pick: same side, same place in the
@@ -417,6 +577,27 @@ async function renameLegacyVote(code, voterId, trimmed) {
   });
 }
 
+// Result texts and push, each behind its own flag and each fire-and-forget.
+// requestBetPush never throws; the catch makes sure a push problem can never
+// reach the settle or call-off either way.
+function notifyAfterClose(code) {
+  requestResultTexts(code);
+  try {
+    requestBetPush(code);
+  } catch (err) {
+    // Push is a bonus.
+  }
+}
+
+// The first-pick push, fire-and-forget. requestPickPush never throws; the
+// catch makes sure a push problem can never reach the pick either way.
+function notifyAfterFirstPick(code) {
+  try {
+    requestPickPush(code);
+  } catch (err) {
+    // Push is a bonus.
+  }
+}
 export async function settleBet(code, winnerId) {
   const ref = doc(db, 'bets', code);
   const settled = await runTransaction(db, async (tx) => {
@@ -449,8 +630,9 @@ export async function settleBet(code, winnerId) {
     return { ...full, ...update, settledAt: null };
   });
   // Fire-and-forget: the server waits out the undo window, re-reads the bet
-  // and texts each saved number once.
-  requestResultTexts(code);
+  // and texts each saved number once, and pushes the result to the voters.
+  // Neither can fail or slow the settle.
+  notifyAfterClose(code);
   return settled;
 }
 
@@ -487,7 +669,7 @@ export async function undoSettle(code) {
 }
 
 // The creator calls off an open bet: closed, nobody won, no undo. Called-off
-// texts go out right away.
+// texts and push go out right away.
 export async function callOffBet(code) {
   const ref = doc(db, 'bets', code);
   const calledOff = await runTransaction(db, async (tx) => {
@@ -507,7 +689,7 @@ export async function callOffBet(code) {
     tx.update(ref, { status: 'closed', calledOff: true, settledAt: serverTimestamp() });
     return { ...full, status: 'closed', calledOff: true, settledAt: null };
   });
-  requestResultTexts(code);
+  notifyAfterClose(code);
   return calledOff;
 }
 

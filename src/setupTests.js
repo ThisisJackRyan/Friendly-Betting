@@ -10,7 +10,6 @@ import '@testing-library/jest-dom';
 jest.mock('./phone/entitlementApi', () => ({
   subscribeEntitlement: jest.fn(() => () => {}),
   fetchEntitlement: jest.fn(async () => null),
-  requestMockPurchase: jest.fn(async () => ({ ok: true })),
 }));
 
 // jsdom has no canvas, so the winner card is never drawn here: the image is
