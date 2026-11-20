@@ -723,7 +723,7 @@ function offlineError(cause) {
 // server route's Admin transaction has no such gap). A bet that changed
 // meanwhile (an older build's pick in the array) retries with a fresh list.
 // A bet that's already gone is done. A transaction only answers once the
-// server has the delete, so My bets never drops the bet on this device alone.
+// server has the delete, so My bets puts the bet back if this throws.
 async function deleteBetHere(code) {
   const ref = doc(db, 'bets', code);
   await runTransaction(db, async (tx) => {
