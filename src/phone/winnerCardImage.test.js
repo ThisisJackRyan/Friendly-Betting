@@ -153,7 +153,7 @@ test('draws I only on the card the creator shares', async () => {
   expect(await lines('jack')).toContain('Maya & I won.');
   await Promise.all(['maya', 'zed', null, undefined, ''].map(async (viewerId) => {
     const text = await lines(viewerId);
-    expect(text).toContain('Maya & 1 other won.');
+    expect(text).toContain('Maya & a friend won.');
     ['I called it.', '& I won.', '& I won.'].forEach((line) => expect(text).not.toContain(line));
   }));
 });

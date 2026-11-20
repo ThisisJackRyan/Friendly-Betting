@@ -134,7 +134,7 @@ test('the delete dialog on My bets stays on screen', async ({ page }) => {
   page.on('pageerror', (error) => errors.push(error.message));
   await mockSignedIn(page);
   await page.goto('/bets');
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Delete this bet?' });
   const keep = dialog.getByRole('button', { name: 'Keep it' });
   await expectOnScreen(page, keep);
