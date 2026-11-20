@@ -107,6 +107,8 @@ export function MyBetsList({ user }) {
   const deleteWait = useRef(null);
   const alive = useRef(true);
   const proTrigger = useRef(null);
+  // Stops the live bets listener, while one is open.
+  const stopList = useRef(null);
   // Head-to-head stats (the Friends filter) are Pro with the paywall on.
   const friendsLocked = useProLocked();
   const proBadge = useProBadge(uid);
@@ -254,11 +256,15 @@ export function MyBetsList({ user }) {
     }
   }, [bets, error, deleting, deleteBusy, deleteError, uid]);
 
+  // Log out closes the list first: once Auth goes null the open query fails
+  // with permission-denied, which would flash the load error.
   useEffect(() => {
     if (!uid) return undefined;
     setBets(null);
     setError('');
-    return subscribeMyBets(uid, (rows, err) => {
+    let active = true;
+    const stopBets = subscribeMyBets(uid, (rows, err) => {
+      if (!active) return;
       if (err) {
         setError('Could not load your bets. Please check your connection and try again.');
         setBets([]);
@@ -267,6 +273,16 @@ export function MyBetsList({ user }) {
       setError('');
       setBets(rows || []);
     });
+    const stop = () => {
+      if (!active) return;
+      active = false;
+      stopBets();
+    };
+    stopList.current = stop;
+    return () => {
+      if (stopList.current === stop) stopList.current = null;
+      stop();
+    };
   }, [uid]);
 
   // A plan that lapses while Friends is open goes back to All.
@@ -482,6 +498,9 @@ export function MyBetsList({ user }) {
             className="logout-link"
             onClick={async () => {
               clearDeletedBets();
+              const stop = stopList.current;
+              stopList.current = null;
+              stop?.();
               try {
                 await signOutCreator();
               } catch {

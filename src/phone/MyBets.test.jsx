@@ -154,6 +154,49 @@ test('a load error does not misrepresent the account as having no bets', () => {
   expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
 });
 
+describe('log out', () => {
+  afterEach(() => signOutCreator.mockReset());
+
+  test('closes the bets listener before signing out', async () => {
+    const calls = [];
+    subscribeMyBets.mockImplementation((_uid, publish) => {
+      publish(bets);
+      return () => calls.push('unsubscribe');
+    });
+    signOutCreator.mockImplementation(async () => { calls.push('signOut'); });
+    const { unmount } = render(<MyBetsList user={user} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(calls).toEqual(['unsubscribe', 'signOut']);
+    unmount();
+    expect(calls).toEqual(['unsubscribe', 'signOut']);
+  });
+
+  test('a permission error landing after the listener closes never flashes the load error', async () => {
+    let publish;
+    subscribeMyBets.mockImplementation((_uid, onChange) => {
+      publish = onChange;
+      onChange(bets);
+      return () => {};
+    });
+    signOutCreator.mockImplementation(async () => {
+      publish(null, Object.assign(new Error('denied'), { code: 'permission-denied' }));
+    });
+    render(<MyBetsList user={user} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    act(() => publish(null, Object.assign(new Error('denied'), { code: 'permission-denied' })));
+    expect(screen.queryByText(/Could not load your bets/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Will Alex break 90?')).toBeInTheDocument();
+  });
+
+  test('a failed log out still says so', async () => {
+    signOutCreator.mockRejectedValue(new Error('network'));
+    render(<MyBetsList user={user} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not log out. Try again.');
+  });
+});
+
 describe('delete a bet', () => {
   const deleteButtons = () => screen.queryAllByRole('button', { name: 'Delete' });
   const openDialog = async (index = 0) => {
