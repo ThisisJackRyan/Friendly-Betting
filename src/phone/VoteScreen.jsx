@@ -73,6 +73,7 @@ const VoteScreen = () => {
   // The name save waiting on a snapshot to confirm it, if any.
   const renameWait = useRef(null);
   const renameSeq = useRef(0);
+  const nameInput = useRef(null);
 
   useEffect(() => {
     document.title = 'Make your call · Friendly';
@@ -165,7 +166,8 @@ const VoteScreen = () => {
     if (!bet || !user || !open || saving) return;
     setSaving(true);
     setError('');
-    const trimmed = cleanName(name);
+    const trimmed = cleanName(nameInput.current?.value ?? name);
+    if (trimmed && trimmed !== name) setName(trimmed);
     if (trimmed) rememberName(trimmed);
     const pick = { voterId: user.uid, name: trimmed, optionId };
     const pickCode = code;
@@ -318,6 +320,7 @@ const VoteScreen = () => {
                   </span>
                   <input
                     id="voter-name"
+                    ref={nameInput}
                     value={name}
                     placeholder={NAME_PLACEHOLDER}
                     autoComplete="nickname"

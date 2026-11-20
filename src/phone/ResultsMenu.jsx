@@ -7,6 +7,7 @@ import { subscribeBet } from './api';
 import { useIdentity } from './identity';
 import { markResultRead, watchResults } from './notificationStore';
 import { notificationFor } from './settlement';
+import { stakeKind } from './reveal';
 
 // The Results inbox, opened from a header button. It sits in the header row
 // instead of floating, so it never covers the screen's own buttons.
@@ -138,7 +139,9 @@ function ResultInbox({ uid }) {
                   <span>{notice.question}</span>
                   <strong>{notice.outcome}</strong>
                   <span>At stake: {notice.stake}</span>
-                  <small>{notice.oneLiner}</small>
+                  {(!notice.won || stakeKind(notice.stake) === 'bragging') && (
+                    <small>{notice.oneLiner}</small>
+                  )}
                 </Link>
               </li>
             ))}

@@ -3,7 +3,7 @@ import path from 'path';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Bars from './Bars';
-import { VOTER_LIST_COPY, votersByOption } from './voters';
+import { VOTER_LIST_COPY, voterListLabel, votersByOption } from './voters';
 
 const bet = (votes, extra = {}) => ({
   schemaVersion: 2,
@@ -31,7 +31,7 @@ test('names are trimmed and unnamed picks collapse into a count', () => {
   const [yes, no] = rows();
   const list = within(yes).getByRole('list', { name: 'Picked by Jake and 3 friends' });
   expect(within(list).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Jake', '3 friends']);
-  expect(within(no).getByRole('list', { name: 'Picked by 1 friend' })).toHaveTextContent('1 friend');
+  expect(within(no).getByRole('list', { name: 'Picked by a friend' })).toHaveTextContent('a friend');
 });
 
 test('a side nobody picked shows no list', () => {
@@ -54,14 +54,14 @@ test('long names truncate with an ellipsis and keep the full name as a title', (
 test('many voters show five names and a +N more control that expands the rest', async () => {
   const names = ['Jake', 'Maya', 'Tyler', 'Sam', 'Jack', 'Kim', 'Lee', 'Ana'];
   render(<Bars showVoters bet={bet([...names.map((name, i) => vote(`v${i}`, name, 'a')), vote('x', '', 'a')])} />);
-  const list = screen.getByRole('list', { name: 'Picked by Jake, Maya, Tyler, Sam, Jack, 3 more, and 1 friend' });
+  const list = screen.getByRole('list', { name: 'Picked by Jake, Maya, Tyler, Sam, Jack, 3 more, and a friend' });
   expect(within(list).queryByText('Kim')).not.toBeInTheDocument();
   const more = within(list).getByRole('button', { name: VOTER_LIST_COPY.more(3) });
   expect(more).toHaveTextContent('+3 more');
   expect(css).toMatch(/\.voter-more button \{[^}]*min-height: 44px/);
 
   await userEvent.click(more);
-  const full = screen.getByRole('list', { name: 'Picked by Jake, Maya, Tyler, Sam, Jack, Kim, Lee, Ana, and 1 friend' });
+  const full = screen.getByRole('list', { name: 'Picked by Jake, Maya, Tyler, Sam, Jack, Kim, Lee, Ana, and a friend' });
   expect(within(full).getByText('Ana')).toBeInTheDocument();
   expect(within(full).queryByRole('button')).not.toBeInTheDocument();
   await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -97,4 +97,11 @@ test('without showVoters the bars stay counts only', () => {
 test('new voter copy has no em dashes', () => {
   const strings = [VOTER_LIST_COPY.friends(1), VOTER_LIST_COPY.friends(2), VOTER_LIST_COPY.more(3), VOTER_LIST_COPY.pickedBy('Jake')];
   strings.forEach((text) => expect(text).not.toMatch(/—/));
+});
+
+test('one unnamed voter is a friend, two or more collapse into a count', () => {
+  expect(voterListLabel([], 0, 1)).toBe('Picked by a friend');
+  expect(voterListLabel(['Maya'], 0, 1)).toBe('Picked by Maya and a friend');
+  expect(voterListLabel([], 0, 2)).toBe('Picked by 2 friends');
+  expect(voterListLabel(['Maya'], 0, 3)).toBe('Picked by Maya and 3 friends');
 });

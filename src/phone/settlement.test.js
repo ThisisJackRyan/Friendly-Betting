@@ -1,4 +1,4 @@
-import { buildSettlement, formatResultMessage, notificationFor, resultHeadline, settlementOf } from './settlement';
+import { buildSettlement, formatResultMessage, notificationFor, resultHeadline, settlementOf, winnerNames } from './settlement';
 
 const bet = {
   id: 'abc123', code: 'abc123', question: 'Will Jack break 90?', stake: '$20 pot',
@@ -87,4 +87,19 @@ test('a server Timestamp settledAt gives the same numeric id and time as a numbe
   const stamped = { ...settled(), settledAt: { toMillis: () => 1234 } };
   expect(notificationFor(stamped, 'jack')).toMatchObject({ id: 'abc123:1234', at: 1234 });
   expect(notificationFor({ ...settled(), settledAt: null }, 'jack')).toBeNull();
+});
+
+test.each([
+  ['a lone cleared name', [''], 'A friend won'],
+  ['a name and a cleared one', ['Maya', ''], 'Maya & a friend won'],
+  ['two cleared names', ['', '  '], '2 friends won'],
+  ['a name and two cleared ones', ['', 'Maya', ''], 'Maya & 2 friends won'],
+])('cleared winner names (deleted accounts) read as friends: %s', (_label, names, headline) => {
+  const result = {
+    stake: 'Coffee', optionLabel: 'Yes',
+    winners: names.map((name, i) => ({ voterId: `v${i}`, name })),
+    recipients: names.map((_name, i) => ({ voterId: `v${i}`, won: true })),
+  };
+  expect(resultHeadline(result)).toBe(headline);
+  expect(winnerNames(result)).toBe(headline.replace(/ won$/, ''));
 });

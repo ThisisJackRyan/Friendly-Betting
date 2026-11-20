@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import VoteScreen from './VoteScreen';
 import TallyScreen from './TallyScreen';
@@ -14,6 +14,7 @@ import { renderWinnerCard } from './winnerCardImage';
 import { saveResultText } from './resultTexts';
 import { RESULT_TEXT_COPY } from './resultTextCopy';
 import { PHONE_INVALID_ERROR, PHONE_OFFLINE_ERROR, phoneError } from './creatorSession';
+import { CACHE_MISS_GRACE_MS } from './useLiveBet';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
@@ -174,12 +175,30 @@ test('a manual share shows the message under the tally', async () => {
   });
 });
 
-test('tally shows the Friendly loader instead of a loading line', () => {
+function expectNeutralSkeleton() {
+  const loader = screen.getByRole('status', { name: 'Loading' });
+  expect(loader).toHaveTextContent(/^$/);
+  expect(within(loader).queryByText(/friendly/i)).not.toBeInTheDocument();
+  expect(loader.querySelector('.friendly-load-mark')).toBeNull();
+  expect(loader.querySelector('.friendly-load-title')).toBeInTheDocument();
+  expect(loader.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+}
+
+test('the loader skeleton is neutral grey with no brand green', () => {
+  const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
+  const loaderRules = css.match(/[^}]*\.friendly-load[^{]*\{[^}]*\}/g).join('\n');
+  expect(loaderRules).not.toMatch(/#007a45/i);
+  expect(loaderRules).not.toMatch(/#9dc9a4/i);
+  expect(loaderRules).not.toMatch(/var\(--accent\)/);
+  expect(css).not.toContain('.friendly-load-mark');
+  expect(loaderRules).toMatch(/\.friendly-load-bar,\s*\.friendly-load-card \{[^}]*background: #e6e4e1;/);
+});
+
+test('tally shows the neutral loader instead of a loading line', () => {
   subscribeBet.mockImplementation(() => () => {});
   renderAt('/t/abc123', <TallyScreen />);
   expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
-  expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+  expectNeutralSkeleton();
   expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Text the crew' })).not.toBeInTheDocument();
 });
@@ -200,7 +219,7 @@ test('the loader holds for at least 450ms before the tally appears', () => {
     act(() => {
       jest.advanceTimersByTime(449);
     });
-    expect(screen.getByText('Friendly')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
     act(() => {
       jest.advanceTimersByTime(1);
     });
@@ -216,8 +235,9 @@ test('reduced motion keeps the tally loader static', () => {
   const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
   expect(css).toContain('@keyframes friendly-load-pulse');
   expect(css).toContain('opacity: 0.4');
-  expect(css).toContain('color: #007a45');
+  expect(reduced).toContain('.friendly-load-title');
   expect(reduced).toContain('.friendly-load-bar');
+  expect(reduced).toContain('.friendly-load-card');
   expect(reduced).toContain('animation: none');
 });
 
@@ -229,12 +249,11 @@ test('live bar changes ease in, and hold still under reduced motion', () => {
   expect(reduced).toContain('transition: none');
 });
 
-test('vote shows the Friendly loader instead of a loading line', () => {
+test('vote shows the neutral loader instead of a loading line', () => {
   subscribeBet.mockImplementation(() => () => {});
   renderAt('/b/abc123', <VoteScreen />);
   expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
-  expect(screen.getByText('Friendly')).toHaveClass('friendly-load-mark');
-  expect(document.querySelectorAll('.friendly-load-bar')).toHaveLength(3);
+  expectNeutralSkeleton();
   expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   expect(screen.queryByText('Who is late')).not.toBeInTheDocument();
 });
@@ -255,7 +274,7 @@ test('the loader holds for at least 450ms before the vote appears', () => {
     act(() => {
       jest.advanceTimersByTime(449);
     });
-    expect(screen.getByText('Friendly')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
     act(() => {
       jest.advanceTimersByTime(1);
     });
@@ -1084,6 +1103,21 @@ describe('adding or editing a name after picking', () => {
     expect(edit).toHaveFocus();
   });
 
+  // Autofill and some mobile blur commits can put a name in the input
+  // without React onChange updating `name` before the pick is tapped.
+  // choose() reads the input itself, so the pick still carries the name.
+  test('a name already in the field goes out with the pick even if React has not seen the change yet', async () => {
+    renderAt('/b/abc123', <VoteScreen />);
+    const field = await screen.findByLabelText(/your name/i);
+    await userEvent.clear(field);
+    field.value = 'Alex';
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    });
+    expect(castVote).toHaveBeenCalledWith('abc123', { voterId: 'anon-1', name: 'Alex', optionId: 'a' });
+    expect(await screen.findByRole('button', { name: NAME_EDIT_COPY.editLabel('Alex') })).toBeInTheDocument();
+  });
+
   test('both name inputs stop at 30 characters', async () => {
     renderAt('/b/abc123', <VoteScreen />);
     const first = await screen.findByLabelText(/your name/i);
@@ -1322,5 +1356,99 @@ describe('adding or editing a name after picking', () => {
     renderAt('/b/abc123', <VoteScreen />);
     await screen.findByRole('heading', { name: 'Who is late' });
     expect(screen.queryByRole('button', { name: /name/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('a friend’s cold first load', () => {
+  let feeds;
+  const latest = () => feeds[feeds.length - 1];
+  const send = (bet, err, meta) => act(() => {
+    latest().onChange(bet, err, meta);
+  });
+  const wait = (ms) => act(() => {
+    jest.advanceTimersByTime(ms);
+  });
+  const cacheMiss = { fromCache: true };
+  const server = { fromCache: false };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    feeds = [];
+    subscribeBet.mockImplementation((code, onChange) => {
+      const feed = { code, onChange, unsubscribe: jest.fn() };
+      feeds.push(feed);
+      return feed.unsubscribe;
+    });
+    renderAt('/b/abc123', <VoteScreen />);
+  });
+
+  afterEach(() => {
+    cleanup();
+    jest.useRealTimers();
+  });
+
+  test('a slow first load that answers inside the grace window shows the bet, not the error', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS - 1);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('This bet’s off the table.')).not.toBeInTheDocument();
+    expect(feeds).toHaveLength(1);
+  });
+
+  test('a first load that times out is retried once silently, then shows the bet', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS);
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a first load that errors is retried once silently, then shows the bet', () => {
+    wait(450);
+    send(undefined, Object.assign(new Error('unavailable'), { code: 'unavailable' }));
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    send(openBet, undefined, server);
+    expect(screen.getByText('Who is late')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a bet the server says is missing still shows not-found right away', () => {
+    wait(450);
+    send(null, undefined, cacheMiss);
+    send(null, undefined, server);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByText('It was deleted, or the link’s not quite right.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(feeds).toHaveLength(1);
+  });
+
+  test('a load that keeps failing still ends in the existing error', () => {
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS);
+    send(null, undefined, cacheMiss);
+    wait(CACHE_MISS_GRACE_MS - 1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    wait(1);
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not open this bet.');
+  });
+
+  test('two errors in a row still end in the existing error', () => {
+    wait(450);
+    send(undefined, new Error('unavailable'));
+    send(undefined, new Error('unavailable'));
+    expect(feeds).toHaveLength(2);
+    expect(screen.getByText('This bet’s off the table.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not open this bet.');
   });
 });

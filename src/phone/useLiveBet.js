@@ -12,9 +12,13 @@ import { hydrateBet, subscribeBet } from './api';
 // confirms (deleted, or a bad code) sets `bet` to null at any time. A miss
 // served from the offline cache never blanks a loaded bet. Before anything
 // loads, a cache miss keeps the loader up for CACHE_MISS_GRACE_MS (a bet just
-// created in a transaction is not in the local cache yet); if the server has
-// not answered by then, it counts as a load failure.
-export const CACHE_MISS_GRACE_MS = 1500;
+// created in a transaction is not in the local cache yet). On a cold first
+// load the cache miss means Firestore gave up on its first connect (one failed
+// stream attempt, or no answer in 10s), so the server may still be seconds
+// away. If the server has not answered by then, or the listener errors before
+// anything loaded, one fresh listener is opened silently with its own grace
+// period; only a second miss or error counts as a load failure.
+export const CACHE_MISS_GRACE_MS = 4000;
 
 export function useLiveBet(code) {
   const [bet, setBet] = useState(undefined);
@@ -35,6 +39,9 @@ export function useLiveBet(code) {
       if (graceTimer) clearTimeout(graceTimer);
       graceTimer = null;
     };
+    // The one silent retry before the first load, used up for this code.
+    let retried = false;
+    let gaveUp = false;
 
     setBet(undefined);
     setFailed(false);
@@ -45,31 +52,49 @@ export function useLiveBet(code) {
       setBet(next);
     };
 
-    const subscribe = () => {
+    // Nothing loaded yet: retry once with a fresh listener, then fail.
+    const missed = () => {
+      if (retried) {
+        gaveUp = true;
+        setFailed(true);
+        setBet(null);
+        return;
+      }
+      retried = true;
+      subscribe();
+      // The fresh listener may stay silent; it still gets a deadline.
+      if (!loaded && !gaveUp) startGrace(current);
+    };
+
+    function startGrace(token) {
+      if (graceTimer) return;
+      graceTimer = setTimeout(() => {
+        graceTimer = null;
+        if (!active || current !== token || loaded) return;
+        missed();
+      }, CACHE_MISS_GRACE_MS);
+    }
+
+    function subscribe() {
       if (unsubscribe) unsubscribe();
+      unsubscribe = null;
       clearGrace();
       const token = {};
       current = token;
       latest += 1;
-      unsubscribe = subscribeBet(code, (next, err, meta) => {
+      const stop = subscribeBet(code, (next, err, meta) => {
         if (!active || current !== token) return;
         if (!next && !err && meta?.fromCache) {
           // Not in the local cache yet. Keep the loader up and give the
           // server a moment to answer before calling it a failure.
-          if (loaded || graceTimer) return;
-          graceTimer = setTimeout(() => {
-            graceTimer = null;
-            if (!active || current !== token || loaded) return;
-            setFailed(true);
-            setBet(null);
-          }, CACHE_MISS_GRACE_MS);
+          if (loaded) return;
+          startGrace(token);
           return;
         }
         clearGrace();
         if (err) {
           if (loaded) return;
-          setFailed(true);
-          setBet(null);
+          missed();
           return;
         }
         if (!next) {
@@ -94,7 +119,11 @@ export function useLiveBet(code) {
             if (active && seq === latest) show(next);
           });
       });
-    };
+      // A listener that answered synchronously may already have been
+      // replaced by the retry; close it instead of keeping its handle.
+      if (current === token) unsubscribe = stop;
+      else stop();
+    }
 
     const resubscribe = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;

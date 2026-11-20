@@ -17,7 +17,17 @@ import FriendlyLoader, { useMinHold } from './FriendlyLoader';
 import { BetFacts } from './ProductUI';
 import DeleteBetDialog from './DeleteBetDialog';
 import ProBadge from './ProBadge';
-import { useProBadge } from './useEntitlement';
+import { useEntitlementState, useProBadge } from './useEntitlement';
+import DeleteAccountDialog from './DeleteAccountDialog';
+import { DELETE_ACCOUNT_COPY, proBulletFor } from './deleteAccountCopy';
+import {
+  REQUIRES_RECENT_LOGIN,
+  clearDeleteAccountResume,
+  clearLocalAccountData,
+  deleteAccount,
+  markDeleteAccountResume,
+  takeDeleteAccountResume,
+} from './accountApi';
 import GoProLink from './GoProLink';
 import PushSettingsRow from './PushSettingsRow';
 import FriendsView from './FriendsView';
@@ -34,6 +44,37 @@ const TOAST_MS = 4000;
 // the delete error. A delete that lands later still closes the dialog.
 export const DELETE_WAIT_MS = 15000;
 
+// Bets deleted this session. The live list can still emit a deleted bet for a
+// while (a stale snapshot, or a vote listener re-sending the last rows), and a
+// screen opened again starts from such a list, so these stay hidden. The set
+// belongs to one account: a different account (or none) starts it empty, so a
+// reused bet code never hides another account's bet.
+const deletedBets = new Set();
+let deletedBetsUid = null;
+
+function clearDeletedBets() {
+  deletedBets.clear();
+  deletedBetsUid = null;
+}
+
+// The deleted set for this account, emptied first if it belonged to another.
+function deletedBetsFor(uid) {
+  if (!uid) {
+    clearDeletedBets();
+    return deletedBets;
+  }
+  if (uid !== deletedBetsUid) {
+    deletedBets.clear();
+    deletedBetsUid = uid;
+  }
+  return deletedBets;
+}
+
+// Tests only.
+export function __resetDeletedBetsForTests() {
+  clearDeletedBets();
+}
+
 // The card's last line, from the creator's side as the reveal puts it: their
 // own win (alone or with others) is "You called it.", never "A friend won"
 // for their own unnamed pick.
@@ -44,8 +85,12 @@ function cardOutcome(bet, result, uid) {
   return resultHeadline(result);
 }
 
+const isOfflineError = (err) => err?.code === 'offline'
+  || (typeof navigator !== 'undefined' && navigator.onLine === false);
+
 export function MyBetsList({ user }) {
   const uid = isCreator(user) ? user.uid : '';
+  const router = useRouter();
   const [bets, setBets] = useState(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('All');
@@ -53,6 +98,8 @@ export function MyBetsList({ user }) {
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  // The bet taken off the list while its delete is in flight.
+  const [removing, setRemoving] = useState(null);
   const [toast, setToast] = useState('');
   const [proSheet, setProSheet] = useState(false);
   const deleteTrigger = useRef(null);
@@ -60,9 +107,16 @@ export function MyBetsList({ user }) {
   const deleteWait = useRef(null);
   const alive = useRef(true);
   const proTrigger = useRef(null);
+  // Stops the live bets listener, while one is open.
+  const stopList = useRef(null);
   // Head-to-head stats (the Friends filter) are Pro with the paywall on.
   const friendsLocked = useProLocked();
   const proBadge = useProBadge(uid);
+  const entitlementState = useEntitlementState();
+  const proBullet = uid && entitlementState.uid === uid ? proBulletFor(entitlementState.entitlement) : '';
+  // Delete account: { busy, error, reauth } while the confirm is open.
+  const [account, setAccount] = useState(null);
+  const accountTrigger = useRef(null);
   const minElapsed = useMinHold(uid || 'anon');
   const reveal = minElapsed && bets !== null;
 
@@ -82,6 +136,54 @@ export function MyBetsList({ user }) {
     setDeleting(null);
     setDeleteError('');
     deleteTrigger.current?.focus();
+  };
+
+  // Back from "Sign in again": reopen the confirm.
+  useEffect(() => {
+    if (uid && takeDeleteAccountResume(uid)) setAccount({ busy: false, error: '', reauth: false });
+  }, [uid]);
+
+  const openAccount = (event) => {
+    accountTrigger.current = event.currentTarget;
+    setAccount({ busy: false, error: '', reauth: false });
+  };
+
+  const closeAccount = () => {
+    setAccount(null);
+    accountTrigger.current?.focus();
+  };
+
+  const confirmAccountDelete = async () => {
+    if (!account || account.busy) return;
+    setAccount({ busy: true, error: '', reauth: false });
+    try {
+      await deleteAccount();
+    } catch (err) {
+      if (!alive.current) return;
+      if (err?.code === REQUIRES_RECENT_LOGIN) setAccount({ busy: false, error: '', reauth: true });
+      else setAccount({ busy: false, error: isOfflineError(err) ? DELETE_ACCOUNT_COPY.offline : DELETE_ACCOUNT_COPY.error, reauth: false });
+      return;
+    }
+    // The account is gone on the server. Everything from here is best effort.
+    await clearLocalAccountData(uid);
+    try {
+      await signOutCreator();
+    } catch {
+      // The Auth user is deleted; the session can't refresh anyway.
+    }
+    router.replace('/');
+  };
+
+  // Sends them through phone sign-in (My bets shows it to anyone signed
+  // out), and My bets reopens the confirm when they are back.
+  const reauthForAccount = async () => {
+    markDeleteAccountResume(uid);
+    try {
+      await signOutCreator();
+    } catch {
+      clearDeleteAccountResume();
+      if (alive.current) setAccount({ busy: false, error: DELETE_ACCOUNT_COPY.error, reauth: false });
+    }
   };
 
   useEffect(() => {
@@ -113,15 +215,21 @@ export function MyBetsList({ user }) {
 
   const confirmDelete = async () => {
     if (!deleting || deleteBusy) return;
+    const code = deleting;
     setDeleteBusy(true);
     setDeleteError('');
+    setRemoving(code);
     try {
-      await removeBet(deleting);
+      await removeBet(code);
+      deletedBetsFor(uid).add(code);
       if (!alive.current) return;
+      setRemoving(null);
       setDeleting(null);
       setToast('Bet deleted.');
     } catch (err) {
       if (!alive.current) return;
+      // Back in its place: the list order comes from the live rows.
+      setRemoving(null);
       const offline = err?.code === 'offline'
         || (typeof navigator !== 'undefined' && navigator.onLine === false);
       setDeleteError(offline ? PHONE_OFFLINE_ERROR : DELETE_ERROR);
@@ -131,26 +239,32 @@ export function MyBetsList({ user }) {
   };
 
   // The live list without the bet: the delete is on the server (deleteBet
-  // only commits on the server, with no local-only removal). It finishes a
-  // waiting delete, and closes the dialog if a failed or timed out delete
-  // landed after all. A failed list load proves nothing.
+  // only commits on the server). It finishes a waiting delete, and closes the
+  // dialog if a failed or timed out delete landed after all. A failed list
+  // load proves nothing. This reads the live rows, not the shown list, which
+  // hides the bet as soon as the delete is confirmed.
   useEffect(() => {
     if (!bets || error) return;
     const gone = (code) => !bets.some((bet) => bet.id === code);
     const wait = deleteWait.current;
     if (wait && gone(wait.code)) wait.done();
     if (deleting && !deleteBusy && deleteError && gone(deleting)) {
+      deletedBetsFor(uid).add(deleting);
       setDeleting(null);
       setDeleteError('');
       setToast('Bet deleted.');
     }
-  }, [bets, error, deleting, deleteBusy, deleteError]);
+  }, [bets, error, deleting, deleteBusy, deleteError, uid]);
 
+  // Log out closes the list first: once Auth goes null the open query fails
+  // with permission-denied, which would flash the load error.
   useEffect(() => {
     if (!uid) return undefined;
     setBets(null);
     setError('');
-    return subscribeMyBets(uid, (rows, err) => {
+    let active = true;
+    const stopBets = subscribeMyBets(uid, (rows, err) => {
+      if (!active) return;
       if (err) {
         setError('Could not load your bets. Please check your connection and try again.');
         setBets([]);
@@ -159,6 +273,16 @@ export function MyBetsList({ user }) {
       setError('');
       setBets(rows || []);
     });
+    const stop = () => {
+      if (!active) return;
+      active = false;
+      stopBets();
+    };
+    stopList.current = stop;
+    return () => {
+      if (stopList.current === stop) stopList.current = null;
+      stop();
+    };
   }, [uid]);
 
   // A plan that lapses while Friends is open goes back to All.
@@ -166,12 +290,20 @@ export function MyBetsList({ user }) {
     if (friendsLocked && filter === 'Friends') setFilter('All');
   }, [friendsLocked, filter]);
 
-  const friends = useMemo(() => friendStats(bets, uid), [bets, uid]);
-  const counts = { All: bets?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
-  (bets || []).forEach((bet) => {
+  const shown = useMemo(
+    () => {
+      if (!bets) return bets;
+      const deleted = deletedBetsFor(uid);
+      return bets.filter((bet) => bet.id !== removing && !deleted.has(bet.id));
+    },
+    [bets, removing, uid],
+  );
+  const friends = useMemo(() => friendStats(shown, uid), [shown, uid]);
+  const counts = { All: shown?.length || 0, Open: 0, Closed: 0, Settled: 0, Friends: friends.length };
+  (shown || []).forEach((bet) => {
     counts[statusLabel(bet)] += 1;
   });
-  const visible = (bets || []).filter(
+  const visible = (shown || []).filter(
     (bet) =>
       (filter === 'All' || statusLabel(bet) === filter) &&
       `${questionOf(bet)} ${typeLabelOf(bet)} ${bet.stake || ''}`
@@ -280,7 +412,7 @@ export function MyBetsList({ user }) {
               </div>
               {filter === 'Friends' ? (
                 <FriendsView friends={friends} />
-              ) : bets.length === 0 ? (
+              ) : shown.length === 0 ? (
                 <div className="empty bets-empty">
                   <span className="empty-mark" aria-hidden="true">
                     <FiPlus size={28} />
@@ -339,6 +471,9 @@ export function MyBetsList({ user }) {
                           <button
                             type="button"
                             className="bet-delete press"
+                            // A bet put back after a failed delete is a new
+                            // button; this keeps focus return pointed at it.
+                            ref={bet.id === deleting ? deleteTrigger : undefined}
                             aria-describedby={`bet-q-${bet.id}`}
                             onClick={(event) => openDelete(bet, event)}
                           >
@@ -353,10 +488,19 @@ export function MyBetsList({ user }) {
             </>
           )}
           <PushSettingsRow uid={uid} />
+          {uid && (
+            <button type="button" className="logout-link delete-account-link press" onClick={openAccount}>
+              {DELETE_ACCOUNT_COPY.row}
+            </button>
+          )}
           <button
             type="button"
             className="logout-link"
             onClick={async () => {
+              clearDeletedBets();
+              const stop = stopList.current;
+              stopList.current = null;
+              stop?.();
               try {
                 await signOutCreator();
               } catch {
@@ -381,6 +525,17 @@ export function MyBetsList({ user }) {
       {deleting && (
         <DeleteBetDialog busy={deleteBusy} error={deleteError} onConfirm={confirmDelete} onCancel={closeDelete} />
       )}
+      {account && (
+        <DeleteAccountDialog
+          proBullet={proBullet}
+          reauth={account.reauth}
+          busy={account.busy}
+          error={account.error}
+          onConfirm={confirmAccountDelete}
+          onReauth={reauthForAccount}
+          onCancel={closeAccount}
+        />
+      )}
       <div className="toast-region" role="status">
         {toast && <p className="toast">{toast}</p>}
       </div>
@@ -397,7 +552,10 @@ const MyBets = () => {
   if (user && !isCreator(user)) {
     return (
       <CreatorAuthFlow
-        onCancel={() => router.push('/')}
+        onCancel={() => {
+          clearDeleteAccountResume();
+          router.push('/');
+        }}
         phoneFooter={<GoProLink />}
         renderDone={(next) => <MyBetsList key={next.uid} user={next} />}
       />

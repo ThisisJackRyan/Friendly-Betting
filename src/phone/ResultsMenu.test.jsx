@@ -80,12 +80,35 @@ test('the inbox opens as a dialog, links to the vote page, and reading clears th
   expect(within(inbox()).queryByLabelText('Unread')).not.toBeInTheDocument();
 });
 
+test.each(['$20 pot', 'Coffee'])('a staked win drops the brag line and keeps the stake (%s)', async (stake) => {
+  bet = { ...bet, stake };
+  rememberBet(uid, 'abc123');
+  render(<ResultsMenu />);
+  settle();
+  await userEvent.click(resultsButton());
+  expect(within(inbox()).getByText('You called it.')).toBeInTheDocument();
+  expect(within(inbox()).getByText(`At stake: ${stake}`)).toBeInTheDocument();
+  expect(within(inbox()).queryByText('Bragging rights, secured.')).not.toBeInTheDocument();
+});
+
+test('a win with no stake keeps the brag line', async () => {
+  bet = { ...bet, stake: '' };
+  rememberBet(uid, 'abc123');
+  render(<ResultsMenu />);
+  settle();
+  await userEvent.click(resultsButton());
+  expect(within(inbox()).getByText('You called it.')).toBeInTheDocument();
+  expect(within(inbox()).getByText('At stake: Bragging rights')).toBeInTheDocument();
+  expect(within(inbox()).getByText('Bragging rights, secured.')).toBeInTheDocument();
+});
+
 test('a losing pick gets the softer line', async () => {
   rememberBet(uid, 'abc123');
   bet = { ...bet, status: 'closed', winnerId: 'b', settledAt: 123, settlement: buildSettlement(bet, 'b') };
   render(<ResultsMenu />);
   await userEvent.click(resultsButton());
   expect(within(inbox()).getByText('This one’s settled.')).toBeInTheDocument();
+  expect(within(inbox()).getByText('At stake: $20 pot')).toBeInTheDocument();
   expect(within(inbox()).getByText('Good game. More friendly bets ahead.')).toBeInTheDocument();
   expect(screen.queryByText('You called it.')).not.toBeInTheDocument();
 });
