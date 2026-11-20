@@ -59,12 +59,14 @@ async function settle() {
   }
 }
 
-test('the Notifications row sits in the account area, right above an unchanged Log out', async () => {
+test('the Notifications row sits in the account area, above Delete account and an unchanged Log out', async () => {
   render(<MyBetsList user={creator} />);
   await settle();
   const row = screen.getByText('Notifications').closest('.push-row');
+  const remove = screen.getByRole('button', { name: 'Delete account' });
   const logout = screen.getByRole('button', { name: 'Log out' });
-  expect(row.nextElementSibling).toBe(logout);
+  expect(row.nextElementSibling).toBe(remove);
+  expect(remove.nextElementSibling).toBe(logout);
   expect(logout).toHaveClass('logout-link');
   expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
 });

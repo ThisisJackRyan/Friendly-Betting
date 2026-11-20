@@ -148,7 +148,7 @@ describe('rendered screens never show TODO_UX', () => {
     await renderAt('/b/abc123', <VoteScreen />);
     const card = screen.getByRole('region', { name: 'Settled result' });
     expect([...card.children].map((node) => node.textContent)).toEqual([
-      'Chiefs -3 won', 'One friend called it.', 'Time for everyone else to pay up.', 'Stakes: $20',
+      'Chiefs -3 won', 'A friend called it.', 'Time for everyone else to pay up.', 'Stakes: $20',
     ]);
     cleanup();
     feed(BETS['several unnamed winners']);
@@ -233,7 +233,7 @@ describe('copy modules never hold TODO_UX', () => {
 
   test('reveal helpers for unnamed winners', () => {
     expect(winnerPhrase([{ name: '' }, { name: ' ' }])).toBe('');
-    expect(REVEAL_COPY.friends(1)).toBe('One friend called it.');
+    expect(REVEAL_COPY.friends(1)).toBe('A friend called it.');
     expect(REVEAL_COPY.friends(2)).toBe('2 friends called it.');
     expect(voters.voterListLabel(['Jake'], 2, 1)).not.toContain(MARKER);
   });
