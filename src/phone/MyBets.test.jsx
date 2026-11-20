@@ -1,15 +1,27 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DELETE_WAIT_MS, MyBetsList } from './MyBets';
+import { DELETE_WAIT_MS, MyBetsList, __resetDeletedBetsForTests } from './MyBets';
 import { deleteBet, subscribeMyBets } from './api';
-import { PHONE_OFFLINE_ERROR } from './creatorSession';
 import { signOutCreator } from './creatorAuth';
+import { PHONE_OFFLINE_ERROR } from './creatorSession';
+import { clearLocalAccountData, deleteAccount, markDeleteAccountResume, RESUME_KEY } from './accountApi';
+import { useEntitlementState } from './useEntitlement';
+import { navigation } from 'next/navigation';
 
 jest.mock('next/navigation');
 jest.mock('next/link');
 jest.mock('./identity', () => ({ useIdentity: () => null }));
 jest.mock('./creatorAuth', () => ({ signOutCreator: jest.fn() }));
 jest.mock('./api', () => ({ subscribeMyBets: jest.fn(), deleteBet: jest.fn() }));
+jest.mock('../Config/firebase-config', () => ({ auth: null, db: null }));
+jest.mock('./accountApi', () => {
+  const actual = jest.requireActual('./accountApi');
+  return { ...actual, deleteAccount: jest.fn(), clearLocalAccountData: jest.fn(async () => {}) };
+});
+jest.mock('./useEntitlement', () => {
+  const actual = jest.requireActual('./useEntitlement');
+  return { ...actual, useEntitlementState: jest.fn(actual.useEntitlementState) };
+});
 jest.mock('./FriendlyLoader', () => ({
   __esModule: true,
   default: () => <p>Loading</p>,
@@ -66,6 +78,7 @@ beforeEach(() => {
     return () => {};
   });
   deleteBet.mockReset();
+  __resetDeletedBetsForTests();
 });
 
 test('filters real bets by status, including expired bets, and preserves tally links', async () => {
@@ -389,6 +402,90 @@ describe('delete a bet', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
   });
+
+  describe('the list after a confirmed delete', () => {
+    const questions = () => [...document.querySelectorAll('.bet-card-question')].map((h) => h.textContent);
+    const allCount = () => within(screen.getByRole('group', { name: 'Filter bets by status' }))
+      .getByRole('button', { name: /^All/ }).textContent;
+
+    test('the bet leaves the list as soon as Delete bet is pressed', async () => {
+      deleteBet.mockImplementation(() => new Promise(() => {}));
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(questions()).toEqual(['Will Alex break 90?', 'Total points tonight?']);
+      expect(allCount()).toBe('All2');
+    });
+
+    test('a failed delete puts the bet back in its place with the existing error', async () => {
+      let fail;
+      deleteBet.mockImplementation(() => new Promise((_resolve, reject) => {
+        fail = reject;
+      }));
+      render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      await act(async () => fail(Object.assign(new Error('Could not delete this bet.'), { code: 'server' })));
+      expect(questions()).toEqual(['Will Alex break 90?', 'Who wins game night?', 'Total points tonight?']);
+      expect(allCount()).toBe('All3');
+      expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe(GENERIC);
+      expect(screen.getByRole('status')).toHaveTextContent('');
+      await userEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+      expect(deleteButtons()[1]).toHaveFocus();
+    });
+
+    test('a stale live list does not bring a deleted bet back, here or on coming back', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      // The listener re-sends its last rows (a vote change), still with the bet.
+      await act(async () => publishBets(bets.map((bet) => ({ ...bet }))));
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(allCount()).toBe('All2');
+      unmount();
+      // Back to My bets: the first list still has the deleted bet.
+      render(<MyBetsList user={user} />);
+      expect(screen.queryByText('Who wins game night?')).not.toBeInTheDocument();
+      expect(questions()).toEqual(['Will Alex break 90?', 'Total points tonight?']);
+    });
+
+    test('another account with the same bet code still sees its bet', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      unmount();
+      const other = { ...user, uid: 'other-creator' };
+      subscribeMyBets.mockImplementation((_uid, publish) => {
+        publish(bets.map((bet) => ({ ...bet, createdByID: 'other-creator' })));
+        return () => {};
+      });
+      render(<MyBetsList user={other} />);
+      expect(questions()).toEqual(['Will Alex break 90?', 'Who wins game night?', 'Total points tonight?']);
+      expect(allCount()).toBe('All3');
+    });
+
+    test('logging out forgets the deleted bets', async () => {
+      deleteBet.mockResolvedValue(undefined);
+      const { unmount } = render(<MyBetsList user={user} />);
+      await openDialog(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Delete bet' }));
+      expect(screen.getByRole('status')).toHaveTextContent('Bet deleted.');
+      await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+      expect(signOutCreator).toHaveBeenCalled();
+      unmount();
+      // Same account again, with a list that still has the bet.
+      render(<MyBetsList user={user} />);
+      expect(screen.getByText('Who wins game night?')).toBeInTheDocument();
+      expect(allCount()).toBe('All3');
+    });
+  });
 });
 
 describe('Friends', () => {
@@ -520,5 +617,170 @@ describe('the settled card line, from the creator’s side', () => {
     expect(cardLine('lost')).toHaveTextContent('Ava won');
     // The creator didn't pick: the friend's win reads as before.
     expect(cardLine('sideline')).toHaveTextContent('A friend won');
+  });
+});
+
+describe('delete account', () => {
+  const row = () => screen.queryByRole('button', { name: 'Delete account' });
+  const openDialog = async () => {
+    await userEvent.click(row());
+    return screen.getByRole('dialog', { name: 'Delete your account?' });
+  };
+  const offlineSpy = () => jest.spyOn(window.navigator, 'onLine', 'get');
+
+  beforeEach(() => {
+    deleteAccount.mockReset();
+    clearLocalAccountData.mockClear();
+    signOutCreator.mockReset();
+    signOutCreator.mockResolvedValue();
+    navigation.replace.mockClear();
+    sessionStorage.clear();
+  });
+
+  test('a phone-verified member sees a quiet Delete account row above Log out', () => {
+    render(<MyBetsList user={user} />);
+    const button = row();
+    expect(button).toHaveClass('logout-link', 'delete-account-link');
+    expect(button).not.toHaveClass('danger');
+    expect(button.nextElementSibling).toHaveTextContent('Log out');
+  });
+
+  test.each([
+    ['an anonymous user', { uid: 'anon', isAnonymous: true, providerData: [] }],
+    ['a device-only user', { uid: 'local', isLocal: true, providerData: [{ providerId: 'phone' }] }],
+    ['nobody yet', null],
+  ])('%s gets no row', (_name, who) => {
+    render(<MyBetsList user={who} />);
+    expect(row()).toBeNull();
+  });
+
+  test('nothing is deleted until the confirm; Keep it closes and returns focus', async () => {
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    expect(dialog).toHaveTextContent('This can’t be undone.');
+    expect(deleteAccount).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(row()).toHaveFocus();
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  test('busy, then on success clears local data, signs out and goes home', async () => {
+    let finish;
+    deleteAccount.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    expect(within(dialog).getByRole('button', { name: 'Deleting…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Keep it' })).toBeDisabled();
+    await act(async () => finish());
+    expect(clearLocalAccountData).toHaveBeenCalledWith('creator');
+    expect(signOutCreator).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+    expect(clearLocalAccountData.mock.invocationCallOrder[0]).toBeLessThan(signOutCreator.mock.invocationCallOrder[0]);
+    expect(screen.queryByRole('status')).not.toHaveTextContent(/deleted/i);
+  });
+
+  test('a server error shows the error copy and keeps them signed in', async () => {
+    deleteAccount.mockRejectedValue(Object.assign(new Error('x'), { code: 'server' }));
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Couldn’t delete your account. Try again.');
+    expect(signOutCreator).not.toHaveBeenCalled();
+    expect(clearLocalAccountData).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole('button', { name: 'Delete account' })).toBeEnabled();
+  });
+
+  test('offline shows the shared offline line', async () => {
+    deleteAccount.mockRejectedValue(Object.assign(new Error('x'), { code: 'offline' }));
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(PHONE_OFFLINE_ERROR);
+  });
+
+  test('a browser that reports offline shows the offline line', async () => {
+    const spy = offlineSpy().mockReturnValue(false);
+    deleteAccount.mockRejectedValue(new Error('x'));
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(PHONE_OFFLINE_ERROR);
+    spy.mockRestore();
+  });
+
+  test('a stale sign-in shows the re-auth line; Sign in again notes the resume and signs out to phone sign-in', async () => {
+    deleteAccount.mockRejectedValue(Object.assign(new Error('x'), { code: 'requires-recent-login' }));
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    const again = await within(dialog).findByRole('button', { name: 'Sign in again' });
+    expect(dialog).toHaveTextContent('Sign in again to delete your account. It’s a quick security check.');
+    expect(again).toHaveClass('dialog-primary');
+    expect(again).not.toHaveClass('danger');
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    await userEvent.click(again);
+    expect(JSON.parse(sessionStorage.getItem(RESUME_KEY)).uid).toBe('creator');
+    expect(signOutCreator).toHaveBeenCalledTimes(1);
+    expect(clearLocalAccountData).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  test('back from sign-in, the confirm opens again, once', () => {
+    markDeleteAccountResume('creator');
+    const { unmount } = render(<MyBetsList user={user} />);
+    expect(screen.getByRole('dialog', { name: 'Delete your account?' })).toBeInTheDocument();
+    unmount();
+    render(<MyBetsList user={user} />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('a resume note does not open the confirm for someone who is not a member', () => {
+    markDeleteAccountResume('creator');
+    render(<MyBetsList user={null} />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(sessionStorage.getItem(RESUME_KEY)).not.toBeNull();
+  });
+
+  test('a resume note left by another member does not open the confirm, and is dropped', () => {
+    markDeleteAccountResume('someone-else');
+    render(<MyBetsList user={user} />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
+  });
+
+  test.each([
+    ['stripe', 'Pro ends right away, with no refund.'],
+    ['apple', 'Pro is billed by Apple. Cancel it in your phone’s settings so it doesn’t renew.'],
+    ['google', 'Pro is billed by Google. Cancel it in Google Play so it doesn’t renew.'],
+  ])('Pro from %s adds its line', async (source, line) => {
+    useEntitlementState.mockReturnValue({ uid: 'creator', entitlement: { plan: 'pro', source, expiresAt: null }, isPro: true, loading: false });
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    expect(within(dialog).getAllByRole('listitem').at(-1)).toHaveTextContent(line);
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(4);
+    useEntitlementState.mockImplementation(jest.requireActual('./useEntitlement').useEntitlementState);
+  });
+
+  test.each([
+    ['a mock test purchase', { plan: 'pro', source: 'mock', expiresAt: null }],
+    ['a legacy founder grant', { plan: 'founder', source: 'mock', founderNumber: 3, expiresAt: null }],
+    ['no plan', null],
+  ])('%s gets no Pro line', async (_name, entitlement) => {
+    useEntitlementState.mockReturnValue({ uid: 'creator', entitlement, isPro: Boolean(entitlement), loading: false });
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(3);
+    expect(dialog).not.toHaveTextContent(/Pro /);
+    useEntitlementState.mockImplementation(jest.requireActual('./useEntitlement').useEntitlementState);
+  });
+
+  test('another user’s loaded plan never adds a Pro line', async () => {
+    useEntitlementState.mockReturnValue({ uid: 'someone-else', entitlement: { plan: 'pro', source: 'stripe' }, isPro: true, loading: false });
+    render(<MyBetsList user={user} />);
+    const dialog = await openDialog();
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(3);
+    useEntitlementState.mockImplementation(jest.requireActual('./useEntitlement').useEntitlementState);
   });
 });

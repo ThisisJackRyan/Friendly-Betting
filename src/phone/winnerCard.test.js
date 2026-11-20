@@ -52,9 +52,11 @@ describe('winnerCardText', () => {
     expect(buildReveal({ bet, viewerId: null }).headline).toBe('Jack, Maya & 3 others won.');
   });
 
-  test('one other is kept with its count too', () => {
+  test('one unnamed winner is kept with its count too', () => {
     const winners = [['jack', 'Jack'], ['maya', 'Maya'], ['anon', '']];
-    expect(winnerCardText(settled({ winners })).headline).toBe('Jack, Maya &\u00A01\u00A0other won.');
+    expect(winnerCardText(settled({ winners })).headline).toBe('Jack, Maya &\u00A0a\u00A0friend won.');
+    const two = [['maya', 'Maya'], ['u1', ''], ['u2', '']];
+    expect(winnerCardText(settled({ winners: two })).headline).toBe('Maya &\u00A02\u00A0friends won.');
   });
 
   test('nobody called it, and no stake line without a stake', () => {
@@ -125,9 +127,9 @@ describe('the creator among the winners, on the card', () => {
   // Anyone but the creator sharing the card: a voter, or a visitor with no
   // id. They never speak as the creator.
   const UNNAMED_CREATOR = [
-    ['solo', [['jack', '']], 'One friend called it.', 'Lunch is on everyone else.'],
-    ['with one other', [['maya', 'Maya'], ['jack', '']], 'Maya &\u00A01\u00A0other won.', 'Lunch is on everyone else.'],
-    ['with two others', [['sam', 'Sam'], ['jack', ''], ['maya', 'Maya']], 'Sam, Maya &\u00A01\u00A0other won.', 'Lunch is on everyone else.'],
+    ['solo', [['jack', '']], 'A friend called it.', 'Lunch is on everyone else.'],
+    ['with one other', [['maya', 'Maya'], ['jack', '']], 'Maya &\u00A0a\u00A0friend won.', 'Lunch is on everyone else.'],
+    ['with two others', [['sam', 'Sam'], ['jack', ''], ['maya', 'Maya']], 'Sam, Maya &\u00A0a\u00A0friend won.', 'Lunch is on everyone else.'],
   ];
   const CREATOR_LINES = ['I called it.', '& I won.', '&\u00A0I won.'];
   describe.each([
@@ -151,9 +153,9 @@ describe('the creator among the winners, on the card', () => {
 
   test('a creator id on the bet that matches no viewer never makes an I card', () => {
     const bet = { ...settled({ winners: [['jack', '']] }), createdByID: '' };
-    expect(winnerCardText(bet, '').headline).toBe('One friend called it.');
+    expect(winnerCardText(bet, '').headline).toBe('A friend called it.');
     const noCreator = { ...settled({ winners: [['jack', '']] }), createdByID: undefined };
-    expect(winnerCardText(noCreator, undefined).headline).toBe('One friend called it.');
+    expect(winnerCardText(noCreator, undefined).headline).toBe('A friend called it.');
   });
 
   test('the creator\'s own screen still says You called it.', () => {

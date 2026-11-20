@@ -4,9 +4,9 @@ import { settlementOf } from './settlement';
 // Head to head on My bets: every friend who picked on the creator's own bets,
 // with their record. Built only from the bets subscribeMyBets already loaded,
 // so it costs no extra reads. A friend is keyed by voterId and shown under the
-// latest name they gave; a voter who never gave a name can't be told apart
-// from any other, so they are left out, as are votes with no voterId and the
-// creator's own pick.
+// latest name they gave; a voter who never gave a name (or whose deleted
+// account cleared it) can't be told apart from any other, so they are left
+// out, as are votes with no voterId and the creator's own pick.
 //
 // A W or L is the creator against this friend: only on a settled bet where
 // they picked different sides, W when the creator's side won and L when the

@@ -39,10 +39,10 @@ export function textDirection(text) {
   return first && STRONG_RTL.test(first[0]) ? 'rtl' : 'ltr';
 }
 
-// "& 2 others" joined with no-break spaces, so the count never ends a line
+// "& 2 others" or "& a friend" joined with no-break spaces, so the count never ends a line
 // on its own ("Sam & 2" / "others won."); "& I" the same way.
 const keepCount = (headline) => headline
-  .replace(/ & (\d+) (others?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`)
+  .replace(/ & (\d+|a) (others?|friends?)\b(?=[^&]*$)/, ` &${NBSP}$1${NBSP}$2`)
   .replace(/ & I won\.$/, ` &${NBSP}I won.`);
 
 // Each block: its font sizes, largest first, with line height as a multiple
