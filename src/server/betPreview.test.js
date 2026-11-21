@@ -4,7 +4,7 @@ import { generateMetadata } from '../../app/b/[code]/page';
 jest.mock('./firebaseAdmin', () => ({ adminDb: jest.fn() }));
 jest.mock('../phone/VoteScreen', () => () => null);
 
-const fallback = 'Vote · Friendly';
+const fallback = 'Friendly Bets';
 const description = 'Pick your side on Friendly Bets.';
 
 function mockBetDoc(data) {

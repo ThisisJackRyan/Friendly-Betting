@@ -4,7 +4,7 @@ import { questionOf } from '../phone/model';
 
 // Server only. The link preview for /b/{code} shows the bet's question and
 // nothing else: no stakes, no names, no sides or picks.
-export const PREVIEW_FALLBACK_TITLE = 'Vote · Friendly';
+export const PREVIEW_FALLBACK_TITLE = 'Friendly Bets';
 export const PREVIEW_DESCRIPTION = 'Pick your side on Friendly Bets.';
 
 // The bet's question on one line, or '' for a bad code, a missing bet, or any
