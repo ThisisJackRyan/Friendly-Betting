@@ -262,6 +262,58 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   expect(errors).toEqual([]);
 });
 
+// Makes a bet from Home with the first history.go call (Create's walk back to
+// the tally) dropped, or held for `delay` ms before it runs.
+async function makeBetWithWalkBack(page, { delay = null } = {}) {
+  await page.addInitScript((wait) => {
+    const go = History.prototype.go;
+    let first = true;
+    History.prototype.go = function (delta) {
+      if (!first) return go.call(this, delta);
+      first = false;
+      if (wait != null) window.setTimeout(() => go.call(this, delta), wait);
+    };
+  }, delay);
+  await mockCrew(page, { votes: [], share: 'dismiss' });
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Start a bet', exact: true }).click();
+  await page.getByRole('button', { name: /Money Line/ }).click();
+  await page.getByLabel(/Question/).fill('Who takes the win?');
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByText('Step 3 of 3')).toBeVisible();
+  await page.getByRole('button', { name: 'Text friends', exact: true }).click();
+}
+
+test('a walk back the WebView drops still opens the tally, and back goes home', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await makeBetWithWalkBack(page);
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
+
+  // The spent steps are still behind the tally: back skips them to home.
+  await page.goBack();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a walk back that lands after the fallback leaves the tally up, and back goes home', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await makeBetWithWalkBack(page, { delay: 1500 });
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  // Past the late landing, the tally is still the page.
+  await page.waitForTimeout(1200);
+  await expect(page).toHaveURL(/\/t\/crew123$/);
+  await expect(page.getByRole('heading', { name: 'The picks' })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+  await expect(page.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('after Create, Wanna vote? opens the vote page, back returns to the tally, and a pick hides it', async ({ page }, testInfo) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
