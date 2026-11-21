@@ -5,7 +5,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
 import { CodeBody, useCreatorPhone } from './AuthSlides';
-import CreateForm from './CreateForm';
+import CreateForm, { TALLY_HANDOFF_FALLBACK_MS } from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
 import { isOnlyBetBy } from './firstBet';
@@ -310,6 +310,68 @@ test('Text friends saves once, then replaces Create with the live tally', async 
   window.history.back();
   await back;
   expect(window.location.pathname).toBe('/');
+});
+
+describe('the tally handoff when the walk back never lands', () => {
+  const pastFallback = () => new Promise((resolve) => {
+    window.setTimeout(resolve, TALLY_HANDOFF_FALLBACK_MS + 100);
+  });
+  const tallyReplaces = () => navigation.replace.mock.calls.filter(([url]) => url === '/t/abc123');
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('a dropped traversal still opens the tally after the fallback', async () => {
+    jest.spyOn(window.history, 'go').mockImplementation(() => {});
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(window.history.go).toHaveBeenCalledWith(-1);
+    expect(tallyReplaces()).toHaveLength(0);
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1), {
+      timeout: TALLY_HANDOFF_FALLBACK_MS + 1000,
+    });
+    // The tally took the spent step entry, so nothing is left waiting on it.
+    expect(window.location.pathname).toBe('/t/abc123');
+  });
+
+  test('a traversal that lands hands off once, and the fallback never adds another', async () => {
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1));
+    await act(pastFallback);
+    expect(tallyReplaces()).toHaveLength(1);
+  });
+
+  test('a popstate that comes after the fallback replaces nothing more', async () => {
+    jest.spyOn(window.history, 'go').mockImplementation(() => {});
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1), {
+      timeout: TALLY_HANDOFF_FALLBACK_MS + 1000,
+    });
+    await act(async () => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    });
+    expect(tallyReplaces()).toHaveLength(1);
+  });
+
+  test('leaving Create before the handoff opens no tally later', async () => {
+    jest.spyOn(window.history, 'go').mockImplementation(() => {});
+    const { unmount } = renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    expect(window.history.go).toHaveBeenCalledWith(-1);
+    unmount();
+    await act(pastFallback);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)));
+    expect(tallyReplaces()).toHaveLength(0);
+  });
 });
 
 test('suggested stakes remain editable and are what the bet saves', async () => {

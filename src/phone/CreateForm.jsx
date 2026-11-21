@@ -54,6 +54,10 @@ const COPY = {
 // leaveForTally), so no way back lands on a step that already sent.
 const STEP_HASH = /^#step-(\d+)$/;
 
+// How long leaveForTally waits for its walk back to land. A WebView can drop
+// the traversal (no popstate), so the tally then replaces the current entry.
+export const TALLY_HANDOFF_FALLBACK_MS = 1000;
+
 function stepFromHash(hash) {
   const match = STEP_HASH.exec(hash || '');
   return match ? Number(match[1]) : null;
@@ -107,6 +111,8 @@ const CreateForm = () => {
   // Forward moves push, so steps in entries only grow and a hash finds its entry.
   const stepHistory = useRef({ entries: [step], index: 0 });
   const onPopRef = useRef(null);
+  // Cancels a tally handoff still waiting on its walk back (see leaveForTally).
+  const cancelHandoffRef = useRef(null);
   const [leaving, setLeaving] = useState(null);
   const [motion, setMotion] = useState('forward');
   const [hasMoved, setHasMoved] = useState(false);
@@ -161,6 +167,8 @@ const CreateForm = () => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Left before the tally opened: nothing navigates later.
+      cancelHandoffRef.current?.();
     };
   }, []);
 
@@ -228,6 +236,8 @@ const CreateForm = () => {
   // the hashless entry Create opened on, then put the tally in its place. The
   // step entries ahead of it are only reachable by forward, which opens a
   // fresh Create (see the refresh rule above), never the bet that just sent.
+  // If the walk back never lands, the tally replaces the current step entry
+  // after TALLY_HANDOFF_FALLBACK_MS. Whichever comes first hands off, once.
   const leaveForTally = (id) => {
     const href = `/t/${encodeURIComponent(id)}`;
     const behind = stepHistory.current.index;
@@ -236,12 +246,25 @@ const CreateForm = () => {
       router.replace(href);
       return;
     }
-    const arrive = () => {
+    let timer;
+    const cancel = () => {
       window.removeEventListener('popstate', arrive);
-      // After the router has handled the same popstate.
-      window.setTimeout(() => router.replace(href), 0);
+      window.clearTimeout(timer);
+      cancelHandoffRef.current = null;
     };
+    const handOff = () => {
+      cancel();
+      router.replace(href);
+    };
+    function arrive() {
+      cancel();
+      cancelHandoffRef.current = cancel;
+      // After the router has handled the same popstate.
+      timer = window.setTimeout(handOff, 0);
+    }
+    cancelHandoffRef.current = cancel;
     window.addEventListener('popstate', arrive);
+    timer = window.setTimeout(handOff, TALLY_HANDOFF_FALLBACK_MS);
     window.history.go(-behind);
   };
 
