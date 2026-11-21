@@ -143,19 +143,41 @@ const VoteScreen = () => {
     if (final) document.title = 'The final word · Friendly';
   }, [final]);
 
+  // Firestore here keeps writes in memory only, so closing or reloading the
+  // tab before castVote resolves loses the pick. While it is in flight, ask
+  // the browser to confirm leaving (browsers show their own generic prompt).
+  useEffect(() => {
+    if (!saving) return undefined;
+    const holdPage = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', holdPage);
+    return () => window.removeEventListener('beforeunload', holdPage);
+  }, [saving]);
+
+  const codeRef = useRef(code);
+  codeRef.current = code;
+
+  // The pick only shows as made ("You’re on ...") once castVote resolves, so
+  // a voter never leaves believing an unsaved pick counted. Until then the
+  // choice buttons stay up, disabled by `saving`.
   const choose = async (optionId) => {
     if (!bet || !user || !open || saving) return;
     setSaving(true);
     setError('');
-    setPendingId(optionId);
     const trimmed = cleanName(nameInput.current?.value ?? name);
     if (trimmed && trimmed !== name) setName(trimmed);
     if (trimmed) rememberName(trimmed);
     const pick = { voterId: user.uid, name: trimmed, optionId };
-    setOptimistic(pick);
+    const pickCode = code;
     try {
-      await castVote(code, pick);
-      if (alive.current) setSavedPick(pick);
+      await castVote(pickCode, pick);
+      if (alive.current && codeRef.current === pickCode) {
+        setPendingId(optionId);
+        setOptimistic(pick);
+        setSavedPick(pick);
+      }
     } catch (err) {
       setPendingId(null);
       setOptimistic(null);
