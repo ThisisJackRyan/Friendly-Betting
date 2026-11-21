@@ -128,10 +128,10 @@ test('a shared link opens the vote screen and records a one-tap choice', async (
 });
 
 const textFriendsMessage = [
-  'New bet: Who is late',
-  'Stakes: a coffee',
-  'Pick your side: http://localhost/b/abc123',
-].join('\n');
+  'New bet:\nWho is late',
+  'Stakes:\na coffee',
+  'Pick your side:\nhttp://localhost/b/abc123',
+].join('\n\n');
 
 test('the creator can close and settle from the tally', async () => {
   renderAt('/t/abc123', <TallyScreen />);
