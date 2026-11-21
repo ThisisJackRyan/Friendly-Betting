@@ -68,3 +68,12 @@ test.each(['', 'a/b', '../x', 'x'.repeat(65), 'abc 123'])('a bad code %p never r
   expect(adminDb).not.toHaveBeenCalled();
   expect(meta.title).toBe(fallback);
 });
+
+test('preview URLs resolve against the deployment on preview deploys and prod otherwise', () => {
+  const { previewOrigin } = require('./betPreview');
+  const prod = 'https://www.friendly-bets.com';
+  expect(previewOrigin({})).toBe(prod);
+  expect(previewOrigin({ VERCEL_ENV: 'production', VERCEL_URL: 'fb-abc.vercel.app' })).toBe(prod);
+  expect(previewOrigin({ VERCEL_ENV: 'preview', VERCEL_URL: 'fb-abc.vercel.app' })).toBe('https://fb-abc.vercel.app');
+  expect(previewOrigin({ VERCEL_ENV: 'preview' })).toBe(prod);
+});

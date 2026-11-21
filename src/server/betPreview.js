@@ -1,6 +1,7 @@
 import { adminDb } from './firebaseAdmin';
 import { validCode } from './http';
 import { questionOf } from '../phone/model';
+import { PROD_ORIGIN } from '../platform/origin';
 
 // Server only. The link preview for /b/{code} shows the bet's question and
 // nothing else: no stakes, no names, no sides or picks.
@@ -18,6 +19,14 @@ export async function previewQuestion(code) {
   } catch (err) {
     return '';
   }
+}
+
+// The origin preview URLs (og:image included) resolve against: the deployment's
+// own URL on preview and development deploys, so their cards come from their
+// own code, and the production origin everywhere else.
+export function previewOrigin(env = process.env) {
+  if (env.VERCEL_ENV !== 'production' && env.VERCEL_URL) return `https://${env.VERCEL_URL}`;
+  return PROD_ORIGIN;
 }
 
 export async function voteMetadata(code) {

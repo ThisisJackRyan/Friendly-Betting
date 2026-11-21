@@ -9,17 +9,33 @@ import { layoutQuestion } from './previewCardLayout.js';
 
 export const CARD_SIZE = { width: 1200, height: 630 };
 export const CARD_COLORS = { background: '#ffffff', ink: '#1a1a1a' };
+// ImageResponse defaults to a year-long immutable cache, which would pin a
+// card forever. next/og copies options.headers over its defaults, so these win.
+// A question card: browsers recheck after a minute and the CDN after five, so
+// an edited or deleted bet shows within minutes, while stale-while-revalidate
+// keeps crawlers fast by serving the old card during the refetch.
+export const QUESTION_CACHE = 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400';
+// The fallback card (no question, or any failure) may only stand for a
+// moment: a cold read or a brief outage must not stick to a real bet's
+// preview, so browsers never reuse it and the CDN holds it a minute at most.
+export const FALLBACK_CACHE = 'public, max-age=0, s-maxage=60';
 const PADDING_X = 96;
 const FONT_FAMILY = 'Manrope';
 
-const fontPath = (weight) =>
-  join(process.cwd(), 'node_modules', '@fontsource', 'manrope', 'files', `manrope-latin-${weight}-normal.woff`);
+// One literal path per weight, so file tracing can see them. next.config.js
+// also lists these files (and app/icon.svg) in outputFileTracingIncludes for
+// the opengraph-image route.
+export const FONT_PATHS = {
+  800: join(process.cwd(), 'node_modules/@fontsource/manrope/files/manrope-latin-800-normal.woff'),
+  600: join(process.cwd(), 'node_modules/@fontsource/manrope/files/manrope-latin-600-normal.woff'),
+};
+export const ICON_PATH = join(process.cwd(), 'app/icon.svg');
 
 // Manrope 800 and 600 as ImageResponse fonts, or [] when they cannot be read
 // (the card then uses the built-in sans). Never throws.
 export async function loadCardFonts() {
   try {
-    const [heavy, semi] = await Promise.all([readFile(fontPath(800)), readFile(fontPath(600))]);
+    const [heavy, semi] = await Promise.all([readFile(FONT_PATHS[800]), readFile(FONT_PATHS[600])]);
     return [
       { name: FONT_FAMILY, data: heavy, weight: 800, style: 'normal' },
       { name: FONT_FAMILY, data: semi, weight: 600, style: 'normal' },
@@ -33,7 +49,7 @@ export async function loadCardFonts() {
 // or '' when it cannot be read. Never throws.
 export async function loadAppIcon() {
   try {
-    const svg = await readFile(join(process.cwd(), 'app', 'icon.svg'));
+    const svg = await readFile(ICON_PATH);
     return `data:image/svg+xml;base64,${svg.toString('base64')}`;
   } catch (err) {
     return '';
