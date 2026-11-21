@@ -5,7 +5,7 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import AppShell from './AppShell';
 import { CodeBody, useCreatorPhone } from './AuthSlides';
-import CreateForm, { TALLY_HANDOFF_FALLBACK_MS } from './CreateForm';
+import CreateForm, { LATE_WALK_GUARD_MS, TALLY_HANDOFF_FALLBACK_MS } from './CreateForm';
 import { CreateChromeProvider } from './createChrome';
 import { saveBet } from './api';
 import { isOnlyBetBy } from './firstBet';
@@ -253,6 +253,15 @@ const popped = () => new Promise((resolve) => {
   window.addEventListener('popstate', resolve, { once: true });
 });
 
+const FALLBACK_NOTE = 'friendly.tallyFallback';
+
+// The first popstate after a fallback disarms its late walk guard, so a test
+// that leaves one armed hands no stray tally replace to the next test.
+function disarmLateWalkGuard() {
+  window.history.replaceState({}, '', '/');
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 test('stake is the last step for a creator: optional, with closes, and Text friends makes the bet', async () => {
   renderForm('/new/money-line');
   await goToStake('Who is late');
@@ -319,6 +328,7 @@ describe('the tally handoff when the walk back never lands', () => {
   const tallyReplaces = () => navigation.replace.mock.calls.filter(([url]) => url === '/t/abc123');
 
   afterEach(() => {
+    disarmLateWalkGuard();
     jest.restoreAllMocks();
   });
 
@@ -371,6 +381,126 @@ describe('the tally handoff when the walk back never lands', () => {
     window.dispatchEvent(new PopStateEvent('popstate'));
     await act(() => new Promise((resolve) => window.setTimeout(resolve, 50)));
     expect(tallyReplaces()).toHaveLength(0);
+  });
+
+  test('a fallback leaves the note that back from the tally goes home', async () => {
+    jest.spyOn(window.history, 'go').mockImplementation(() => {});
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1), {
+      timeout: TALLY_HANDOFF_FALLBACK_MS + 1000,
+    });
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBe('/new/money-line');
+  });
+
+  test('a normal handoff clears an old fallback note', async () => {
+    window.sessionStorage.setItem(FALLBACK_NOTE, '/new/money-line');
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1));
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBeNull();
+  });
+});
+
+describe('a walk back that lands after the fallback', () => {
+  const realGo = History.prototype.go;
+  const tallyReplaces = () => navigation.replace.mock.calls.filter(([url]) => url === '/t/abc123');
+  const settle = () => act(() => new Promise((resolve) => window.setTimeout(resolve, 50)));
+  const land = async (url) => {
+    window.history.replaceState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await settle();
+  };
+
+  async function fallBackToTally() {
+    jest.spyOn(window.history, 'go').mockImplementation(() => {});
+    renderFromHome('/new/money-line');
+    await goToStake('Who is late');
+    await userEvent.click(screen.getByRole('button', { name: 'Text friends' }));
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(1), {
+      timeout: TALLY_HANDOFF_FALLBACK_MS + 1000,
+    });
+    expect(window.location.pathname).toBe('/t/abc123');
+  }
+
+  afterEach(() => {
+    disarmLateWalkGuard();
+    jest.restoreAllMocks();
+  });
+
+  test('a delayed walk back that lands on the entry Create opened on puts the tally there', async () => {
+    await fallBackToTally();
+    const back = popped();
+    realGo.call(window.history, -1);
+    await back;
+    await waitFor(() => expect(tallyReplaces()).toHaveLength(2));
+    expect(window.location.pathname).toBe('/t/abc123');
+    expect(window.location.hash).toBe('');
+    // Same end state as a normal handoff, so the fallback note is gone.
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBeNull();
+    // The tally sits where Create opened, so one back is home.
+    const home = popped();
+    window.history.back();
+    await home;
+    expect(window.location.pathname).toBe('/');
+  });
+
+  test('a landing on a step entry is the user moving on, so nothing replaces it', async () => {
+    await fallBackToTally();
+    await land('/new/money-line#step-2');
+    expect(tallyReplaces()).toHaveLength(1);
+    expect(window.location.hash).toBe('#step-2');
+    // The first landing disarmed it: a later hashless landing is left alone.
+    await land('/new/money-line');
+    expect(tallyReplaces()).toHaveLength(1);
+  });
+
+  test('the guard expires after LATE_WALK_GUARD_MS', async () => {
+    await fallBackToTally();
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, LATE_WALK_GUARD_MS + 100)));
+    await land('/new/money-line');
+    expect(tallyReplaces()).toHaveLength(1);
+    expect(window.location.pathname).toBe('/new/money-line');
+  }, LATE_WALK_GUARD_MS + 10000);
+});
+
+describe('back from a tally whose handoff fell back', () => {
+  function mountOnStep(hash) {
+    navigation.pathname = '/new/money-line';
+    navigation.params = { type: 'money-line' };
+    window.history.replaceState({}, '', `/new/money-line${hash}`);
+    return render(<CreateForm />);
+  }
+
+  test('a spent step with the note goes home and takes the note', () => {
+    window.sessionStorage.setItem(FALLBACK_NOTE, '/new/money-line');
+    mountOnStep('#step-2');
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+    expect(navigation.replace).not.toHaveBeenCalledWith('/new/money-line', { scroll: false });
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBeNull();
+  });
+
+  test('without the note, or with one for another Create, it starts over as before', () => {
+    const { unmount } = mountOnStep('#step-2');
+    expect(navigation.replace).toHaveBeenCalledWith('/new/money-line', { scroll: false });
+    expect(navigation.replace).not.toHaveBeenCalledWith('/');
+    unmount();
+
+    navigation.replace.mockClear();
+    window.sessionStorage.setItem(FALLBACK_NOTE, '/new/prop');
+    mountOnStep('#step-3');
+    expect(navigation.replace).toHaveBeenCalledWith('/new/money-line', { scroll: false });
+    expect(navigation.replace).not.toHaveBeenCalledWith('/');
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBeNull();
+  });
+
+  test('a hashless Create ignores the note and leaves it', () => {
+    window.sessionStorage.setItem(FALLBACK_NOTE, '/new/money-line');
+    mountOnStep('');
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(FALLBACK_NOTE)).toBe('/new/money-line');
   });
 });
 

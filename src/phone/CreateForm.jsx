@@ -27,6 +27,7 @@ import CreateSaveError from './CreateSaveError';
 import ProSheet from './ProSheet';
 import { PRO_ROW } from './proConfig';
 import { markFreshBet } from './freshBet';
+import { clearTallyFallback, markTallyFallback, takeTallyFallback } from './tallyFallback';
 import { checkFirstBet, firstBetCheckPossible } from './pushOptIn';
 import CreatePick from './CreatePick';
 import Landing from './Landing';
@@ -58,9 +59,46 @@ const STEP_HASH = /^#step-(\d+)$/;
 // the traversal (no popstate), so the tally then replaces the current entry.
 export const TALLY_HANDOFF_FALLBACK_MS = 1000;
 
+// How long after a fallback handoff a late walk back is still put right.
+export const LATE_WALK_GUARD_MS = 3000;
+
 function stepFromHash(hash) {
   const match = STEP_HASH.exec(hash || '');
   return match ? Number(match[1]) : null;
+}
+
+// Removes the armed late walk guard, if any.
+let disarmLateWalk = null;
+
+// A walk back that was only delayed, not dropped, can land after the fallback
+// put the tally in place: on the hashless entry Create opened on, which would
+// show a fresh Create over the bet just made. Within LATE_WALK_GUARD_MS, that
+// landing gets the tally put in its place (the end state the walk was for, so
+// back then leaves Create's opener). That is a normal handoff's end state, with
+// only forward step entries spent, so it clears the fallback note too: Forward
+// then opens a fresh Create, not Home. It lives at module level because Create
+// unmounts once the tally opens. The first popstate decides: any other
+// landing is the user moving on, so it disarms and replaces nothing.
+function armLateWalkGuard(router, pathname, href) {
+  disarmLateWalk?.();
+  let timer;
+  const disarm = () => {
+    window.removeEventListener('popstate', onPop);
+    window.clearTimeout(timer);
+    if (disarmLateWalk === disarm) disarmLateWalk = null;
+  };
+  function onPop() {
+    disarm();
+    if (window.location.pathname !== pathname || stepFromHash(window.location.hash) != null) return;
+    // After the router has handled the same popstate.
+    window.setTimeout(() => {
+      clearTallyFallback();
+      router.replace(href);
+    }, 0);
+  }
+  disarmLateWalk = disarm;
+  window.addEventListener('popstate', onPop);
+  timer = window.setTimeout(disarm, LATE_WALK_GUARD_MS);
 }
 
 const SKIP_WHEN_CREATOR = [CREATE_STEP.phone, CREATE_STEP.code];
@@ -156,9 +194,11 @@ const CreateForm = () => {
 
   // A refresh (or a return from another page) on a step hash starts Create over
   // on its first step, so the stale hash is dropped instead of adding an entry.
+  // Back from a tally whose handoff fell back lands on a spent step: Home.
   useEffect(() => {
     if (!invalidRoute && stepFromHash(window.location.hash) != null) {
-      router.replace(pathname, { scroll: false });
+      if (takeTallyFallback(pathname)) router.replace('/');
+      else router.replace(pathname, { scroll: false });
     }
     // Mount only: later hashes are this form's own entries.
   }, []);
@@ -238,10 +278,14 @@ const CreateForm = () => {
   // fresh Create (see the refresh rule above), never the bet that just sent.
   // If the walk back never lands, the tally replaces the current step entry
   // after TALLY_HANDOFF_FALLBACK_MS. Whichever comes first hands off, once.
+  // A fallback leaves a note (spent steps are behind the tally, see the mount
+  // effect above) and guards against the walk back landing late.
   const leaveForTally = (id) => {
     const href = `/t/${encodeURIComponent(id)}`;
     const behind = stepHistory.current.index;
     leavingRef.current = true;
+    disarmLateWalk?.();
+    clearTallyFallback();
     if (behind <= 0) {
       router.replace(href);
       return;
@@ -256,6 +300,12 @@ const CreateForm = () => {
       cancel();
       router.replace(href);
     };
+    const fallBack = () => {
+      cancel();
+      markTallyFallback(pathname);
+      armLateWalkGuard(router, pathname, href);
+      router.replace(href);
+    };
     function arrive() {
       cancel();
       cancelHandoffRef.current = cancel;
@@ -264,7 +314,7 @@ const CreateForm = () => {
     }
     cancelHandoffRef.current = cancel;
     window.addEventListener('popstate', arrive);
-    timer = window.setTimeout(handOff, TALLY_HANDOFF_FALLBACK_MS);
+    timer = window.setTimeout(fallBack, TALLY_HANDOFF_FALLBACK_MS);
     window.history.go(-behind);
   };
 
