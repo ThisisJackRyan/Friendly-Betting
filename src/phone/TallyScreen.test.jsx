@@ -200,7 +200,7 @@ test('the creator can still settle a bet that closed without a winner', async ()
 });
 
 describe('the invite right after Create', () => {
-  const invite = 'New bet: Who is late\nStakes: $5\nPick your side: http://localhost/b/abc123';
+  const invite = 'New bet:\nWho is late\n\nStakes:\n$5\n\nPick your side:\nhttp://localhost/b/abc123';
   const inviteButton = () => screen.getByRole('button', { name: 'Text the crew' });
 
   beforeEach(() => {
