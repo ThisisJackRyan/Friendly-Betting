@@ -112,7 +112,7 @@ test('Run it back makes the same bet and lands on its tally, and back returns to
   await expect(page.getByRole('button', { name: 'Text the crew', exact: true })).toBeVisible();
   await expect(page.locator('.tally-share.is-nudge')).toBeVisible();
   await expect.poll(() => shares(page)).toEqual([
-    'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/new456',
+    'New bet:\nWho takes the win?\n\nStakes:\n$20 pot\n\nPick your side:\nhttp://127.0.0.1:5173/b/new456',
   ]);
   await expect(page.getByRole('button', { name: 'Run it back', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('rematch-new-tally.png'), animations: 'disabled', scale: 'css' });

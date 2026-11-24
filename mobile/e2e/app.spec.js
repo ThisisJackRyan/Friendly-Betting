@@ -208,7 +208,7 @@ test('making a bet lands on its live tally, opens the share sheet once, and back
   page.on('pageerror', (error) => errors.push(error.message));
   await mockCrew(page, { votes: [], share: 'dismiss' });
   const shares = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
-  const invite = 'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123';
+  const invite = 'New bet:\nWho takes the win?\n\nStakes:\n$20 pot\n\nPick your side:\nhttp://127.0.0.1:5173/b/crew123';
 
   await page.goto('/');
   await page.getByRole('link', { name: 'Start a bet', exact: true }).click();
@@ -406,7 +406,7 @@ test('with no share sheet and no clipboard, the tally shows the whole invite to 
   await page.getByRole('button', { name: 'Text the crew', exact: true }).click();
   await expect(card.getByText('Copy the message below.')).toBeVisible();
   await expect(card.locator('.manual-message')).toHaveText(
-    'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123',
+    'New bet:\nWho takes the win?\n\nStakes:\n$20 pot\n\nPick your side:\nhttp://127.0.0.1:5173/b/crew123',
   );
   // No raw vote URL to tap; the creator's only link is Wanna vote?.
   await expect(card.locator('a')).toHaveText(['Wanna vote?']);
@@ -448,7 +448,7 @@ async function enableAds(page, { lastShownAt, cappedToday } = {}) {
   }
 }
 
-const crewInvite = 'New bet: Who takes the win?\nStakes: $20 pot\nPick your side: http://127.0.0.1:5173/b/crew123';
+const crewInvite = 'New bet:\nWho takes the win?\n\nStakes:\n$20 pot\n\nPick your side:\nhttp://127.0.0.1:5173/b/crew123';
 const crewShares = (page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-shares') || '[]'));
 const thanksLine = 'Thanks for watching. That keeps Friendly free.';
 
