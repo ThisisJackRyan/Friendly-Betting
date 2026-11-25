@@ -33,24 +33,34 @@ export const auth = typeof window === "undefined" ? null : isNativeApp()
   ? initializeAuth(app, { persistence: indexedDBLocalPersistence })
   : getAuth(app);
 
-// iOS WKWebView (WebKit 26.4+) holds Listen responses on fetch streams until a
-// ~30s keep-alive, so live tallies stall. Workaround from the SDK maintainers:
-// turn off fetch streams so WebChannel uses XHR.
-// https://github.com/firebase/firebase-js-sdk/issues/9789
-// In @firebase/firestore 4.17.2 the browser build registers Firestore with
-// useFetchStreams: true and spreads our settings over it, so false wins here.
-// Long polling auto detect is already on by default. useFetchStreams is not in
-// the public Settings type, which is fine in JS.
+// iOS WKWebView (WebKit 26.4+) holds streamed Listen responses until a ~30s
+// keep-alive, so live tallies stall (firebase-js-sdk #9789). Turning off fetch
+// streams was not enough on device: WebKit can also buffer XHR streaming
+// WebChannel responses. Force long polling, so every Listen response is a
+// complete request that WebKit hands over at once. With long polling forced,
+// WebChannel does not stream at all, so useFetchStreams is moot and left at
+// the SDK default. Do not also set experimentalAutoDetectLongPolling: in
+// @firebase/firestore 4.17.2 FirestoreSettingsImpl throws when both are true
+// (dist/common-CLMydGSF.esm.js:8969, check at :1382), and force long polling
+// already turns auto detect off (:8970).
 const isNativeIOS = () =>
   typeof Capacitor.getPlatform === "function" && Capacitor.getPlatform() === "ios";
 
+const isDev = () => process.env.NODE_ENV !== "production";
+
 function createDb() {
-  if (typeof window === "undefined" || !isNativeIOS()) return getFirestore(app);
+  if (typeof window === "undefined" || !isNativeIOS()) {
+    if (typeof window !== "undefined" && isDev()) console.info("Firestore: default transport");
+    return getFirestore(app);
+  }
   try {
-    return initializeFirestore(app, { useFetchStreams: false });
+    const iosDb = initializeFirestore(app, { experimentalForceLongPolling: true });
+    if (isDev()) console.info("Firestore: iOS, force long polling");
+    return iosDb;
   } catch {
     // Already initialized with other settings (for example Vite HMR re-runs
     // this module): reuse the existing instance.
+    if (isDev()) console.warn("Firestore: iOS settings not applied, using the existing instance");
     return getFirestore(app);
   }
 }

@@ -114,6 +114,34 @@ test('a first-load cache miss keeps the loader, then the server hit shows the be
   expect(result.current.failed).toBe(false);
 });
 
+// subscribeBet's one fresh read (STALE_BET_FRESH_READ_MS, 3s) on a listener
+// stuck on the cache reports { fromCache: false }: an authoritative load.
+test('subscribeBet\'s fresh read after a stale cache loads the bet, with no retry or failure', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(3000));
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS * 3));
+  expect(feeds).toHaveLength(1);
+  expect(feeds[0].unsubscribe).not.toHaveBeenCalled();
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  expect(result.current.failed).toBe(false);
+  // A later cache-only miss never blanks it.
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+});
+
+test('a stale cached bet replaced by the fresh read shows the fresh picks', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  expect(result.current.failed).toBe(false);
+});
+
 test('a first-load cache miss then a server miss is gone, not a load failure', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));

@@ -354,21 +354,60 @@ function sameBetData(a, b) {
   return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameBetData(a[key], b[key]));
 }
 
+// How long the bet listener may sit on cache-only snapshots before
+// subscribeBet reads the bet doc once on its own.
+export const STALE_BET_FRESH_READ_MS = 3000;
+
 // The bet doc and its vote docs, merged. Nothing is reported until both have
 // answered once (a failed vote listen counts as an answer), so the tally
 // never flashes the array alone.
+//
+// If the listener's first snapshot comes from the cache and the server has
+// not confirmed one within STALE_BET_FRESH_READ_MS, the bet doc is read once
+// inside a transaction. On iOS the Listen (Watch) stream can stall while
+// plain RPCs still work, and the memory cache keeps serving the doc other
+// listeners hold, so a reopened tally would show stale picks. getDocFromServer
+// also goes through Watch in the JS SDK; tx.get is a BatchGetDocuments RPC.
 export function subscribeBet(code, onChange) {
   let bet;
   let meta;
   let docs = null;
   let failed = false;
+  let stopped = false;
+  let firstSnapshot = true;
+  let serverSeen = false;
+  let freshTimer = null;
+  const clearFreshTimer = () => {
+    if (freshTimer) clearTimeout(freshTimer);
+    freshTimer = null;
+  };
   const emit = () => {
     if (failed || bet === undefined || docs === null) return;
     if (!bet) onChange(null, undefined, meta);
     else onChange(withVotes(bet, docs), undefined, meta);
   };
+  const betRef = doc(db, 'bets', code);
+  const readFresh = async () => {
+    freshTimer = null;
+    let snap;
+    try {
+      // Read only: no writes, so the commit carries nothing.
+      snap = await runTransaction(db, (tx) => tx.get(betRef));
+    } catch {
+      return;
+    }
+    // A missing doc here is not proof the bet is gone: leave that to the
+    // listener, which reports a server-confirmed miss.
+    if (stopped || failed || serverSeen || !snap?.exists?.()) return;
+    const next = { id: code, ...snap.data() };
+    const unchanged = Boolean(bet) && sameBetData(bet, next);
+    meta = { fromCache: false };
+    if (unchanged) return;
+    bet = next;
+    emit();
+  };
   const stopBet = onSnapshot(
-    doc(db, 'bets', code),
+    betRef,
     // fromCache tells a server-confirmed delete from an offline cache miss.
     // Without includeMetadataChanges, a doc that is still missing when the
     // server answers never fires again (only fromCache flips), so a first-load
@@ -376,6 +415,13 @@ export function subscribeBet(code, onChange) {
     { includeMetadataChanges: true },
     (snap) => {
       const fromCache = Boolean(snap.metadata?.fromCache);
+      if (!fromCache) {
+        serverSeen = true;
+        clearFreshTimer();
+      } else if (firstSnapshot && !stopped) {
+        freshTimer = setTimeout(readFresh, STALE_BET_FRESH_READ_MS);
+      }
+      firstSnapshot = false;
       const next = snap.exists() ? { id: snap.id, ...snap.data() } : null;
       // Metadata-only snapshots (fromCache, hasPendingWrites) on a loaded bet
       // carry the same data: skip them so screens don't re-render. A missing
@@ -390,6 +436,7 @@ export function subscribeBet(code, onChange) {
     },
     (err) => {
       failed = true;
+      clearFreshTimer();
       onChange(undefined, err);
     },
   );
@@ -398,6 +445,8 @@ export function subscribeBet(code, onChange) {
     emit();
   });
   return () => {
+    stopped = true;
+    clearFreshTimer();
     stopBet();
     stopVotes();
   };
