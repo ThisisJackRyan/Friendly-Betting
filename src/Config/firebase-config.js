@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getAuth, initializeAuth, indexedDBLocalPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
+import { Capacitor } from "@capacitor/core";
 import { isNativeApp } from '../platform/runtime';
 
 // Your web app's Firebase configuration
@@ -31,4 +32,27 @@ if (typeof window !== "undefined") {
 export const auth = typeof window === "undefined" ? null : isNativeApp()
   ? initializeAuth(app, { persistence: indexedDBLocalPersistence })
   : getAuth(app);
-export const db = getFirestore(app);
+
+// iOS WKWebView (WebKit 26.4+) holds Listen responses on fetch streams until a
+// ~30s keep-alive, so live tallies stall. Workaround from the SDK maintainers:
+// turn off fetch streams so WebChannel uses XHR.
+// https://github.com/firebase/firebase-js-sdk/issues/9789
+// In @firebase/firestore 4.17.2 the browser build registers Firestore with
+// useFetchStreams: true and spreads our settings over it, so false wins here.
+// Long polling auto detect is already on by default. useFetchStreams is not in
+// the public Settings type, which is fine in JS.
+const isNativeIOS = () =>
+  typeof Capacitor.getPlatform === "function" && Capacitor.getPlatform() === "ios";
+
+function createDb() {
+  if (typeof window === "undefined" || !isNativeIOS()) return getFirestore(app);
+  try {
+    return initializeFirestore(app, { useFetchStreams: false });
+  } catch {
+    // Already initialized with other settings (for example Vite HMR re-runs
+    // this module): reuse the existing instance.
+    return getFirestore(app);
+  }
+}
+
+export const db = createDb();
