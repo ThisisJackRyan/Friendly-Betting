@@ -142,6 +142,44 @@ test('a stale cached bet replaced by the fresh read shows the fresh picks', () =
   expect(result.current.failed).toBe(false);
 });
 
+test('a bet the server confirmed is not replaced by a resubscribe\'s stale cache snapshot', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  const shown = result.current.bet;
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  act(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(feeds).toHaveLength(2);
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+  act(() => feeds[1].onChange(null, undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+  act(() => feeds[1].onChange(v2({ votes: [1, 2, 3] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+  // Still confirmed: later cache data is ignored again.
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+});
+
+test('a bet confirmed by a same-object report (subscribeBet, no data change) is then kept over stale cache', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  const cached = v2({ votes: [1, 2] });
+  act(() => feeds[0].onChange(cached, undefined, { fromCache: true }));
+  const shown = result.current.bet;
+  act(() => feeds[0].onChange(cached, undefined, { fromCache: false }));
+  expect(result.current.bet).toBe(shown);
+  act(() => window.dispatchEvent(new Event('online')));
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+});
+
+test('a bet only ever loaded from the cache still shows newer cache data (offline)', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  act(() => window.dispatchEvent(new Event('online')));
+  act(() => feeds[1].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+});
+
 test('a first-load cache miss then a server miss is gone, not a load failure', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));

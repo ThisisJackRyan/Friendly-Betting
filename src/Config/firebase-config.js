@@ -17,7 +17,9 @@ const firebaseConfig = {
   measurementId: "G-74305KF5X4"
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// Exported for the Firestore Lite read in subscribeBet's fresh-read backup
+// (src/phone/api.js), which needs the same app (and so the same signed-in user).
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 if (typeof window !== "undefined") {
   isSupported()
