@@ -2,13 +2,15 @@ import { createElement as h } from 'react';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { layoutQuestion } from './previewCardLayout.js';
+import { BRAND_ACCENT } from '../phone/brandColors.js';
 
 // The link preview card for /b/{code}, 1200x630. Plain createElement (no JSX)
 // so a node script can render it too. The question card is the question in
-// dark ink on white; the fallback card is the app icon and the name.
+// the brand green on white with the name in dark ink; the fallback card is the
+// app icon and the name in dark ink.
 
 export const CARD_SIZE = { width: 1200, height: 630 };
-export const CARD_COLORS = { background: '#ffffff', ink: '#1a1a1a' };
+export const CARD_COLORS = { background: '#ffffff', ink: '#1a1a1a', title: BRAND_ACCENT };
 // ImageResponse defaults to a year-long immutable cache, which would pin a
 // card forever. next/og copies options.headers over its defaults, so these win.
 // A question card: browsers recheck after a minute and the CDN after five, so
@@ -72,10 +74,10 @@ function questionCard(question) {
       ...lines.map((line, i) => h('div', {
         key: i,
         style: {
-          display: 'flex', fontSize, fontWeight: 800, lineHeight, letterSpacing: -0.02 * fontSize, whiteSpace: 'nowrap',
+          display: 'flex', color: CARD_COLORS.title, fontSize, fontWeight: 800, lineHeight, letterSpacing: -0.02 * fontSize, whiteSpace: 'nowrap',
         },
       }, line))),
-    h('div', { style: { display: 'flex', fontSize: 34, fontWeight: 600, letterSpacing: -0.5 } }, 'Friendly Bets'),
+    h('div', { style: { display: 'flex', color: CARD_COLORS.ink, fontSize: 34, fontWeight: 600, letterSpacing: -0.5 } }, 'Friendly Bets'),
   );
 }
 
