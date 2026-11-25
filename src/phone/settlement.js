@@ -1,6 +1,6 @@
 import { isSettled } from './betStatus';
 import { optionVoteLabel, questionOf } from './model';
-import { settledAtMs } from './undoSettle';
+import { settledAtMs } from './undoSettle.js';
 
 // Snapshot the result in the same transaction that closes the bet. A later
 // profile or copy change must not change who won or what was at stake.
