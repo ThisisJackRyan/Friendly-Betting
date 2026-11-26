@@ -1,4 +1,4 @@
-import { timestampMs } from './undoSettle';
+import { timestampMs } from './undoSettle.js';
 
 // Votes live in two places while the move to per-voter docs rolls out
 // (docs/VOTE-SECURITY.md): the legacy `votes` array on bets/{code}, and one

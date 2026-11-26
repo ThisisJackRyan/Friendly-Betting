@@ -3,7 +3,7 @@ import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
 import { normalizeE164 } from '../phone/resultTexts';
 import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
 import { optionVoteLabel, questionOf } from '../phone/model';
-import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
+import { settledAtMs, undoHoldMs } from '../phone/undoSettle.js';
 import { PROD_ORIGIN } from '../platform/runtime';
 import { readBetWithVotes } from './betVotes';
 

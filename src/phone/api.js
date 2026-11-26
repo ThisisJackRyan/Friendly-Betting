@@ -21,7 +21,7 @@ import { buildSettlement } from './settlement';
 import { rememberBet } from './notificationStore';
 import { apiUrl, requestResultTexts } from './resultTexts';
 import { requestBetPush, requestPickPush } from './betPush';
-import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle';
+import { timestampMs, UNDO_RULES_WINDOW_MS } from './undoSettle.js';
 import { cleanName, mergeVotes, voteFromDoc, withVotes } from './votes';
 
 async function createBetHere(fields) {
