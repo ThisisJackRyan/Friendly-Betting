@@ -1255,6 +1255,11 @@ button:focus-visible {
   box-shadow: none;
   color: var(--accent);
 }
+/* Before the pill is placed (cold load, pre-hydration), the active tab keeps
+   its own highlight. It drops off as soon as the pill shows, so never two. */
+.app-nav:not(:has(.tab-pill[data-shown])) .tab.active {
+  background: var(--wash);
+}
 /* The active tab's pill. AppShell sets the vars from the active tab's box. */
 .tab-pill {
   position: absolute;

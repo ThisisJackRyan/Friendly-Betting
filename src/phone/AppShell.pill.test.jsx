@@ -136,3 +136,40 @@ test('the pill slides on transform only, and not at all under reduced motion', (
     /^[^}]*transition: none;/,
   );
 });
+
+test('unmount disconnects the observer, drops listeners and cancels the pending frame', () => {
+  const disconnect = jest.fn();
+  const RO = window.ResizeObserver;
+  window.ResizeObserver = jest.fn(() => ({ observe: jest.fn(), disconnect }));
+  const add = jest.spyOn(window, 'addEventListener');
+  const remove = jest.spyOn(window, 'removeEventListener');
+  try {
+    navigation.pathname = '/bets';
+    const { unmount } = render(shell());
+    expect(window.ResizeObserver).toHaveBeenCalledTimes(1);
+    // First placement queued a frame and it has not run yet.
+    expect(frames).toHaveLength(1);
+    const pending = window.requestAnimationFrame.mock.results.at(-1).value;
+    const handler = (type) => add.mock.calls.find(([t]) => t === type)?.[1];
+    const onResize = handler('resize');
+    const onOrientation = handler('orientationchange');
+    expect(onResize).toBeDefined();
+    expect(onOrientation).toBe(onResize);
+
+    unmount();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith('resize', onResize);
+    expect(remove).toHaveBeenCalledWith('orientationchange', onOrientation);
+    expect(window.cancelAnimationFrame).toHaveBeenLastCalledWith(pending);
+  } finally {
+    window.ResizeObserver = RO;
+  }
+});
+
+test('the active tab keeps its own highlight until the pill shows', () => {
+  expect(css).toMatch(
+    /\.app-nav:not\(:has\(\.tab-pill\[data-shown\]\)\) \.tab\.active \{\s*background: var\(--wash\);\s*\}/,
+  );
+  const at = css.indexOf('.tab-pill {');
+  expect(css.slice(at, css.indexOf('}', at))).toMatch(/background: var\(--wash\);/);
+});
