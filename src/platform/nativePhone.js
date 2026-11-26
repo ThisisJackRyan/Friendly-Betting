@@ -10,10 +10,10 @@ let cancelPending = null;
 const NATIVE_PHONE_ERRORS = [
   [/blocked all requests from this device|unusual activity|too many/i, 'auth/too-many-requests'],
   [/quota/i, 'auth/quota-exceeded'],
-  [/format of the phone number|invalid phone number/i, 'auth/invalid-phone-number'],
+  [/format of the phone number|invalid phone number|^(too_short|too_long)$|invalid format/i, 'auth/invalid-phone-number'],
   [/provide a phone number|missing phone number/i, 'auth/missing-phone-number'],
   [/network error/i, 'auth/network-request-failed'],
-  [/recaptcha response token/i, 'auth/captcha-check-failed'],
+  [/recaptcha response token|token is invalid or has expired/i, 'auth/captcha-check-failed'],
   [/interaction was cancelled by the user/i, PERSON_CHECK_CANCELLED],
   [/apns device token provided is either incorrect/i, 'auth/invalid-app-credential'],
   [/missing an apns device token/i, 'auth/missing-app-credential'],

@@ -944,6 +944,17 @@ test('a billing-not-enabled send shows the setup sentence and only that code', a
   expect(screen.queryByRole('heading', { name: 'Code' })).not.toBeInTheDocument();
 });
 
+test('a too-many-requests send failure says to wait hours and leaves Send code enabled', async () => {
+  sendPhoneCode.mockRejectedValue({ code: 'auth/too-many-requests' });
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Too many tries. Try again in a few hours.');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send code' })).not.toBeDisabled());
+});
+
 test('a network send failure still says you are offline', async () => {
   const err = new Error('Firebase: Error (auth/network-request-failed).');
   err.code = 'auth/network-request-failed';
