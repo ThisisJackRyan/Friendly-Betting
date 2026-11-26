@@ -811,7 +811,7 @@ test('a tally opened from My bets backs out to My bets, and Home from Create unw
   page.on('pageerror', (error) => errors.push(error.message));
   await mockCrew(page);
   await page.goto('/');
-  await page.getByRole('link', { name: /View your bets/ }).click();
+  await tab(page, 'My bets').click();
   await expect(page).toHaveURL(/\/bets$/);
   expect(await appIndex(page)).toBe(0);
   await page.getByRole('link', { name: /Who takes the win\?/ }).click();

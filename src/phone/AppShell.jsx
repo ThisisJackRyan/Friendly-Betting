@@ -56,7 +56,7 @@ const AppShell = ({ children }) => {
                 ? 'My bets'
                 : pathname.startsWith('/t/') || pathname.startsWith('/Bet/')
                   ? 'Your bet'
-                  : 'The clubhouse'
+                  : undefined
           }
           createActive={createActive}
           onHomeClick={cancelCreateEntry}
