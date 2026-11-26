@@ -9,6 +9,8 @@ import { markResultRead, watchResults } from './notificationStore';
 import { notificationFor } from './settlement';
 import { stakeKind } from './reveal';
 
+export const unreadBadge = (count) => `${count > 9 ? '9+' : count} new`;
+
 // The Results inbox, opened from a header button. It sits in the header row
 // instead of floating, so it never covers the screen's own buttons.
 function ResultInbox({ uid }) {
@@ -86,7 +88,7 @@ function ResultInbox({ uid }) {
       >
         <FiBell aria-hidden="true" />
         Results
-        {unread.length > 0 && <span>{unread.length} new</span>}
+        {unread.length > 0 && <span>{unreadBadge(unread.length)}</span>}
       </button>
       {open && (
         <section
