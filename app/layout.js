@@ -17,7 +17,7 @@ export const metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'Friendly',
+    title: 'Friendly Bets',
   },
   other: {
     'mobile-web-app-capable': 'yes',
