@@ -1,4 +1,5 @@
 import { buildSettlement } from './settlement';
+import { buildWinnerCard } from './winnerCard';
 
 // setupTests.js swaps this module out for every other test; this one tests
 // the real drawing against a recording canvas, since jsdom has none.
@@ -23,9 +24,9 @@ function fakeDoc({ fonts, context = true, blob = new Blob(['png'], { type: 'imag
     fillText: (text, x, y) => calls.push(['fillText', text, x, y, ctx.font, ctx.fillStyle]),
     beginPath: () => {},
     closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    arc: () => {},
+    moveTo: (x, y) => calls.push(['moveTo', x, y]),
+    lineTo: (x, y) => calls.push(['lineTo', x, y]),
+    arc: (...args) => calls.push(['arc', ...args]),
     rect: () => {},
     fill: () => calls.push(['fill', ctx.fillStyle]),
   };
@@ -49,8 +50,16 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   const text = drawn(calls);
   // The brand goes letter by letter, for its tight spacing.
   expect(text.slice(0, 9).join('')).toBe('friendly.');
-  // The symbol: a white tile, then the green F and its dot.
-  expect(calls.filter(([op]) => op === 'fill')).toEqual([['fill', '#ffffff'], ['fill', '#007a45'], ['fill', '#007a45']]);
+  // The symbol: a white tile, then the green F.
+  expect(calls.filter(([op]) => op === 'fill')).toEqual([['fill', '#ffffff'], ['fill', '#007a45']]);
+  // The F matches app/icon.svg's, point for point, and has no dot (no arc).
+  const { brand } = buildWinnerCard(settledBet, { measure: (t) => Array.from(t).length * 20 });
+  const unit = brand.symbol / 32;
+  const F = [[9, 7], [23, 7], [23, 12], [14, 12], [14, 14], [20, 14], [20, 19], [14, 19], [14, 25], [9, 25]];
+  expect(calls.filter(([op]) => op === 'moveTo' || op === 'lineTo')).toEqual(
+    F.map(([ux, uy], index) => [index ? 'lineTo' : 'moveTo', brand.x + ux * unit, brand.y + uy * unit]),
+  );
+  expect(calls.some(([op]) => op === 'arc')).toBe(false);
   expect(text).toEqual(expect.arrayContaining(['Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'Stakes: $20', 'friendly-bets.com']));
   expect(doc.fonts.load).toHaveBeenCalledWith('800 40px Manrope');
   const headline = calls.find((call) => call[1] === 'Maya won.');

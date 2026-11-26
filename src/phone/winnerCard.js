@@ -178,7 +178,7 @@ export function buildWinnerCard(bet, { measure, viewerId = null }) {
     height,
     background: CARD_COLORS.background,
     text,
-    // The app's Brand (ProductUI.jsx): the F. symbol, then "friendly."
+    // The app's Brand (ProductUI.jsx): the F symbol, then "friendly."
     brand: {
       x: pad, y: pad, symbol: 66, text: CARD_BRAND, period: '.', font: font(800, 56), spacing: -2.8,
       color: CARD_COLORS.ink, letter: CARD_COLORS.background, periodColor: CARD_COLORS.accentSoft,
