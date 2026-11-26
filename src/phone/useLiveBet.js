@@ -23,8 +23,10 @@ import { hydrateBet, subscribeBet } from './api';
 // subscribeBet's fresh read also reports), snapshots served from the cache
 // never replace it: a resubscribe's first snapshot comes from the cache and
 // can be older than what is on screen. The bet stays until the server answers
-// again. A bet only ever loaded from the cache still shows cache data, so the
-// app works offline.
+// again. A cache snapshot with this device's own pending write
+// (meta.hasPendingWrites) is still shown, without counting as a server
+// confirmation. A bet only ever loaded from the cache still shows cache data,
+// so the app works offline.
 export const CACHE_MISS_GRACE_MS = 4000;
 
 export function useLiveBet(code) {
@@ -96,7 +98,9 @@ export function useLiveBet(code) {
       let lastNext;
       const stop = subscribeBet(code, (next, err, meta) => {
         if (!active || current !== token) return;
-        if (!next && !err && meta?.fromCache) {
+        // This device's own write, not yet on the server.
+        const pending = Boolean(meta?.hasPendingWrites);
+        if (!next && !err && meta?.fromCache && !pending) {
           // Not in the local cache yet. Keep the loader up and give the
           // server a moment to answer before calling it a failure.
           if (loaded) return;
@@ -109,8 +113,9 @@ export function useLiveBet(code) {
           missed();
           return;
         }
-        // Cache data never replaces what the server confirmed.
-        if (meta?.fromCache && confirmed) return;
+        // Cache data never replaces what the server confirmed, unless it
+        // carries a pending write.
+        if (meta?.fromCache && confirmed && !pending) return;
         if (meta && !meta.fromCache) confirmed = true;
         if (next === lastNext) return;
         lastNext = next;

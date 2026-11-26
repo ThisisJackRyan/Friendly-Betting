@@ -282,9 +282,9 @@ export async function readVoteDocs(code, { fresh = false } = {}) {
   }
 }
 
-// Calls `onDocs(docs, { fromCache })` with the bet's vote docs on every
-// change. A failed listen (denied by rules without per-voter docs, or
-// dropped) counts as no new docs: onDocs(null). Once denied this session, no
+// Calls `onDocs(docs, { fromCache, hasPendingWrites })` with the bet's vote
+// docs on every change. A failed listen (denied by rules without per-voter
+// docs, or dropped) counts as no new docs: onDocs(null). Once denied this session, no
 // listener is opened at all. `includeMetadataChanges` also reports a cache to
 // server flip with the same docs (subscribeBet needs it to learn the docs are
 // confirmed; it skips the repeat itself).
@@ -296,7 +296,10 @@ function subscribeVoteDocs(code, onDocs, { includeMetadataChanges = false } = {}
   return onSnapshot(
     votesRef(code),
     ...(includeMetadataChanges ? [{ includeMetadataChanges: true }] : []),
-    (snap) => onDocs(voteDocsOf(snap), { fromCache: Boolean(snap.metadata?.fromCache) }),
+    (snap) => onDocs(voteDocsOf(snap), {
+      fromCache: Boolean(snap.metadata?.fromCache),
+      hasPendingWrites: Boolean(snap.metadata?.hasPendingWrites),
+    }),
     (err) => {
       if (isDenied(err)) noteVoteDocsDenied();
       onDocs(null);
@@ -358,6 +361,17 @@ function sameBetData(a, b) {
   return keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameBetData(a[key], b[key]));
 }
 
+// Bet codes the server has confirmed exist this session (a server snapshot
+// without pending writes, or a fresh read). Lets a later subscribeBet trust a
+// fresh read that finds the bet missing: it was deleted, not just created
+// offline and not yet on the server.
+const serverSeenBets = new Set();
+
+// Tests only.
+export function __resetLiveBetsForTests() {
+  serverSeenBets.clear();
+}
+
 // How long subscribeBet may sit on cache-only snapshots (of the bet or its
 // vote docs) before it reads what is still unconfirmed once on its own.
 export const STALE_BET_FRESH_READ_MS = 3000;
@@ -402,13 +416,17 @@ async function readBetOnce(betRef) {
 // answered once (a failed vote listen counts as an answer), so the tally
 // never flashes the array alone. meta.fromCache is false once the bet doc is
 // confirmed by the server (a server snapshot or the fresh read below).
+// meta.hasPendingWrites is true when the snapshot behind the report carries
+// this device's own unsent writes.
 //
 // Once the bet doc is confirmed, later cache snapshots of it are ignored: the
 // memory cache can serve an older copy another listener holds, and must not
-// overwrite server data. Only the next server snapshot changes it. The vote
-// docs work the same way. A confirmation with the same data is reported once,
-// with the same object as before, so screens can tell the bet is confirmed
-// without re-rendering.
+// overwrite server data. Only the next server snapshot changes it. A cache
+// snapshot with pending writes is still reported: it is this device's own
+// write (while Watch is stalled, it is the only snapshot that shows it). It
+// does not count as a server confirmation. The vote docs work the same way.
+// A confirmation with the same data is reported once, with the same object
+// as before, so screens can tell the bet is confirmed without re-rendering.
 //
 // If either listener's first snapshot comes from the cache, then after
 // STALE_BET_FRESH_READ_MS whatever the server has still not confirmed is read
@@ -417,6 +435,8 @@ async function readBetOnce(betRef) {
 // the Listen (Watch) stream can stall while plain RPCs still work, so a
 // reopened tally would show stale picks. getDocFromServer and getDocs also go
 // through Watch in the full JS SDK. The reads are merged and reported once.
+// A fresh read that finds the bet missing only counts as gone when the server
+// confirmed the bet existed earlier this session (serverSeenBets).
 export function subscribeBet(code, onChange) {
   let bet;
   let docs = null;
@@ -434,10 +454,11 @@ export function subscribeBet(code, onChange) {
     freshTimer = null;
   };
   // Reports the merged bet. With no data change, only a change of fromCache
-  // is reported, with the same value as the last report.
-  const emit = (changed) => {
+  // is reported, with the same value as the last report. `pending`: the
+  // snapshot behind this report has pending writes.
+  const emit = (changed, pending = false) => {
     if (failed || bet === undefined || docs === null) return;
-    const meta = { fromCache: !betServer };
+    const meta = pending ? { fromCache: !betServer, hasPendingWrites: true } : { fromCache: !betServer };
     if (!changed && sent) {
       if (sent.fromCache === meta.fromCache) return;
       sent = { value: sent.value, fromCache: meta.fromCache };
@@ -460,14 +481,25 @@ export function subscribeBet(code, onChange) {
     ]);
     if (stopped || failed) return;
     let changed = false;
-    // A missing doc here is not proof the bet is gone: leave that to the
-    // listener, which reports a server-confirmed miss. A server snapshot
-    // that came in meanwhile wins over the read.
+    // A missing doc here is not proof the bet is gone (a bet created
+    // offline is not on the server yet): leave that to the listener, which
+    // reports a server-confirmed miss, unless the server confirmed the bet
+    // existed earlier this session. A failed read (null) proves nothing. A
+    // server snapshot that came in meanwhile wins over the read.
     if (!betServer && snap?.exists?.()) {
       const next = { id: code, ...snap.data() };
       betServer = true;
+      serverSeenBets.add(code);
       if (!bet || !sameBetData(bet, next)) {
         bet = next;
+        changed = true;
+      }
+    } else if (!betServer && snap && serverSeenBets.has(code)) {
+      // Gone, the same as a server snapshot of a missing doc.
+      betServer = true;
+      serverSeenBets.delete(code);
+      if (bet !== null) {
+        bet = null;
         changed = true;
       }
     }
@@ -494,21 +526,27 @@ export function subscribeBet(code, onChange) {
     { includeMetadataChanges: true },
     (snap) => {
       const fromCache = Boolean(snap.metadata?.fromCache);
+      const pending = Boolean(snap.metadata?.hasPendingWrites);
       if (fromCache) {
-        // Older than (or the same as) what the server already confirmed.
-        if (betServer) return;
-        armBackup();
+        // Older than (or the same as) what the server already confirmed,
+        // unless it carries this device's own pending write.
+        if (!betServer) armBackup();
+        else if (!pending) return;
       } else {
         betServer = true;
         if (settled()) clearFreshTimer();
       }
       const next = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+      if (!fromCache && !pending) {
+        if (next) serverSeenBets.add(code);
+        else serverSeenBets.delete(code);
+      }
       // Metadata-only snapshots (fromCache, hasPendingWrites) on a loaded bet
       // carry the same data: skip them so screens don't re-render. A missing
       // bet is reported again only when fromCache changes.
       const changed = bet === undefined || (next ? !bet || !sameBetData(bet, next) : bet !== null);
       if (changed) bet = next;
-      emit(changed);
+      emit(changed, pending);
     },
     (err) => {
       failed = true;
@@ -524,9 +562,11 @@ export function subscribeBet(code, onChange) {
       emit(true);
       return;
     }
+    const pending = Boolean(info?.hasPendingWrites);
     if (info?.fromCache) {
-      if (votesServer) return;
-      armBackup();
+      // As for the bet doc: a pending write still counts.
+      if (!votesServer) armBackup();
+      else if (!pending) return;
     } else {
       votesServer = true;
       if (settled()) clearFreshTimer();
@@ -534,7 +574,7 @@ export function subscribeBet(code, onChange) {
     // Metadata-only snapshots carry the same docs: skip them.
     if (docs !== null && sameBetData(docs, next)) return;
     docs = next;
-    emit(true);
+    emit(true, pending);
   }, { includeMetadataChanges: true });
   return () => {
     stopped = true;
