@@ -73,7 +73,7 @@ test.each([
   ['To send verification codes, provide a phone number for the recipient.', 'auth/missing-phone-number'],
   ['Network error (such as timeout, interrupted connection or unreachable host) has occurred.', 'auth/network-request-failed'],
   ['The reCAPTCHA response token provided is either invalid, expired, already spent or doesn\'t match the domain.', 'auth/captcha-check-failed'],
-  ['The reCAPTCHA token is invalid or has expired.', 'auth/captcha-check-failed'],
+  ['The reCAPTCHA verification token is invalid or has expired.', 'auth/captcha-check-failed'],
   ['The interaction was cancelled by the user.', PERSON_CHECK_CANCELLED],
   ['The APNs device token provided is either incorrect or does not match the private certificate uploaded to the Firebase Console.', 'auth/invalid-app-credential'],
   ['The phone verification request is missing an APNs Device token. Firebase Auth automatically detects APNs Device Tokens, however, if method swizzling is disabled, the APNs token must be set via the APNSToken property on FIRAuth or by calling setAPNSToken:type on FIRAuth.', 'auth/missing-app-credential'],
