@@ -219,7 +219,7 @@ const AppShell = ({ children }) => {
       </div>
       <nav ref={navRef} className="tabbar app-nav" aria-label="Primary">
         <span ref={pillRef} className="tab-pill" aria-hidden="true" />
-        <Link href="/" className="nav-brand" aria-label="Friendly home" onClick={cancelCreateEntry}>
+        <Link href="/" className="nav-brand" aria-label="Friendly Bets home" onClick={cancelCreateEntry}>
           <Brand />
         </Link>
         <Link

@@ -1210,17 +1210,16 @@ button:focus-visible {
   color: var(--ink);
   font-size: 27px;
   letter-spacing: -1.4px;
+  word-spacing: 0.15em;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 .brand-symbol {
   width: 33px;
   height: 33px;
   flex: none;
   color: var(--accent);
-}
-.brand-period {
-  color: #7ea26a;
 }
 .nav-brand {
   display: none;
@@ -2438,6 +2437,15 @@ html[data-arrive='home'] .landing-body.screen-fade {
     padding: 0 10px;
     margin-bottom: 45px;
   }
+  .nav-brand .brand {
+    font-size: 20px;
+    gap: 7px;
+    letter-spacing: -0.02em;
+  }
+  .nav-brand .brand-symbol {
+    width: 29px;
+    height: 29px;
+  }
   .app-nav .tab {
     flex: none;
     flex-direction: row;
@@ -2547,8 +2555,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (min-width: 768px) and (max-width: 1150px) {
+  /* Wide enough for the 19px wordmark (with its 0.15em word space) to sit 12px inside the nav item edges on both sides. */
   .app-nav {
-    width: 176px;
+    width: 204px;
     padding: 24px 12px 18px;
   }
   .brand {
@@ -2558,6 +2567,14 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .brand-symbol {
     width: 29px;
     height: 29px;
+  }
+  .nav-brand {
+    padding: 0 12px;
+  }
+  .nav-brand .brand {
+    font-size: 19px;
+    gap: 6px;
+    letter-spacing: -0.02em;
   }
   .route-content > .phone > .landing-body,
   .route-content > .phone > .scroll {
@@ -3832,4 +3849,52 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .push-switch[aria-checked='true'] .push-switch-thumb { transform: translateX(20px); }
 @media (prefers-reduced-motion: reduce) {
   .push-switch, .push-switch-thumb { transition: none; }
+}
+/* Phone headers: the Friendly Bets wordmark and the Results button share one row. */
+@media (max-width: 400px) {
+  .header-brand .brand,
+  .vote-header .brand {
+    font-size: 20px;
+    gap: 7px;
+    letter-spacing: -0.02em;
+  }
+  .header-brand .brand-symbol,
+  .vote-header .brand-symbol {
+    width: 29px;
+    height: 29px;
+  }
+  .app-header {
+    gap: 12px;
+  }
+  .header-results {
+    gap: 6px;
+    padding: 0 10px;
+  }
+}
+@media (max-width: 359px) {
+  .header-brand .brand,
+  .vote-header .brand {
+    font-size: 18px;
+    gap: 6px;
+    word-spacing: 0.1em;
+  }
+  .header-brand .brand-symbol,
+  .vote-header .brand-symbol {
+    width: 26px;
+    height: 26px;
+  }
+  .app-header,
+  .vote-header {
+    padding-left: 16px;
+    padding-right: 16px;
+    gap: 10px;
+  }
+}
+
+/* 1151 to 1499px: the 20px wordmark nearly fills the 174px nav column, so give the brand link 5px on each side to split the spare room evenly. */
+@media (min-width: 1151px) and (max-width: 1499px) {
+  .nav-brand {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
 }

@@ -244,7 +244,7 @@ const VoteScreen = () => {
   return (
     <main className="phone focus-column">
       <header className="vote-header">
-        <Link href="/" aria-label="Friendly home">
+        <Link href="/" aria-label="Friendly Bets home">
           <Brand />
         </Link>
         <ResultsMenu />
