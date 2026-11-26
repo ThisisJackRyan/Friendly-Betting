@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import Link from '../platform/Link';
 import { usePathname, useRouter } from '../platform/navigation';
 import { FiHome, FiList, FiPlus } from 'react-icons/fi';
@@ -9,6 +9,127 @@ import { useCreateChrome } from './createChrome';
 import { SLIDE_MS } from './createMotion';
 import CreatePick from './CreatePick';
 import AppHeader from './AppHeader';
+
+// The green pill under the active tab. It sits at the active tab's box and
+// slides there on transform only. Only a change of active tab, after the pill
+// has settled, slides. Every other placement (first paint, hydration, fonts,
+// resize, a shell change, coming back after being hidden) snaps: data-ready
+// comes off, the new spot is set, style is flushed so the browser commits it
+// with no transition, and data-ready goes back on two frames later.
+function useTabPill(activeTab, shell) {
+  const navRef = useRef(null);
+  const pillRef = useRef(null);
+  const activeRef = useRef(activeTab);
+  const frame = useRef(0);
+  const placed = useRef({ tab: null, box: '' });
+  const observer = useRef(null);
+  const watched = useRef(null);
+
+  const cancelFrame = () => {
+    if (frame.current) window.cancelAnimationFrame(frame.current);
+    frame.current = 0;
+  };
+
+  // tabChange: this call comes from a new active tab, so it may slide.
+  const place = useCallback((tabChange) => {
+    const nav = navRef.current;
+    const pill = pillRef.current;
+    if (!nav || !pill) return;
+    const tab = nav.querySelector('.tab.active');
+    if (tab && observer.current && watched.current !== tab) {
+      if (watched.current) observer.current.unobserve(watched.current);
+      observer.current.observe(tab);
+      watched.current = tab;
+    }
+    const width = tab ? tab.offsetWidth : 0;
+    const height = tab ? tab.offsetHeight : 0;
+    if (!width || !height) {
+      cancelFrame();
+      delete pill.dataset.shown;
+      delete pill.dataset.ready;
+      placed.current = { tab: null, box: '' };
+      return;
+    }
+    const key = activeRef.current;
+    const box = `${tab.offsetLeft},${tab.offsetTop},${width},${height}`;
+    const shown = pill.dataset.shown !== undefined;
+    if (shown && box === placed.current.box) {
+      placed.current.tab = key;
+      return;
+    }
+    const slide =
+      tabChange &&
+      shown &&
+      pill.dataset.ready !== undefined &&
+      placed.current.tab !== null &&
+      placed.current.tab !== key;
+    if (!slide) {
+      cancelFrame();
+      delete pill.dataset.ready;
+    }
+    pill.style.setProperty('--pill-x', `${tab.offsetLeft}px`);
+    pill.style.setProperty('--pill-y', `${tab.offsetTop}px`);
+    pill.style.setProperty('--pill-w', `${width}px`);
+    pill.style.setProperty('--pill-h', `${height}px`);
+    pill.dataset.shown = '';
+    placed.current = { tab: key, box };
+    if (slide) return;
+    // Commit the snapped spot with the transition off before it comes back on.
+    void window.getComputedStyle(pill).transform;
+    if (typeof window.requestAnimationFrame !== 'function') return;
+    frame.current = window.requestAnimationFrame(() => {
+      frame.current = window.requestAnimationFrame(() => {
+        frame.current = 0;
+        if (pill.dataset.shown !== undefined) pill.dataset.ready = '';
+      });
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    activeRef.current = activeTab;
+    place(true);
+  }, [activeTab, shell, place]);
+
+  useEffect(() => {
+    let live = true;
+    const remeasure = () => {
+      if (live) place(false);
+    };
+    const nav = navRef.current;
+    if (typeof window.ResizeObserver === 'function' && nav) {
+      observer.current = new window.ResizeObserver(remeasure);
+      observer.current.observe(nav);
+      // Siblings above a tab can move it without the nav changing size.
+      [...nav.children].forEach((child) => observer.current.observe(child));
+      watched.current = null;
+      place(false);
+    }
+    window.addEventListener('resize', remeasure);
+    window.addEventListener('orientationchange', remeasure);
+    window.addEventListener('load', remeasure);
+    const fonts = document.fonts;
+    fonts?.ready?.then(remeasure, () => {});
+    fonts?.addEventListener?.('loadingdone', remeasure);
+    const late =
+      typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(remeasure)
+        : 0;
+    return () => {
+      live = false;
+      observer.current?.disconnect();
+      observer.current = null;
+      watched.current = null;
+      window.removeEventListener('resize', remeasure);
+      window.removeEventListener('orientationchange', remeasure);
+      window.removeEventListener('load', remeasure);
+      fonts?.removeEventListener?.('loadingdone', remeasure);
+      if (late) window.cancelAnimationFrame(late);
+      cancelFrame();
+    };
+  }, [place]);
+
+  return { navRef, pillRef };
+}
 
 const AppShell = ({ children }) => {
   const pathname = usePathname() || '/';
@@ -25,6 +146,11 @@ const AppShell = ({ children }) => {
     : phoneTabs
       ? 'app-shell shell-tabs'
       : 'app-shell shell-stack';
+  const homeTab = pathname === '/' && !enteringCreate;
+  const betsTab = betsActive && !enteringCreate;
+  const createTab = createActive || enteringCreate;
+  const activeTab = createTab ? 'new' : betsTab ? 'bets' : homeTab ? 'home' : '';
+  const { navRef, pillRef } = useTabPill(activeTab, shell);
 
   useEffect(() => {
     if (!enteringCreate) return undefined;
@@ -91,14 +217,15 @@ const AppShell = ({ children }) => {
           )}
         </main>
       </div>
-      <nav className="tabbar app-nav" aria-label="Primary">
+      <nav ref={navRef} className="tabbar app-nav" aria-label="Primary">
+        <span ref={pillRef} className="tab-pill" aria-hidden="true" />
         <Link href="/" className="nav-brand" aria-label="Friendly home" onClick={cancelCreateEntry}>
           <Brand />
         </Link>
         <Link
           href="/"
-          className={pathname === '/' && !enteringCreate ? 'tab active' : 'tab'}
-          aria-current={pathname === '/' && !enteringCreate ? 'page' : undefined}
+          className={homeTab ? 'tab active' : 'tab'}
+          aria-current={homeTab ? 'page' : undefined}
           onClick={cancelCreateEntry}
         >
           <FiHome size={20} aria-hidden="true" />
@@ -106,8 +233,8 @@ const AppShell = ({ children }) => {
         </Link>
         <Link
           href="/bets"
-          className={betsActive && !enteringCreate ? 'tab active' : 'tab'}
-          aria-current={betsActive && !enteringCreate ? 'page' : undefined}
+          className={betsTab ? 'tab active' : 'tab'}
+          aria-current={betsTab ? 'page' : undefined}
           onClick={cancelCreateEntry}
         >
           <FiList size={20} aria-hidden="true" />
@@ -115,8 +242,8 @@ const AppShell = ({ children }) => {
         </Link>
         <Link
           href="/new"
-          className={createActive || enteringCreate ? 'tab active' : 'tab'}
-          aria-current={createActive || enteringCreate ? 'page' : undefined}
+          className={createTab ? 'tab active' : 'tab'}
+          aria-current={createTab ? 'page' : undefined}
           onClick={onCreateClick}
         >
           <FiPlus size={22} aria-hidden="true" />
