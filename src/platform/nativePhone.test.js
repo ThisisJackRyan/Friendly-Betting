@@ -209,6 +209,46 @@ test.each([
   expect(err.message).toBeTruthy();
 });
 
+test.each([
+  ["The operation couldn't be completed. (FirebaseAuthenticationPlugin.RuntimeError error 1.)", 'auth/native-plugin-error-1'],
+  ["The operation couldn't be completed. (FirebaseAuthenticationPlugin.RuntimeError error 1)", 'auth/native-plugin-error-1'],
+  ["The operation couldn't be completed. (FirebaseAuthenticationPlugin.RuntimeError error 12.)", 'auth/native-send-failed'],
+  ["The operation couldn't be completed. (FirebaseAuthenticationPlugin.RuntimeError error 10.)", 'auth/native-send-failed'],
+  ["The operation couldn't be completed. (FirebaseAuthenticationPlugin.RuntimeError error 19.)", 'auth/native-send-failed'],
+])('plugin error 1 is anchored: %p -> %p', (message, code) => {
+  expect(nativePhoneErrorCode(message)).toBe(code);
+});
+
+describe('an empty failure still names its stage', () => {
+  test.each([[undefined], [{}]])('signInWithPhoneNumber rejecting with %p -> stage=signIn', async (rejection) => {
+    const err = await sendRejecting(rejection);
+    expect(err.code).toBe('auth/native-send-failed');
+    expect(err.detail).toBe('stage=signIn');
+    expect(errorSpy.mock.calls[0][1]).toMatchObject({ detail: 'stage=signIn' });
+  });
+
+  test('addListener rejecting with {} -> stage=listen', async () => {
+    FirebaseAuthentication.addListener.mockRejectedValueOnce({});
+    const pending = sendNativePhoneCode('+15551234567');
+    const check = expect(pending).rejects.toMatchObject({ code: 'auth/native-send-failed', detail: 'stage=listen' });
+    await ready();
+    await check;
+  });
+
+  test.each([[undefined], [{}]])('phoneVerificationFailed with %p -> stage=verify', async (payload) => {
+    const pending = sendNativePhoneCode('+15551234567');
+    const check = expect(pending).rejects.toMatchObject({ code: 'auth/native-send-failed', detail: 'stage=verify' });
+    await ready();
+    callbacks.phoneVerificationFailed(payload);
+    await check;
+  });
+
+  test('a non-empty detail is kept as is', async () => {
+    const err = await sendRejecting({ message: 'boom' });
+    expect(err.detail).toBe('boom');
+  });
+});
+
 describe('redactDetail', () => {
   test.each([
     ['call +1 (555) 123-4567 now', 'call [redacted] now'],

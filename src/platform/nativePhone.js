@@ -27,7 +27,7 @@ const NATIVE_PHONE_ERRORS = [
   [/internal error/i, 'auth/internal-error'],
   // Plugin-side failures, mostly when Firebase was never configured natively.
   // iOS sends "The operation couldn't be completed. (...RuntimeError error 1.)".
-  [/FirebaseAuthenticationPlugin\.RuntimeError error 1/i, 'auth/native-plugin-error-1'],
+  [/FirebaseAuthenticationPlugin\.RuntimeError error 1\b/i, 'auth/native-plugin-error-1'],
   [/sign-in provider is not enabled/i, 'auth/native-provider-not-enabled'],
   [/GoogleService-Info|firebase was not configured|no default firebase ?app/i, 'auth/native-not-configured'],
 ];
@@ -85,9 +85,11 @@ export function nativeErrorFrom(raw, fallbackCode = NATIVE_SEND_FAILED, options 
     if (code === NATIVE_SEND_FAILED && fallbackCode) code = fallbackCode;
   }
   const message = redactDigits(original) || redactDigits(options.message) || SEND_CODE_ERROR;
+  // A fully empty rejection still says where it failed, e.g. "stage=signIn".
   const detail = redactDetail(options.detail !== undefined
     ? options.detail
-    : [original, rawExtras(raw)].filter(Boolean).join(' '));
+    : [original, rawExtras(raw)].filter(Boolean).join(' '))
+    || (options.stage ? `stage=${options.stage}` : '');
   return Object.assign(new Error(message), { code, detail });
 }
 
@@ -128,8 +130,12 @@ export function sendNativePhoneCode(phoneNumber) {
       message: 'The code took too long. Try sending it again.',
       detail: 'timed out after 120s',
     })), 120000);
+    // Which await in start() was running, for an empty rejection's detail.
+    let stage = 'import';
     const start = async () => {
+      stage = 'import';
       const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      stage = 'listen';
       const listen = async (event, callback) => {
         const handle = await FirebaseAuthentication.addListener(event, callback);
         if (finished) await handle.remove();
@@ -149,13 +155,14 @@ export function sendNativePhoneCode(phoneNumber) {
       // An explicit code in the payload wins over the message.
       await listen('phoneVerificationFailed', (payload = {}) => {
         const given = typeof payload?.code === 'string' ? payload.code.trim() : '';
-        finish(nativeErrorFrom(payload, NATIVE_SEND_FAILED, given ? { code: given } : {}));
+        finish(nativeErrorFrom(payload, NATIVE_SEND_FAILED, given ? { code: given, stage: 'verify' } : { stage: 'verify' }));
       });
       if (finished) return;
       // Explicit code entry keeps the same creator-only OTP UI on both platforms.
+      stage = 'signIn';
       await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber, timeout: 0, skipNativeAuth: true });
     };
     // Plugin rejections (no code on iOS), sync throws and a failed import.
-    start().catch((error) => finish(nativeErrorFrom(error)));
+    start().catch((error) => finish(nativeErrorFrom(error, NATIVE_SEND_FAILED, { stage })));
   });
 }

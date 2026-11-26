@@ -1,6 +1,8 @@
-// Any run of 7 or more digits, with spaces, dashes, dots, parens or a plus
-// between them, could be a phone number, so it never reaches a log or the UI.
-const LONG_DIGITS = /\+?\d(?:[\s().+-]*\d){6,}/g;
+// Any run of 7 or more digits, in any script, with up to 3 non-letter,
+// non-digit characters (spaces, dashes, slashes, commas, NBSP...) between
+// consecutive digits, could be a phone number, so it never reaches a log or
+// the UI. A letter between digit groups breaks the run.
+const LONG_DIGITS = /\+?\p{Nd}(?:[^\p{L}\p{Nd}]{0,3}\p{Nd}){6,}/gu;
 
 export const DETAIL_MAX = 160;
 
