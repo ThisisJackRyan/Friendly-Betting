@@ -102,7 +102,7 @@ test('mapped Firebase codes keep their friendly copy and hide the code', () => {
     expect(phoneError({
       code,
       message: `Firebase: A longer server explanation. (${code}).`,
-    }, SEND_CODE_ERROR)).toEqual({ message: copy, code: '' });
+    }, SEND_CODE_ERROR)).toEqual({ message: copy, code: '', detail: '' });
   });
 });
 
@@ -118,6 +118,7 @@ describe('raw codes on preview builds', () => {
     expect(phoneError({ code: 'auth/code-expired' }, VERIFY_CODE_ERROR)).toEqual({
       message: 'That code expired. Resend it.',
       code: 'auth/code-expired',
+      detail: '',
     });
   });
 
@@ -127,6 +128,7 @@ describe('raw codes on preview builds', () => {
     expect(phoneError({ code: 'auth/session-expired' }, VERIFY_CODE_ERROR)).toEqual({
       message: 'That code expired. Resend it.',
       code: '',
+      detail: '',
     });
     expect(phoneError({ code: 'auth/billing-not-enabled' }, SEND_CODE_ERROR).code)
       .toBe('auth/billing-not-enabled');
@@ -138,6 +140,7 @@ test('billing-not-enabled keeps its sentence and the muted raw code', () => {
   const expected = {
     message: 'Texting isn\u2019t set up yet.',
     code: 'auth/billing-not-enabled',
+    detail: '',
   };
   expect(phoneError({
     code: 'auth/billing-not-enabled',
@@ -158,6 +161,7 @@ test('an unmapped send failure uses the short line and the raw code', () => {
   expect(phoneError(err, SEND_CODE_ERROR)).toEqual({
     message: 'Couldn\u2019t send a code. Try again.',
     code: 'auth/operation-not-allowed',
+    detail: '',
   });
 });
 
@@ -170,6 +174,7 @@ test('an unmapped verify failure uses the verify line and the raw code', () => {
   expect(phoneError(err, VERIFY_CODE_ERROR)).toEqual({
     message: 'Couldn\u2019t verify that code. Try again.',
     code: 'auth/missing-client-identifier',
+    detail: '',
   });
 });
 
@@ -177,11 +182,28 @@ test('a failure without a Firebase code keeps the human line and omits a code', 
   expect(phoneError(new Error('socket hang up'), SEND_CODE_ERROR)).toEqual({
     message: SEND_CODE_ERROR,
     code: '',
+    detail: '',
   });
   expect(phoneError(null, VERIFY_CODE_ERROR)).toEqual({
     message: VERIFY_CODE_ERROR,
     code: '',
+    detail: '',
   });
+});
+
+test('an unmapped failure carries the redacted raw detail; a mapped one does not', () => {
+  const detail = 'The operation couldn\u2019t be completed. (FirebaseAuthenticationPlugin.RuntimeError error 1.)';
+  expect(phoneError({ code: 'auth/native-plugin-error-1', detail }, SEND_CODE_ERROR)).toEqual({
+    message: SEND_CODE_ERROR,
+    code: 'auth/native-plugin-error-1',
+    detail,
+  });
+  const long = phoneError({ code: 'auth/native-send-failed', detail: `call +1 (555) 123-4567 ${'x'.repeat(300)}` }, SEND_CODE_ERROR).detail;
+  expect(long).not.toMatch(/555/);
+  expect(long.length).toBeLessThanOrEqual(160);
+  expect(long.endsWith('...')).toBe(true);
+  expect(phoneError({ code: 'auth/too-many-requests', detail: 'blocked' }, SEND_CODE_ERROR).detail).toBe('');
+  expect(phoneError({ code: 'auth/native-send-failed', detail: { a: 1 } }, SEND_CODE_ERROR).detail).toBe('');
 });
 
 test('settle requires the phone creator who owns the bet', () => {

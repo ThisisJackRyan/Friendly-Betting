@@ -1,4 +1,5 @@
 import { isCalledOff, isSettled } from './betStatus';
+import { redactDetail } from './redactDetail';
 
 export const PHONE_PROVIDER = 'phone';
 
@@ -104,9 +105,11 @@ export function phoneError(err, fallback) {
   if (code && PHONE_ERRORS[code]) {
     // Billing is a project setup miss, so the raw code stays under the sentence.
     const showCode = code === 'auth/billing-not-enabled' || showsRawCodes();
-    return { message: PHONE_ERRORS[code], code: showCode ? code : '' };
+    return { message: PHONE_ERRORS[code], code: showCode ? code : '', detail: '' };
   }
-  return { message: fallback, code };
+  // The generic line carries the raw native detail, already redacted at the
+  // source and cut again here in case it came from somewhere else.
+  return { message: fallback, code, detail: redactDetail(typeof err?.detail === 'string' ? err.detail : '') };
 }
 
 export function createStepOrder(user) {
