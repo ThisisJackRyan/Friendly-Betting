@@ -39,7 +39,7 @@ export const PHONE_OFFLINE_ERROR = 'You\u2019re offline. Try again.';
 const PHONE_ERRORS = {
   'auth/invalid-phone-number': 'That number doesn\u2019t look right.',
   'auth/missing-phone-number': 'Enter a phone number.',
-  'auth/too-many-requests': 'Too many tries. Wait a moment.',
+  'auth/too-many-requests': 'Too many tries. Try again in a few hours.',
   'auth/invalid-verification-code': 'That code doesn\u2019t match.',
   'auth/code-expired': 'That code expired. Resend it.',
   'auth/session-expired': 'That code expired. Resend it.',
