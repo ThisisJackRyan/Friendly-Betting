@@ -4,7 +4,7 @@ import Link from '../platform/Link';
 import { FiList, FiPlus } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 import ResultsMenu from './ResultsMenu';
-import AccountMenu from './AccountMenu';
+import AccountMenu, { useAccountIcon } from './AccountMenu';
 
 export default function AppHeader({
   className = '',
@@ -14,13 +14,15 @@ export default function AppHeader({
   onHomeClick,
   onActionClick,
 }) {
+  // With the Account icon in the row, Results goes bell-only on narrow phones.
+  const accountIcon = useAccountIcon().show && account;
   return (
     <header className={`app-header ${className}`}>
       <Link href="/" className="header-brand" aria-label="Friendly Bets home" onClick={onHomeClick}>
         <Brand />
       </Link>
       {location ? <span className="header-location">{location}</span> : null}
-      <ResultsMenu />
+      <ResultsMenu compact={accountIcon} />
       <Link
         className="header-action"
         href={createActive ? '/bets' : '/new'}

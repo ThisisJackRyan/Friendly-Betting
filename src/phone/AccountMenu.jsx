@@ -17,17 +17,24 @@ import { pushEnabled } from './pushConfig';
 // gets it only in the iOS or Android app with push on, where the sheet has
 // the Notifications row; with push off their sheet would be empty, so no
 // icon. A web visitor who is not signed in sees nothing.
-export default function AccountMenu() {
+// Whether the icon shows for the current user. AppHeader reads it too, to
+// make room for the icon on narrow phones.
+export function useAccountIcon() {
   const user = useIdentity();
+  const member = isCreator(user);
+  // The push flag and the native app together, as pushAvailable() checks.
+  const pushUid = user && !user.isLocal ? user.uid : '';
+  const show = member || Boolean(pushUid && pushEnabled() && isNativeApp());
+  return { user, member, pushUid, show };
+}
+
+export default function AccountMenu() {
+  const { user, member, pushUid, show } = useAccountIcon();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const iconRef = useRef(null);
   // Set when a close should put focus back on the icon.
   const refocus = useRef(false);
-  const member = isCreator(user);
-  // The push flag and the native app together, as pushAvailable() checks.
-  const pushUid = user && !user.isLocal ? user.uid : '';
-  const show = member || Boolean(pushUid && pushEnabled() && isNativeApp());
 
   useEffect(() => {
     if (open || !refocus.current) return;

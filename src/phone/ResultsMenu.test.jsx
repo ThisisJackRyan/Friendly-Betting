@@ -194,7 +194,7 @@ test('no global floating Results mount and no floating trigger styles remain', (
   expect(source('app/layout.js')).not.toMatch(/ResultNotifications|ResultsMenu/);
   expect(source('mobile/App.jsx')).not.toMatch(/ResultNotifications|ResultsMenu/);
   expect(fs.existsSync(path.join(__dirname, 'ResultNotifications.jsx'))).toBe(false);
-  expect(source('src/phone/AppHeader.jsx')).toMatch(/<ResultsMenu \/>/);
+  expect(source('src/phone/AppHeader.jsx')).toMatch(/<ResultsMenu compact=\{accountIcon\} \/>/);
   expect(source('src/phone/VoteScreen.jsx')).toMatch(/<ResultsMenu \/>/);
   const css = source('src/phone/phone.css');
   expect(css).not.toMatch(/\.results-trigger|\.result-toast|\.result-notifications/);
