@@ -471,7 +471,7 @@ const MyBets = () => {
   const user = useIdentity();
   const router = useRouter();
   useEffect(() => {
-    document.title = 'My bets · Friendly';
+    document.title = 'My bets · Friendly Bets';
   }, []);
   if (user && !isCreator(user)) {
     return (

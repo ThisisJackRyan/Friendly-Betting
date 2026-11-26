@@ -3,7 +3,7 @@ import Paywall from '../../../src/phone/Paywall';
 import { proPaywallEnabled } from '../../../src/phone/proConfig';
 
 export const metadata = {
-  title: 'Go Pro · Friendly',
+  title: 'Go Pro · Friendly Bets',
 };
 
 // Behind NEXT_PUBLIC_PRO_PAYWALL (docs/PRO.md): a real 404 when it is off.

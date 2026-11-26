@@ -5,7 +5,7 @@ export async function generateMetadata({ params }) {
   const { type } = await params;
   const meta = TYPE_META[type];
   return {
-    title: meta ? `${meta.label} · Friendly` : 'Friendly Bets',
+    title: meta ? `${meta.label} · Friendly Bets` : 'Friendly Bets',
   };
 }
 

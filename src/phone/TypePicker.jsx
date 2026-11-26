@@ -34,7 +34,7 @@ const TypePicker = ({ onPick, earlyTypes = EARLY_ACCESS_TYPES }) => {
 
   useEffect(() => {
     if (onPick) return undefined;
-    document.title = 'New bet · Friendly';
+    document.title = 'New bet · Friendly Bets';
     return undefined;
   }, [onPick]);
 
