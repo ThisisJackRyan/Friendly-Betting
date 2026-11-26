@@ -76,7 +76,7 @@ const VoteScreen = () => {
   const nameInput = useRef(null);
 
   useEffect(() => {
-    document.title = 'Make your call · Friendly';
+    document.title = 'Make your call · Friendly Bets';
     setName(savedName());
   }, []);
 
@@ -140,7 +140,7 @@ const VoteScreen = () => {
 
   const final = Boolean(settled);
   useEffect(() => {
-    if (final) document.title = 'The final word · Friendly';
+    if (final) document.title = 'The final word · Friendly Bets';
   }, [final]);
 
   // Firestore here keeps writes in memory only, so closing or reloading the

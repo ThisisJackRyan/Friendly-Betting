@@ -79,5 +79,5 @@ test('standalone picker: New bet heading, no Friendly wordmark above it', () => 
   expect(title.previousElementSibling).toBeNull();
   expect(document.querySelector('.wordmark')).toBeNull();
   expect(screen.queryByText(/friendly/i)).not.toBeInTheDocument();
-  expect(document.title).toBe('New bet · Friendly');
+  expect(document.title).toBe('New bet · Friendly Bets');
 });

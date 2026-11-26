@@ -1,7 +1,7 @@
 import TallyScreen from '../../../../../src/phone/TallyScreen';
 
 export const metadata = {
-  title: 'Tally · Friendly',
+  title: 'Tally · Friendly Bets',
 };
 
 export default function LegacyTallyPage() {

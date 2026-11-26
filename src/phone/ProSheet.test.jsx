@@ -104,7 +104,7 @@ describe('/pro', () => {
     await openPage();
     expect(dialog()).toHaveAccessibleName(SPEC.headline);
     expect(highlighted()).toEqual([SPEC.benefits[0]]);
-    expect(document.title).toBe('Go Pro · Friendly');
+    expect(document.title).toBe('Go Pro · Friendly Bets');
   });
 
   test('the page behind /pro is inert while the sheet is up', async () => {
