@@ -44,10 +44,7 @@ const Landing = ({ quiet = false }) => {
       className={quiet || pinPhoneTabs ? 'scroll landing-body' : 'scroll landing-body screen-fade'}
     >
       <div className="home-heading">
-        <div>
-          <h1>Good times. Better stakes.</h1>
-        </div>
-        <span className="home-heading-note">Keep it light. Make it interesting.</span>
+        <h1>Good times. Better stakes.</h1>
       </div>
       <section className="home-hero" aria-labelledby="hero-title">
         <div className="landing-copy">
@@ -74,10 +71,7 @@ const Landing = ({ quiet = false }) => {
       </section>
       <section className="home-types" aria-labelledby="home-types-title">
         <div className="section-heading">
-          <div>
-            <h2 id="home-types-title">There’s a bet for that.</h2>
-          </div>
-          <span>Big games. Small disagreements. Anything goes.</span>
+          <h2 id="home-types-title">There’s a bet for that.</h2>
         </div>
         <div className="starter-grid">
           {[
