@@ -194,7 +194,7 @@ const TallyScreen = () => {
   };
 
   useEffect(() => {
-    document.title = 'The picks · Friendly';
+    document.title = 'The picks · Friendly Bets';
   }, []);
 
   useEffect(() => {
@@ -361,7 +361,7 @@ const TallyScreen = () => {
 
   const final = Boolean(settled);
   useEffect(() => {
-    if (final) document.title = 'The final word · Friendly';
+    if (final) document.title = 'The final word · Friendly Bets';
   }, [final]);
 
   useEffect(() => {

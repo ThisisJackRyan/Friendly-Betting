@@ -226,7 +226,7 @@ const CreateForm = () => {
       4: AUTH_COPY.phoneTitle,
       5: AUTH_COPY.codeTitle,
     };
-    document.title = `${titles[step] || COPY.newBet} · Friendly`;
+    document.title = `${titles[step] || COPY.newBet} · Friendly Bets`;
   }, [step, meta]);
 
   useEffect(() => {

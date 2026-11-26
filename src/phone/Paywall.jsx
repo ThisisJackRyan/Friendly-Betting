@@ -14,7 +14,7 @@ export default function Paywall() {
   const enabled = proPaywallEnabled();
 
   useEffect(() => {
-    if (enabled) document.title = `${PRO_COPY.title} · Friendly`;
+    if (enabled) document.title = `${PRO_COPY.title} · Friendly Bets`;
   }, [enabled]);
 
   if (!enabled) return <NotFound />;

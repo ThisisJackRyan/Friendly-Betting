@@ -121,10 +121,10 @@ describe('closed bets', () => {
   test('/t/ keeps the tally title; a closed bet gets the closed tags with a /t/ og:url and the /b/ card', async () => {
     mockBetDoc(settledBet);
     const meta = await tallyMetadataFor('abc123');
-    expect(meta.title).toBe('Tally · Friendly');
+    expect(meta.title).toBe('Tally · Friendly Bets');
     expect(meta.openGraph).toMatchObject({ title: 'Sam (obviously) won. Will Sam finish?', url: '/t/abc123?s=settled', images: [image('settled')] });
     mockBetDoc({ ...base, status: 'open' });
     const open = await tallyMetadataFor('abc123');
-    expect(open).toEqual({ metadataBase: expect.any(URL), title: 'Tally · Friendly' });
+    expect(open).toEqual({ metadataBase: expect.any(URL), title: 'Tally · Friendly Bets' });
   });
 });

@@ -6,7 +6,7 @@ import { previewOrigin, tallyMetadata } from '../../../../src/server/betPreview'
 // the closed card from /b/{code}/opengraph-image.
 export async function generateMetadata({ params }) {
   const { code } = await params;
-  return { metadataBase: new URL(previewOrigin()), ...(await tallyMetadata(code, 'Tally · Friendly')) };
+  return { metadataBase: new URL(previewOrigin()), ...(await tallyMetadata(code, 'Tally · Friendly Bets')) };
 }
 
 export default function TallyPage() {
