@@ -11,7 +11,7 @@ export const INVITE_COPY = {
 };
 
 // Trimmed, with every run of whitespace (newlines too) as one space.
-function oneLine(value) {
+export function oneLine(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
 

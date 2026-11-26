@@ -617,7 +617,7 @@ test('settle with ads on and no Undo (an older settledAt): the house ad, then th
   expect(await crewShares(page)).toEqual([]);
   await page.getByRole('button', { name: 'Share the result', exact: true }).click();
   await expect.poll(() => crewShares(page)).toHaveLength(1);
-  expect((await crewShares(page))[0]).toContain('Sam won the $20 pot');
+  expect((await crewShares(page))[0]).toContain('Winning pick:\nPackers\n\nStakes:\n$20 pot\n');
   expect(errors).toEqual([]);
 });
 
@@ -743,7 +743,9 @@ for (const [side, winner, ping, headline, subline, previewLines] of [
     await expect.poll(async () => (await page.getByRole('region', { name: 'Settled result' }).boundingBox()).y).toBeGreaterThanOrEqual(header.y + header.height + 8);
     await page.screenshot({ path: testInfo.outputPath('settled.png'), animations: 'disabled', scale: 'css' });
     await page.getByRole('button', { name: 'Share the result', exact: true }).click();
-    expect(await page.evaluate(() => window.sharedResult)).toContain(`FRIENDLY · Closed · ${winner} won the $20 pot`);
+    const shared = await page.evaluate(() => window.sharedResult);
+    expect(shared).toContain(`Bet settled:\nWho takes the win?\n\nWinning pick:\n${side}\n\nStakes:\n$20 pot\n\nSee who called it:\n`);
+    expect(shared).toMatch(/\nhttps?:\/\/[^\s]+\/b\/crew123\?s=settled$/);
 
     // The vote link's header carries Results, with the unread count and the participant line.
     await page.goto('/b/crew123');

@@ -68,7 +68,7 @@ async function shareNativeFile(blob, filename, title) {
 //    (navigator.canShare({ files })): mobile Safari and Android Chrome.
 // 2. A download of the PNG: desktop, or a browser that refused the file.
 // 3. The result text through the share sheet, when the download can't run.
-export async function shareImage(blob, { filename = CARD_FILENAME, title = 'FRIENDLY', text = '' } = {}) {
+export async function shareImage(blob, { filename = CARD_FILENAME, title = 'Friendly Bets', text = '' } = {}) {
   if (!blob) return 'failed';
   if (isNativeApp()) {
     const native = await shareNativeFile(blob, filename, title);

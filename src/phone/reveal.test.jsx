@@ -366,19 +366,17 @@ describe('settled screens', () => {
     expect(document.querySelector('.voter-list')).toBeNull();
   });
 
-  test('Share the result still sends the existing result text, unchanged', async () => {
+  test('Share the result sends the settled text', async () => {
     as('maya');
     const bet = settled(crew);
     feed(bet);
     await renderAt('/b/abc123', <VoteScreen />);
     await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
     const expected = [
-      'FRIENDLY · Closed · Jack, Maya & Sam won',
-      'Chiefs cover -3?',
-      'Winning pick: Chiefs -3',
-      'At stake: $20',
-      'Bragging rights, secured.',
-      'The final word: http://localhost/b/abc123',
+      'Bet settled:', 'Chiefs cover -3?', '',
+      'Winning pick:', 'Chiefs -3', '',
+      'Stakes:', '$20', '',
+      'See who called it:', 'http://localhost/b/abc123?s=settled',
     ].join('\n');
     expect(formatResultMessage(bet, 'http://localhost/b/abc123')).toBe(expected);
     expect(shareMessage).toHaveBeenCalledWith(expected);

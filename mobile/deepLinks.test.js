@@ -3,6 +3,8 @@ import { appPathFromUrl } from './deepLinks';
 test.each([
   ['https://www.friendly-bets.com/b/abc123', '/b/abc123'],
   ['https://www.friendly-bets.com/t/abc123', '/t/abc123'],
+  ['https://www.friendly-bets.com/b/abc123?s=settled', '/b/abc123'],
+  ['https://www.friendly-bets.com/t/abc123?s=off', '/t/abc123'],
   ['https://www.friendly-bets.com/Friendly-Betting/Bet/Prop/abc', '/Bet/Prop/abc'],
   ['friendlybetting://b/abc123', '/b/abc123'],
   ['friendlybetting://new/over-under', '/new/over-under'],

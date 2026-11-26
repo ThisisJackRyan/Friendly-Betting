@@ -104,9 +104,9 @@ export function fixOrphan(lines, maxEm) {
   return out;
 }
 
-// Keeps the first MAX_LINES lines and ends the last with an ellipsis that fits.
-function ellipsize(lines, maxEm) {
-  const kept = lines.slice(0, MAX_LINES).map((line) => [...line]);
+// Keeps the first maxLines lines and ends the last with an ellipsis that fits.
+function ellipsize(lines, maxEm, maxLines = MAX_LINES) {
+  const kept = lines.slice(0, maxLines).map((line) => [...line]);
   const last = kept[kept.length - 1];
   while (last.length > 1 && textWidth(`${last.join(' ')}${ELLIPSIS}`) > maxEm) last.pop();
   let text = last.join(' ').replace(/[\s.,;:!?-]+$/, '');
@@ -115,21 +115,55 @@ function ellipsize(lines, maxEm) {
   return kept;
 }
 
-// { fontSize, lineHeight, lines: string[] } for a question on a box maxWidth
-// pixels wide. Never throws; an empty question gives no lines.
-export function layoutQuestion(question, maxWidth = 1008) {
-  const sizes = FONT_SIZES;
+const asLayout = (fontSize, lineHeight, lines) => ({ fontSize, lineHeight, lines: lines.map((line) => line.join(' ')) });
+
+// { fontSize, lineHeight, lines: string[] } for text on a box maxWidth
+// pixels wide: the largest of `sizes` whose wrap fits in maxLines, balanced
+// with no orphan, else the smallest size cut with an ellipsis. Never throws;
+// empty text gives no lines.
+export function layoutText(text, maxWidth, { sizes = FONT_SIZES, maxLines = MAX_LINES, lineHeight = LINE_HEIGHT } = {}) {
   for (const fontSize of sizes) {
     const maxEm = maxWidth / fontSize;
-    const words = wordsOf(question, maxEm);
-    if (!words.length) return { fontSize, lineHeight: LINE_HEIGHT, lines: [] };
-    if (greedyWrap(words, maxEm).length <= MAX_LINES) {
-      const lines = fixOrphan(balancedWrap(words, maxEm), maxEm);
-      return { fontSize, lineHeight: LINE_HEIGHT, lines: lines.map((line) => line.join(' ')) };
+    const words = wordsOf(text, maxEm);
+    if (!words.length) return { fontSize, lineHeight, lines: [] };
+    if (greedyWrap(words, maxEm).length <= maxLines) {
+      return asLayout(fontSize, lineHeight, fixOrphan(balancedWrap(words, maxEm), maxEm));
     }
   }
   const fontSize = sizes[sizes.length - 1];
   const maxEm = maxWidth / fontSize;
-  const lines = ellipsize(greedyWrap(wordsOf(question, maxEm), maxEm), maxEm);
-  return { fontSize, lineHeight: LINE_HEIGHT, lines: lines.map((line) => line.join(' ')) };
+  return asLayout(fontSize, lineHeight, ellipsize(greedyWrap(wordsOf(text, maxEm), maxEm), maxEm, maxLines));
+}
+
+// The open card's question: up to MAX_LINES lines from FONT_SIZES.
+export function layoutQuestion(question, maxWidth = 1008) {
+  return layoutText(question, maxWidth);
+}
+
+// Like layoutText, for `head` followed by a fixed `suffix` (" won."): when
+// the whole will not fit in maxLines even at the smallest size, the head is
+// cut (whole words first, then letters) and ends with an ellipsis, so the
+// suffix always shows: "{head…} won.".
+export function layoutWithSuffix(head, suffix, maxWidth, { sizes = FONT_SIZES, maxLines = MAX_LINES, lineHeight = LINE_HEIGHT } = {}) {
+  const clean = String(head || '').replace(/\s+/g, ' ').trim();
+  const fits = (text, fontSize) => {
+    const maxEm = maxWidth / fontSize;
+    return greedyWrap(wordsOf(text, maxEm), maxEm).length <= maxLines;
+  };
+  for (const fontSize of sizes) {
+    if (fits(`${clean}${suffix}`, fontSize)) return layoutText(`${clean}${suffix}`, maxWidth, { sizes: [fontSize], maxLines, lineHeight });
+  }
+  const fontSize = sizes[sizes.length - 1];
+  const cut = (text) => `${text.replace(/[\s.,;:!?-]+$/, '')}${ELLIPSIS}${suffix}`;
+  const words = clean.split(' ');
+  for (let count = words.length - 1; count >= 1; count -= 1) {
+    const text = cut(words.slice(0, count).join(' '));
+    if (fits(text, fontSize)) return layoutText(text, maxWidth, { sizes: [fontSize], maxLines, lineHeight });
+  }
+  const letters = Array.from(words[0] || '');
+  for (let count = letters.length - 1; count >= 1; count -= 1) {
+    const text = cut(letters.slice(0, count).join(''));
+    if (fits(text, fontSize)) return layoutText(text, maxWidth, { sizes: [fontSize], maxLines, lineHeight });
+  }
+  return layoutText(`${clean}${suffix}`, maxWidth, { sizes, maxLines, lineHeight });
 }
