@@ -2537,8 +2537,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (min-width: 768px) and (max-width: 1150px) {
+  /* Wide enough for the 19px wordmark with a 12px inset inside the nav padding, like the nav items. */
   .app-nav {
-    width: 176px;
+    width: 200px;
     padding: 24px 12px 18px;
   }
   .brand {
@@ -2550,7 +2551,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
     height: 29px;
   }
   .nav-brand {
-    padding: 0;
+    padding: 0 12px;
   }
   .nav-brand .brand {
     font-size: 19px;
