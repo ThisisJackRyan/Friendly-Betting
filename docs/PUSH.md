@@ -1,6 +1,6 @@
 # Push notifications
 
-Status: **infra, opt-in UX, settle and call-off sends, the first-pick send, and the closing-soon cron, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row on My bets, both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, a friend's first pick tells the bet's creator, a cron reminds the creator once when their bet has under an hour left, and the Android app creates its one notification channel at start. This was the last of the five push PRs. Nothing is sent while the flag is off, and it is off.
+Status: **infra, opt-in UX, settle and call-off sends, the first-pick send, and the closing-soon cron, behind a flag that is off.** The app has the soft opt-in sheet and a Notifications row in the Account sheet (the person icon on My bets), both hidden unless the flag is on in the native app. A settle (after its undo window) and a call-off push the result to the bet's voters, a friend's first pick tells the bet's creator, a cron reminds the creator once when their bet has under an hour left, and the Android app creates its one notification channel at start. This was the last of the five push PRs. Nothing is sent while the flag is off, and it is off.
 
 ## The flag
 
@@ -119,9 +119,9 @@ Copy is UX final (Nov 16 2026) and lives in `src/phone/pushCopy.js`. Native only
 
 State is kept per uid in Preferences: `fb.pushAsked.{uid}` (`granted` or `denied`, the OS answer) and `fb.pushPref.{uid}` (`on` or `off`, the in-app choice). Another account signing in on the same install does not inherit either. Anything saved in either key for this uid means the choice was already made, so the sheet does not show. Every path that saves `fb.pushPref.{uid}` while the OS permission is granted (the sheet's grant, the row's toggle on or off, the resume resync) also saves `fb.pushAsked.{uid}` as `granted`, so the two keys agree. Turning the row off never saves `denied`: the OS may still allow notifications; only the in-app choice is off.
 
-### The Notifications row (My bets, above Log out)
+### The Notifications row (Account sheet, above Log out)
 
-"Notifications" / "Picks, results, and closing reminders." and a switch. Only on the signed-in My bets list, never on the phone gate.
+"Notifications" / "Picks, results, and closing reminders." and a switch. The first row of the Account sheet (the person icon at the top right of My bets), in the app only: for a phone-signed-in member and for an anonymous app user (who gets only this row).
 
 - **Permission granted:** the switch registers (on) or unregisters (off) and saves the in-app choice, plus the grant (`fb.pushAsked.{uid}` = `granted`).
 - **Still promptable** (the user never saw the sheet, for example they already had bets): turning it on asks the OS from that tap, then registers on a grant. Loading the row never asks.

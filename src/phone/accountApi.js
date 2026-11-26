@@ -91,6 +91,21 @@ export function clearDeleteAccountResume() {
   }
 }
 
+// True while a recent note left by this member is waiting, without taking it:
+// My bets uses it to send them on to the Delete account page, which takes it.
+export function hasDeleteAccountResume(uid, now = Date.now()) {
+  if (!uid) return false;
+  try {
+    const value = session()?.getItem(RESUME_KEY);
+    if (value == null) return false;
+    const note = JSON.parse(value);
+    const at = Number(note?.at);
+    return note?.uid === uid && Number.isFinite(at) && now - at >= 0 && now - at <= RESUME_MS;
+  } catch {
+    return false;
+  }
+}
+
 // True once, for a recent note left by this member. Any note is removed.
 export function takeDeleteAccountResume(uid, now = Date.now()) {
   if (!uid) return false;

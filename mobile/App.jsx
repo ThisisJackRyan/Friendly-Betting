@@ -12,6 +12,7 @@ import NativeLifecycle from './NativeLifecycle';
 import EntitlementSync from '../src/phone/EntitlementSync';
 import PushSync from '../src/phone/PushSync';
 import Paywall from '../src/phone/Paywall';
+import DeleteAccountPage from '../src/phone/DeleteAccountPage';
 
 function Chrome() {
   return <CreateChromeProvider><AppShell><Outlet /></AppShell></CreateChromeProvider>;
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="t/:code" element={<TallyScreen />} />
           <Route path="Bet/:collection/:id" element={<TallyScreen />} />
           <Route path="pro" element={<Paywall />} />
+          <Route path="account/delete" element={<DeleteAccountPage />} />
         </Route>
         <Route path="b/:code" element={<VoteScreen />} />
         <Route path="*" element={<NotFound />} />

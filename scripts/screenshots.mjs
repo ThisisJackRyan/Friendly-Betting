@@ -24,7 +24,12 @@
 // winner-card-long.png, and F8: Call off on an open tally,
 // f8-call-off-button.png, its confirm, f8-call-off-confirm.png, the reveal
 // with its Undo countdown, f8-undo-countdown.png, and the tally once called
-// off, f8-called-off.png) only go to --copy-to.
+// off, f8-called-off.png, and Account on My bets at 390px wide: the sheet,
+// account-sheet.png, its Log out? confirm, account-logout-confirm.png, and
+// the Delete account page, account-delete-page.png, and the same sheet with
+// push on so its Notifications row shows, account-sheet-push.png) only go to
+// --copy-to.
+// A shot's `viewport` overrides the default 393x852.
 //
 // SCREENSHOTS_BASE points at an app preview already running elsewhere, for
 // when another checkout holds port 5173.
@@ -49,6 +54,9 @@ const CODE = 'k7q2xm';
 const JACK = { uid: 'jack', providerData: [{ providerId: 'phone' }] };
 const MAYA = { uid: 'maya', providerData: [] };
 const JAKE = { uid: 'jake', providerData: [] };
+// Jack with a made-up number (555), for the Account sheet's Signed in line.
+const JACK_PHONE = { ...JACK, phoneNumber: '+18165550123' };
+const ACCOUNT_VIEWPORT = { width: 390, height: 844 };
 
 const OPEN_BET = {
   id: CODE, code: CODE, schemaVersion: 2, type: 'money-line', typeLabel: 'Money Line',
@@ -177,7 +185,11 @@ async function startServer() {
 // `bets` is My bets' whole list, when it should hold more than `bet`.
 // `noUndo` makes Settle & notify come back with a number settledAt, as an
 // older build wrote: no Undo, the one settle the ad still shows on.
-async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false, noUndo = false }) {
+// `push` turns the push flag on in pushConfig.js and, since Chromium is not
+// the native app, lets pushTokens.js's pushAvailable() follow the flag alone;
+// pushOptIn.js then reads an OS permission that is granted with the in-app
+// choice on, and never syncs a token (no plugin exists here).
+async function fixtures(page, { user, name, bet, bets = null, settled = false, shareSheet = null, ads = false, plan = null, paywall = false, noUndo = false, push = false }) {
   const winnerId = settled === true ? 'a' : settled;
   await page.route(/(?:googleapis\.com|firebaseio\.com|firebaseapp\.com|gstatic\.com|google\.com)/, (route) => route.abort());
   await page.route('**/src/phone/identity.js*', (route) => route.fulfill({
@@ -233,6 +245,27 @@ async function fixtures(page, { user, name, bet, bets = null, settled = false, s
       );
       await route.fulfill({ response, body });
     });
+  }
+  if (push) {
+    const patch = (glob, edits) => page.route(glob, async (route) => {
+      const response = await route.fetch();
+      let body = await response.text();
+      for (const [pattern, replacement] of edits) {
+        if (!pattern.test(body)) throw new Error(`push fixture: ${glob} no longer matches ${pattern}`);
+        body = body.replace(pattern, replacement);
+      }
+      await route.fulfill({ response, body });
+    });
+    await patch('**/src/phone/pushConfig.js*', [
+      [/export function pushEnabled\(\) \{[\s\S]*?\n\}/, 'export function pushEnabled() { return true; }'],
+    ]);
+    await patch('**/src/phone/pushTokens.js*', [
+      [/export function pushAvailable\(\) \{[\s\S]*?\n\}/, 'export function pushAvailable() { return pushEnabled(); }'],
+    ]);
+    await patch('**/src/phone/pushOptIn.js*', [
+      [/export async function readPushSettings\(uid\) \{[\s\S]*?\n\}/, "export async function readPushSettings(uid) { return uid ? { permission: 'granted', on: true } : null; }"],
+      [/export async function syncPushForUser\(uid\) \{[\s\S]*?\n\}/, 'export async function syncPushForUser() { return null; }'],
+    ]);
   }
   if (ads) {
     await page.route('**/src/ads/config.js*', async (route) => {
@@ -325,7 +358,67 @@ async function openCallOff(page) {
   return button;
 }
 
+// My bets with the Account sheet up, once it has slid in.
+async function openAccount(page) {
+  await page.goto('/bets');
+  await page.getByRole('heading', { name: 'My bets' }).waitFor();
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Account' }).waitFor();
+}
+
 const SHOTS = [
+  {
+    file: 'account-sheet.png',
+    docs: false,
+    viewport: ACCOUNT_VIEWPORT,
+    user: JACK_PHONE,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await openAccount(page);
+      await page.getByText('Signed in as (816) 555-0123').waitFor();
+    },
+  },
+  {
+    file: 'account-sheet-push.png',
+    docs: false,
+    viewport: ACCOUNT_VIEWPORT,
+    user: JACK_PHONE,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    push: true,
+    async run(page) {
+      await openAccount(page);
+      await page.getByRole('switch', { name: 'Notifications' }).waitFor();
+    },
+  },
+  {
+    file: 'account-logout-confirm.png',
+    docs: false,
+    viewport: ACCOUNT_VIEWPORT,
+    user: JACK_PHONE,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await openAccount(page);
+      await page.getByRole('dialog', { name: 'Account' }).getByRole('button', { name: 'Log out', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Log out?' }).waitFor();
+    },
+  },
+  {
+    file: 'account-delete-page.png',
+    docs: false,
+    viewport: ACCOUNT_VIEWPORT,
+    user: JACK_PHONE,
+    bet: OPEN_BET,
+    bets: FRIEND_BETS,
+    async run(page) {
+      await openAccount(page);
+      await page.getByRole('button', { name: 'Delete account', exact: true }).click();
+      await page.waitForURL('**/account/delete');
+      await page.getByText('This can’t be undone.').waitFor();
+    },
+  },
   {
     file: 'f8-call-off-button.png',
     docs: false,
@@ -744,7 +837,7 @@ try {
   for (const shot of picked) {
     const context = await browser.newContext({
       baseURL: BASE,
-      viewport: { width: 393, height: 852 },
+      viewport: shot.viewport || { width: 393, height: 852 },
       deviceScaleFactor: 2,
       isMobile: true,
       hasTouch: true,
@@ -754,7 +847,7 @@ try {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall, noUndo: shot.noUndo });
+    await fixtures(page, { user: shot.user, name: shot.name || '', bet: shot.bet, bets: shot.bets, settled: shot.settled, shareSheet: shot.shareSheet, ads: shot.ads, plan: shot.plan, paywall: shot.paywall, noUndo: shot.noUndo, push: shot.push });
     await shot.run(page);
     await settle(page);
     if (errors.length) throw new Error(`${shot.file}: ${errors.join('; ')}`);

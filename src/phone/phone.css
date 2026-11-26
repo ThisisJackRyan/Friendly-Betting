@@ -111,19 +111,6 @@ body {
   min-height: 100%;
 }
 
-.logout-link {
-  margin-top: auto;
-  align-self: center;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 500;
-  line-height: 1.35;
-  padding: 20px 12px 8px;
-  min-height: 44px;
-}
-
 .type-list,
 .bet-list,
 .choices,
@@ -2190,10 +2177,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   min-height: 45px;
   font-size: 12px;
 }
-.logout-link {
-  font-size: 11px;
-  padding-top: 28px;
-}
 
 /* Voting and results share a readable, focused card. */
 .vote-header {
@@ -3309,12 +3292,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .dialog-primary:disabled { opacity: 0.55; }
 .dialog-primary:focus-visible { outline: none; box-shadow: var(--focus); }
-/* Delete account: the confirm body and the quiet row above Log out. */
+/* Delete account: the confirm body (and the Delete account page). */
 .delete-account-lead { margin: 0 0 6px; color: var(--ink); font-weight: 700; }
 .delete-account-list { margin: 0; padding-left: 18px; }
 .delete-account-list li + li { margin-top: 4px; }
-.logout-link.delete-account-link { color: var(--ink); }
-.delete-account-link + .logout-link { margin-top: 0; padding-top: 4px; }
 .toast-region {
   position: fixed;
   left: 50%;
@@ -3730,8 +3711,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
 /* The button under a failed create's error (CreateSaveError): Go Pro or Try again. */
 .create-error-action { margin-top: 8px; }
 
-/* Push opt-in sheet (after the creator's first send) and the quiet
-   Notifications row on My bets, above Log out. Same scrim, sheet and
+/* Push opt-in sheet (after the creator's first send) and the
+   Notifications row in the Account sheet. Same scrim, sheet and
    button language as the Pro sheet. */
 .push-sheet-layer {
   position: fixed;
@@ -3799,7 +3780,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   gap: 16px;
   padding: 20px 4px 0;
 }
-.push-row + .logout-link { margin-top: 0; }
 .push-row-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .push-row-label { margin: 0; color: var(--ink); font-size: 15px; font-weight: 700; }
 .push-row-helper { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
@@ -3850,6 +3830,173 @@ html[data-arrive='home'] .landing-body.screen-fade {
 @media (prefers-reduced-motion: reduce) {
   .push-switch, .push-switch-thumb { transition: none; }
 }
+
+/* Account: the person icon at the top right of My bets, the Account sheet it
+   opens, and the Delete account page pushed from the sheet. */
+.account-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  /* A 56px tap area around the 24px glyph, without growing the header. */
+  margin: -7px -16px -7px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.account-button:hover { background: var(--hover-wash); }
+.account-button:focus-visible { outline: none; box-shadow: var(--focus); }
+@media (max-width: 767px) {
+  .app-header .account-button { margin-left: auto; }
+  .app-header .results-menu ~ .account-button { margin-left: 0; }
+}
+/* Bell-only Results: at 449px and under, with the Account icon in the header,
+   Results is a 44px bell with the unread count in a pill on its corner. The
+   word and the "N new" text stay in the button, hidden here; its aria-label
+   names it. */
+.header-results.bell-only {
+  position: relative;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  gap: 0;
+  font-size: 0;
+}
+.header-results.bell-only > svg { width: 20px; height: 20px; }
+.header-results.bell-only > span { display: none; }
+.header-results.bell-only > .bell-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--raised);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+@media (max-width: 359px) {
+  .app-header:has(> .account-button) { gap: 8px; }
+}
+.account-sheet {
+  gap: 0;
+  padding-top: 12px;
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transition: transform 200ms ease;
+}
+.account-sheet-handle {
+  align-self: center;
+  flex: none;
+  width: 36px;
+  height: 5px;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.account-sheet-phone { margin: 4px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.account-sheet-rows { display: flex; flex-direction: column; margin-top: 12px; }
+.account-sheet .push-row {
+  margin: 0;
+  min-height: 56px;
+  padding: 8px 0;
+  box-sizing: border-box;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.account-delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.account-row:focus-visible,
+.account-delete-row:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 8px; }
+.dialog-keep.dialog-cancel { color: var(--muted); }
+.delete-account-body {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  padding-top: 8px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.delete-account-body .delete-account-list { margin-bottom: 24px; list-style: disc; }
+.delete-account-button {
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+  color: var(--danger);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.delete-account-button:hover { background: #fbf4f2; }
+.delete-account-never {
+  align-self: center;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.delete-account-button:focus-visible,
+.delete-account-never:focus-visible { outline: none; box-shadow: var(--focus); }
+
 /* Phone headers: the Friendly Bets wordmark and the Results button share one row. */
 @media (max-width: 400px) {
   .header-brand .brand,

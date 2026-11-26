@@ -9,6 +9,7 @@ import { auth } from '../Config/firebase-config';
 import { isNativeApp } from '../platform/runtime';
 import { cancelNativePhoneCode, sendNativePhoneCode } from '../platform/nativePhone';
 import { PERSON_CHECK_CANCELLED, showsRawCodes } from './creatorSession';
+import { refreshIdentity } from './identity';
 import { unregisterBeforeSignOut } from './pushOptIn';
 
 const ALREADY_IN_USE = new Set([
@@ -249,6 +250,9 @@ export async function verifyPhoneCode(verificationId, code) {
 
   try {
     const result = await linkWithCredential(current, credential);
+    // Same uid, so onAuthStateChanged stays quiet. Tell useIdentity (the
+    // header Account icon) that this user is now phone-signed-in.
+    refreshIdentity(result.user);
     return result.user;
   } catch (err) {
     if (ALREADY_IN_USE.has(err?.code)) {

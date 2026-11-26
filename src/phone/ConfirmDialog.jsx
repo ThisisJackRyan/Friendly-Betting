@@ -7,13 +7,16 @@ import { useEffect, useId, useRef } from 'react';
 // bet. While the action is in flight both buttons are disabled so the outcome
 // always lands in this dialog. `copy` is one line of text; `body` takes any
 // content (a list) instead. `confirmClassName` swaps the red confirm for
-// another button style.
+// another button style; `cancelLabel` and `cancelClassName` do the same for
+// "Keep it" (Log out? uses a muted Cancel).
 const ConfirmDialog = ({
   title,
   copy,
   body = null,
   confirmLabel,
   confirmClassName = 'danger',
+  cancelLabel = 'Keep it',
+  cancelClassName = 'dialog-keep',
   busyLabel,
   busy,
   error,
@@ -75,8 +78,8 @@ const ConfirmDialog = ({
           <button ref={confirmRef} type="button" className={`${confirmClassName} press`} disabled={busy} onClick={onConfirm}>
             {busy ? busyLabel : confirmLabel}
           </button>
-          <button ref={keepRef} type="button" className="dialog-keep press" disabled={busy} onClick={onCancel}>
-            Keep it
+          <button ref={keepRef} type="button" className={`${cancelClassName} press`} disabled={busy} onClick={onCancel}>
+            {cancelLabel}
           </button>
         </div>
         {error && (
