@@ -3853,6 +3853,44 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .app-header .account-button { margin-left: auto; }
   .app-header .results-menu ~ .account-button { margin-left: 0; }
 }
+/* Bell-only Results: at 400px and under, with the Account icon in the header,
+   Results is a 44px bell with the unread count in a pill on its corner. The
+   word and the "N new" text stay in the button, hidden here; its aria-label
+   names it. */
+.header-results.bell-only {
+  position: relative;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  gap: 0;
+  font-size: 0;
+}
+.header-results.bell-only > svg { width: 20px; height: 20px; }
+.header-results.bell-only > span { display: none; }
+.header-results.bell-only > .bell-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--raised);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+@media (max-width: 359px) {
+  .app-header:has(> .account-button) { gap: 8px; }
+}
 .account-sheet {
   gap: 0;
   padding-top: 12px;

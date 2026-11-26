@@ -8,10 +8,19 @@ import { useIdentity } from './identity';
 import { markResultRead, watchResults } from './notificationStore';
 import { notificationFor } from './settlement';
 import { stakeKind } from './reveal';
+import useMediaQuery from './useMediaQuery';
+
+// Bell-only Results (narrow phones with the Account icon): the pill on the
+// bell shows the count, and the button's name says it.
+export const bellCount = (count) => (count >= 10 ? '9+' : String(count));
+export const bellLabel = (count) => {
+  if (count <= 0) return 'Results';
+  return count >= 10 ? 'Results, 9 or more new' : `Results, ${count} new`;
+};
 
 // The Results inbox, opened from a header button. It sits in the header row
 // instead of floating, so it never covers the screen's own buttons.
-function ResultInbox({ uid }) {
+function ResultInbox({ uid, compact }) {
   const [saved, setSaved] = useState({ codes: [], read: [] });
   const [results, setResults] = useState({});
   const [errors, setErrors] = useState({});
@@ -22,6 +31,7 @@ function ResultInbox({ uid }) {
   const panel = useRef(null);
   const panelId = useId();
   const titleId = useId();
+  const bellOnly = useMediaQuery('(max-width: 400px)') && compact;
 
   useEffect(() => watchResults(uid, setSaved), [uid]);
   useEffect(() => {
@@ -78,12 +88,16 @@ function ResultInbox({ uid }) {
       <button
         ref={trigger}
         type="button"
-        className="header-results press"
+        className={bellOnly ? 'header-results bell-only press' : 'header-results press'}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
+        aria-label={bellOnly ? bellLabel(unread.length) : undefined}
       >
+        {bellOnly && unread.length > 0 && (
+          <span className="bell-count" aria-hidden="true">{bellCount(unread.length)}</span>
+        )}
         <FiBell aria-hidden="true" />
         Results
         {unread.length > 0 && <span>{unread.length} new</span>}
@@ -152,7 +166,9 @@ function ResultInbox({ uid }) {
   );
 }
 
-export default function ResultsMenu() {
+// `compact` (AppHeader with the Account icon) makes the button bell-only at
+// 400px and under; wider, it is the full Results button.
+export default function ResultsMenu({ compact = false }) {
   const user = useIdentity();
-  return user?.uid ? <ResultInbox key={user.uid} uid={user.uid} /> : null;
+  return user?.uid ? <ResultInbox key={user.uid} uid={user.uid} compact={compact} /> : null;
 }
