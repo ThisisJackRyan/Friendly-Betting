@@ -73,7 +73,7 @@ test.each([
   [9, '9', 'Results, 9 new'],
   [10, '9+', 'Results, 9 or more new'],
   [25, '9+', 'Results, 9 or more new'],
-])('with the Account icon at 400px and under, Results is a bell (%i unread)', (unread, pill, label) => {
+])('with the Account icon at 449px and under, Results is a bell (%i unread)', (unread, pill, label) => {
   remember(unread);
   render(<AppHeader account />);
   expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
@@ -88,6 +88,15 @@ test.each([
   } else {
     expect(count).toBeNull();
   }
+});
+
+test.each([449, 400, 360, 320])('with the Account icon at %ipx, Results is a bell', (w) => {
+  width = w;
+  remember(3);
+  render(<AppHeader account />);
+  const button = resultsButton();
+  expect(button).toHaveClass('header-results', 'bell-only');
+  expect(button).toHaveAccessibleName('Results, 3 new');
 });
 
 test('bell count and label helpers', () => {
@@ -107,8 +116,8 @@ function expectFull(button, unread) {
   expect(button).toHaveAccessibleName(unread ? `Results ${unread} new` : 'Results');
 }
 
-test.each([0, 3, 9])('above 400px the Account header keeps the full Results button (%i unread)', (unread) => {
-  width = 401;
+test.each([0, 3, 9])('above 449px the Account header keeps the full Results button (%i unread)', (unread) => {
+  width = 450;
   remember(unread);
   render(<AppHeader account />);
   expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
@@ -136,12 +145,12 @@ test('ResultsMenu on its own (the vote page header) is never bell-only', () => {
   expectFull(resultsButton(), 3);
 });
 
-test('crossing 400px swaps between bell and full button', () => {
-  width = 401;
+test('crossing 449/450px swaps between bell and full button', () => {
+  width = 450;
   remember(3);
   render(<AppHeader account />);
   expectFull(resultsButton(), 3);
-  setWidth(400);
+  setWidth(449);
   expect(resultsButton()).toHaveAccessibleName('Results, 3 new');
   expect(resultsButton()).toHaveClass('bell-only');
   setWidth(800);

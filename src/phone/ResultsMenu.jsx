@@ -33,7 +33,7 @@ function ResultInbox({ uid, compact }) {
   const panel = useRef(null);
   const panelId = useId();
   const titleId = useId();
-  const bellOnly = useMediaQuery('(max-width: 400px)') && compact;
+  const bellOnly = useMediaQuery('(max-width: 449px)') && compact;
 
   useEffect(() => watchResults(uid, setSaved), [uid]);
   useEffect(() => {
@@ -169,7 +169,7 @@ function ResultInbox({ uid, compact }) {
 }
 
 // `compact` (AppHeader with the Account icon) makes the button bell-only at
-// 400px and under; wider, it is the full Results button.
+// 449px and under; wider, it is the full Results button.
 export default function ResultsMenu({ compact = false }) {
   const user = useIdentity();
   return user?.uid ? <ResultInbox key={user.uid} uid={user.uid} compact={compact} /> : null;
