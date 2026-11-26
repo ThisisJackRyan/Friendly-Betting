@@ -955,6 +955,35 @@ test('a too-many-requests send failure says to wait hours and leaves Send code e
   await waitFor(() => expect(screen.getByRole('button', { name: 'Send code' })).not.toBeDisabled());
 });
 
+test('a native plugin send failure shows the generic line, the code and the raw detail', async () => {
+  const detail = 'The operation couldn’t be completed. (FirebaseAuthenticationPlugin.RuntimeError error 1.)';
+  sendPhoneCode.mockRejectedValue({ code: 'auth/native-plugin-error-1', detail });
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toBe('Couldn’t send a code. Try again.');
+  const code = document.querySelector('.phone-error-code');
+  expect(code).toHaveClass('muted');
+  expect(code.textContent).toBe('auth/native-plugin-error-1');
+  const line = document.querySelector('.phone-error-detail');
+  expect(line).toHaveClass('muted');
+  expect(line).not.toHaveClass('form-error');
+  expect(line.textContent).toBe(detail);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send code' })).not.toBeDisabled());
+});
+
+test('a mapped send failure shows no detail line', async () => {
+  sendPhoneCode.mockRejectedValue({ code: 'auth/too-many-requests', detail: 'blocked' });
+
+  await reachPhone();
+  await userEvent.click(screen.getByRole('button', { name: 'Send code' }));
+
+  await screen.findByRole('alert');
+  expect(document.querySelector('.phone-error-detail')).not.toBeInTheDocument();
+});
+
 test('a network send failure still says you are offline', async () => {
   const err = new Error('Firebase: Error (auth/network-request-failed).');
   err.code = 'auth/network-request-failed';

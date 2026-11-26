@@ -586,6 +586,11 @@ body {
 .phone p.phone-error-code {
   margin-top: 4px;
 }
+.phone p.phone-error-detail {
+  margin-top: 2px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 
 .phone .field-hint {
   margin: 0 0 16px;
@@ -1941,6 +1946,10 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .form-error + .phone-error-code {
   padding: 4px 14px;
+}
+.phone-error-code + .phone-error-detail,
+.form-error + .phone-error-detail {
+  padding: 0 14px 4px;
 }
 .manual-message {
   white-space: pre-wrap;

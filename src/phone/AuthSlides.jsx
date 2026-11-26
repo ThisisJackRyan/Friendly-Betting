@@ -35,17 +35,20 @@ export function useCreatorPhone() {
   const [busy, setBusy] = useState(null);
   const [error, setErrorState] = useState('');
   const [errorCode, setErrorCode] = useState('');
+  const [errorDetail, setErrorDetail] = useState('');
   const [verifiedUser, setVerifiedUser] = useState(null);
 
   const setError = (message) => {
     setErrorState(message);
     setErrorCode('');
+    setErrorDetail('');
   };
 
   const showPhoneError = (err, fallback) => {
     const next = phoneError(err, fallback);
     setErrorState(next.message);
     setErrorCode(next.code);
+    setErrorDetail(next.detail || '');
   };
 
   const onNational = (value) => {
@@ -152,6 +155,7 @@ export function useCreatorPhone() {
     busy,
     error,
     errorCode,
+    errorDetail,
     setError,
     onNational,
     onOtp,
@@ -163,7 +167,7 @@ export function useCreatorPhone() {
   };
 }
 
-export function PhoneAlert({ error, code }) {
+export function PhoneAlert({ error, code, detail }) {
   if (!error) return null;
   return (
     <>
@@ -171,6 +175,7 @@ export function PhoneAlert({ error, code }) {
         {error}
       </p>
       {code ? <p className="muted phone-error-code">{code}</p> : null}
+      {detail ? <p className="muted phone-error-detail">{detail}</p> : null}
     </>
   );
 }
@@ -620,7 +625,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = nu
             busy={phone.busy}
             error={phone.error}
           />
-          <PhoneAlert error={phone.error} code={phone.errorCode} />
+          <PhoneAlert error={phone.error} code={phone.errorCode} detail={phone.errorDetail} />
         </AuthChrome>
       );
     }
@@ -641,7 +646,7 @@ export default function CreatorAuthFlow({ onCancel, renderDone, phoneFooter = nu
           busy={phone.busy}
           check={step === 1 ? <PersonCheck containerRef={phone.containerRef} /> : null}
         />
-        <PhoneAlert error={phone.error} code={phone.errorCode} />
+        <PhoneAlert error={phone.error} code={phone.errorCode} detail={phone.errorDetail} />
       </AuthChrome>
     );
   };
