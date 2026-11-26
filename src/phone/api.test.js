@@ -1,15 +1,17 @@
 import { deleteDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
-import { auth } from '../Config/firebase-config';
+import { getDocs as liteGetDocs, getFirestore as liteGetFirestore } from 'firebase/firestore/lite';
+import { app, auth } from '../Config/firebase-config';
 import {
-  __resetCreateForTests, __resetVoteRulesForTests, CREATE_STALL_CAP_MS, CREATE_TIMEOUT_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
+  __resetCreateForTests, __resetLiveBetsForTests, __resetVoteRulesForTests, CREATE_STALL_CAP_MS, CREATE_TIMEOUT_MS, STALE_BET_FRESH_READ_MS, callOffBet, castVote, deleteBet, readVoteDocs, renameVote, saveBet, settleBet, subscribeBet,
   subscribeMyBets, undoSettle,
 } from './api';
 import { rememberBet } from './notificationStore';
 import { requestResultTexts } from './resultTexts';
 import { saveRematch } from './rematch';
 import { requestBetPush, requestPickPush } from './betPush';
+import { CACHE_MISS_GRACE_MS } from './useLiveBet';
 
-jest.mock('../Config/firebase-config', () => ({ db: {}, auth: { currentUser: null } }));
+jest.mock('../Config/firebase-config', () => ({ app: { name: 'app' }, db: {}, auth: { currentUser: null } }));
 jest.mock('firebase/firestore', () => ({
   // bets/{code} -> { collection: 'bets', id }; bets/{code}/votes/{uid} ->
   // { collection: 'bets/{code}/votes', id: uid }.
@@ -24,6 +26,12 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: jest.fn(async () => {}),
   serverTimestamp: () => 'SERVER_TIME',
   deleteField: () => 'DELETE_FIELD',
+}));
+// The backup vote-doc read in subscribeBet (one RunQuery RPC, not Watch).
+jest.mock('firebase/firestore/lite', () => ({
+  getFirestore: jest.fn(() => ({ lite: true })),
+  collection: (_db, ...path) => ({ lite: true, path: path.join('/') }),
+  getDocs: jest.fn(),
 }));
 jest.mock('./notificationStore', () => ({ rememberBet: jest.fn() }));
 jest.mock('./betPush', () => ({ requestBetPush: jest.fn(), requestPickPush: jest.fn() }));
@@ -45,6 +53,7 @@ let clock;
 let tx;
 beforeEach(() => {
   __resetVoteRulesForTests();
+  __resetLiveBetsForTests();
   stored = {
     schemaVersion: 2, status: 'open', createdByID: 'creator', question: 'Game on?', stake: 'Pizza',
     options: [{ id: 'a', label: 'Yes' }, { id: 'b', label: 'No' }],
@@ -103,6 +112,11 @@ beforeEach(() => {
       docs: Object.entries(voteDocs).map(([id, data]) => ({ id, data: () => JSON.parse(JSON.stringify(data)) })),
     };
   });
+  liteGetDocs.mockReset();
+  liteGetDocs.mockImplementation(async () => {
+    throw new Error('lite getDocs not set up for this test');
+  });
+  liteGetFirestore.mockClear();
   rememberBet.mockClear();
   requestResultTexts.mockReset();
   requestBetPush.mockReset();
@@ -683,7 +697,13 @@ describe('callOffBet', () => {
 describe('live listeners merge the bet with its vote docs', () => {
   // onSnapshot by target: the bet doc or a votes collection.
   let listeners;
+  // subscribeBet may arm a fresh-read timer; keep it from firing in later tests.
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
   beforeEach(() => {
+    jest.useFakeTimers();
     listeners = [];
     onSnapshot.mockReset();
     onSnapshot.mockImplementation((ref, ...rest) => {
@@ -695,12 +715,14 @@ describe('live listeners merge the bet with its vote docs', () => {
   });
   const betListener = () => listeners.find((item) => item.ref.collection === 'bets');
   const votesListener = (code = 'abc123') => listeners.find((item) => item.ref.path === `bets/${code}/votes`);
-  const betSnap = (data, fromCache = false) => ({
-    id: 'abc123', exists: () => Boolean(data), data: () => data, metadata: { fromCache },
+  const betSnap = (data, fromCache = false, hasPendingWrites = false) => ({
+    id: 'abc123', exists: () => Boolean(data), data: () => data, metadata: { fromCache, hasPendingWrites },
   });
-  const voteSnap = (docs) => ({
+  const voteSnap = (docs, fromCache = false, hasPendingWrites = false) => ({
     docs: Object.entries(docs).map(([id, data]) => ({ id, data: () => data })),
+    metadata: { fromCache, hasPendingWrites },
   });
+  const maya = { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 2, nanoseconds: 0 } };
 
   test('subscribeBet waits for both, then merges; a vote doc wins over its array entry', () => {
     const onChange = jest.fn();
@@ -738,10 +760,15 @@ describe('live listeners merge the bet with its vote docs', () => {
     expect(onChange).toHaveBeenLastCalledWith(undefined, err);
   });
 
-  test('subscribeBet listens to the bet doc with metadata changes, and the votes without', () => {
+  test('subscribeBet listens to the bet doc and its votes with metadata changes; My bets votes without', () => {
     subscribeBet('abc123', () => {});
     expect(betListener().options).toEqual({ includeMetadataChanges: true });
-    expect(votesListener().options).toBeUndefined();
+    // A cache to server flip with the same docs is how the votes learn they
+    // are confirmed.
+    expect(votesListener().options).toEqual({ includeMetadataChanges: true });
+    subscribeMyBets('creator', () => {});
+    listeners[listeners.length - 1].next({ docs: [{ id: 'one', data: () => ({ createdAt: 1, votes: [] }) }] });
+    expect(votesListener('one').options).toBeUndefined();
   });
 
   test('subscribeBet reports a cache miss, then the metadata-only server miss', () => {
@@ -761,22 +788,402 @@ describe('live listeners merge the bet with its vote docs', () => {
     expect(onChange).toHaveBeenCalledTimes(2);
   });
 
-  test('subscribeBet skips a metadata-only snapshot on a loaded bet, but not a vote doc update', () => {
+  test('subscribeBet reports a server confirmation once with the same object, then skips metadata-only snapshots, but not a vote doc update', () => {
     const onChange = jest.fn();
     subscribeBet('abc123', onChange);
     votesListener().next(voteSnap({}));
     betListener().next(betSnap(stored, true));
     expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][2]).toEqual({ fromCache: true });
+    // The same data confirmed by the server: the same object, fromCache false.
     betListener().next(betSnap({ ...stored, votes: stored.votes.map((vote) => ({ ...vote })) }, false));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    votesListener().next(voteSnap({ maya: { voterId: 'maya', name: 'Maya', optionId: 'a', at: { seconds: 2, nanoseconds: 0 } } }));
     expect(onChange).toHaveBeenCalledTimes(2);
-    expect(onChange.mock.calls[1][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(onChange.mock.calls[1][0]).toBe(onChange.mock.calls[0][0]);
     expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+    betListener().next(betSnap({ ...stored }, false));
+    votesListener().next(voteSnap({}, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    votesListener().next(voteSnap({ maya }));
+    expect(onChange).toHaveBeenCalledTimes(3);
+    expect(onChange.mock.calls[2][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(onChange.mock.calls[2][2]).toEqual({ fromCache: false });
     // Changed data still emits.
     betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+    expect(onChange).toHaveBeenCalledTimes(4);
+    expect(onChange.mock.calls[3][0].status).toBe('closed');
+  });
+
+  test('subscribeBet: once the server confirmed the bet, a stale cache snapshot is ignored until the next server one', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    const fresh = { ...stored, votes: [...stored.votes, { voterId: 'maya', name: 'Maya', optionId: 'a' }] };
+    betListener().next(betSnap(fresh, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap(stored, true));
+    betListener().next(betSnap(null, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    betListener().next(betSnap({ ...fresh, status: 'closed' }, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith({ id: 'abc123', ...fresh, status: 'closed' }, undefined, { fromCache: false });
+  });
+
+  test('subscribeBet: once the server confirmed the vote docs, a stale cache vote snapshot is ignored until the next server one', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    betListener().next(betSnap(stored, false));
+    votesListener().next(voteSnap({ maya }, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    votesListener().next(voteSnap({}, true));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    votesListener().next(voteSnap({ maya: { ...maya, optionId: 'b' } }, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[1][0].votes.find((vote) => vote.voterId === 'maya').optionId).toBe('b');
+  });
+
+  test('subscribeBet: after the server confirmed the bet, a pending local write from the cache is reported; plain stale cache is not', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(stored, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    // A write made here while Watch is stalled.
+    betListener().next(betSnap({ ...stored, status: 'closed' }, true, true));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(
+      { id: 'abc123', ...stored, status: 'closed' }, undefined, { fromCache: false, hasPendingWrites: true },
+    );
+    // Plain stale cache is still ignored.
+    betListener().next(betSnap(stored, true, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('subscribeBet: after the server confirmed the vote docs, a pending local pick from the cache is reported; plain stale cache is not', () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    betListener().next(betSnap(stored, false));
+    votesListener().next(voteSnap({}, false));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    votesListener().next(voteSnap({ maya }, true, true));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[1][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+    expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false, hasPendingWrites: true });
+    votesListener().next(voteSnap({}, true, false));
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('subscribeBet: a pending local write from the cache neither confirms the bet nor cancels the fresh read', async () => {
+    const onChange = jest.fn();
+    subscribeBet('abc123', onChange);
+    votesListener().next(voteSnap({}));
+    betListener().next(betSnap(JSON.parse(JSON.stringify(stored)), true));
+    betListener().next(betSnap({ ...stored, status: 'closed' }, true, true));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange.mock.calls[1][2]).toEqual({ fromCache: true, hasPendingWrites: true });
+    // Not confirmed: a later cache snapshot still counts.
+    betListener().next(betSnap({ ...stored, status: 'settled' }, true, false));
     expect(onChange).toHaveBeenCalledTimes(3);
-    expect(onChange.mock.calls[2][0].status).toBe('closed');
+    await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+    expect(runTransaction).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith({ id: 'abc123', ...stored }, undefined, { fromCache: false });
+  });
+
+  describe('a bet listener stuck on the cache reads the bet once in a transaction', () => {
+    const fresh = () => ({ ...stored, votes: [...stored.votes, { voterId: 'maya', name: 'Maya', optionId: 'a' }] });
+    // Opens the tally on the cached (stale) copy of the current stored doc;
+    // tests change `stored` afterwards to stand for the server's copy.
+    const start = () => {
+      const onChange = jest.fn();
+      const stop = subscribeBet('abc123', onChange);
+      // Live rules: picks in the bet doc's array. Once denied, no votes listener.
+      votesListener()?.error(denied());
+      const cached = JSON.parse(JSON.stringify(stored));
+      betListener().next(betSnap(cached, true));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith({ id: 'abc123', ...cached }, undefined, { fromCache: true });
+      return { onChange, stop };
+    };
+
+    test('the fresh read comes before useLiveBet gives up on a first-load cache miss', () => {
+      expect(STALE_BET_FRESH_READ_MS).toBe(3000);
+      expect(STALE_BET_FRESH_READ_MS).toBeLessThan(CACHE_MISS_GRACE_MS);
+    });
+
+    test('no server snapshot in time: one read-only transaction, then the fresh votes', async () => {
+      const { onChange } = start();
+      stored = fresh();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS - 1);
+      expect(runTransaction).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(tx.get).toHaveBeenCalledTimes(1);
+      expect(tx.get.mock.calls[0][0]).toEqual({ collection: 'bets', id: 'abc123' });
+      expect(tx.update).not.toHaveBeenCalled();
+      expect(tx.set).not.toHaveBeenCalled();
+      expect(tx.delete).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0].votes.map((vote) => vote.voterId)).toEqual(['jack', 'sam', 'maya']);
+      expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+      // Only once, and later listener snapshots still report as before.
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 5);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+      expect(onChange).toHaveBeenCalledTimes(3);
+      expect(onChange.mock.calls[2][0].status).toBe('closed');
+    });
+
+    test('a server snapshot before the timer: no read', async () => {
+      const { onChange } = start();
+      betListener().next(betSnap(fresh(), false));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 2);
+      expect(runTransaction).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledTimes(2);
+    });
+
+    test('a first snapshot from the server: no read', async () => {
+      subscribeBet('abc123', jest.fn());
+      betListener().next(betSnap(stored, false));
+      betListener().next(betSnap(stored, true));
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 2);
+      expect(runTransaction).not.toHaveBeenCalled();
+    });
+
+    test('unsubscribed before the timer: no read', async () => {
+      const { onChange, stop } = start();
+      stop();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 2);
+      expect(runTransaction).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    test('a server snapshot while the read is in flight wins: the read is dropped', async () => {
+      let land;
+      runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+        land = () => resolve(run(tx));
+      }));
+      const { onChange } = start();
+      stored = fresh();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      land();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0].status).toBe('closed');
+    });
+
+    test('unsubscribed while the read is in flight: no emit', async () => {
+      let land;
+      runTransaction.mockImplementationOnce((_db, run) => new Promise((resolve) => {
+        land = () => resolve(run(tx));
+      }));
+      const { onChange, stop } = start();
+      stored = fresh();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      stop();
+      land();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    test('a missing doc or a failed read: no emit, never gone', async () => {
+      const base = stored;
+      const missing = start();
+      stored = null;
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(missing.onChange).toHaveBeenCalledTimes(1);
+      missing.stop();
+
+      listeners = [];
+      stored = base;
+      const broken = start();
+      runTransaction.mockRejectedValueOnce(new Error('unavailable'));
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(2);
+      expect(broken.onChange).toHaveBeenCalledTimes(1);
+      expect(broken.onChange.mock.calls.some(([next]) => next === null)).toBe(false);
+    });
+
+    test('a bet the server confirmed earlier this session that the read finds missing is gone', async () => {
+      const first = jest.fn();
+      const stopFirst = subscribeBet('abc123', first);
+      votesListener()?.error(denied());
+      betListener().next(betSnap(stored, false));
+      stopFirst();
+      listeners = [];
+      const { onChange } = start();
+      stored = null;
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: false });
+    });
+
+    test('a bet the server confirmed earlier: a failed read is not gone', async () => {
+      const stopFirst = subscribeBet('abc123', jest.fn());
+      votesListener()?.error(denied());
+      betListener().next(betSnap(stored, false));
+      stopFirst();
+      listeners = [];
+      const { onChange } = start();
+      runTransaction.mockRejectedValueOnce(new Error('unavailable'));
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls.some(([next]) => next === null)).toBe(false);
+    });
+
+    test('a cache miss first: the read loads the bet as a server answer', async () => {
+      const onChange = jest.fn();
+      subscribeBet('abc123', onChange);
+      votesListener().next(voteSnap({}));
+      betListener().next(betSnap(null, true));
+      expect(onChange).toHaveBeenLastCalledWith(null, undefined, { fromCache: true });
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenLastCalledWith({ id: 'abc123', ...stored }, undefined, { fromCache: false });
+    });
+
+    test('identical data: the same object once more as fromCache false, and the next vote update too', async () => {
+      const onChange = jest.fn();
+      subscribeBet('abc123', onChange);
+      votesListener().next(voteSnap({}));
+      betListener().next(betSnap(JSON.parse(JSON.stringify(stored)), true));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      // Votes already confirmed by the server: no vote read.
+      expect(liteGetDocs).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0]).toBe(onChange.mock.calls[0][0]);
+      expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+      votesListener().next(voteSnap({ maya }));
+      expect(onChange).toHaveBeenCalledTimes(3);
+      expect(onChange.mock.calls[2][2]).toEqual({ fromCache: false });
+    });
+
+    test('after the fresh read, a stale cache snapshot is ignored', async () => {
+      const { onChange } = start();
+      const cached = JSON.parse(JSON.stringify(stored));
+      stored = fresh();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      betListener().next(betSnap(cached, true));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      betListener().next(betSnap({ ...stored, status: 'closed' }, false));
+      expect(onChange).toHaveBeenCalledTimes(3);
+      expect(onChange.mock.calls[2][0].status).toBe('closed');
+    });
+  });
+
+  describe('vote docs stuck on the cache are read once with Firestore Lite', () => {
+    const liteSnap = (docs) => ({
+      docs: Object.entries(docs).map(([id, data]) => ({ id, data: () => data })),
+    });
+    // A Lite Timestamp: voteFromDoc reads it with toMillis.
+    const at = (seconds) => ({ seconds, nanoseconds: 0, toMillis: () => seconds * 1000 });
+    const ids = (call) => call[0].votes.map((vote) => `${vote.voterId}:${vote.optionId}`);
+    // The bet confirmed by the server; the vote docs only from the cache,
+    // where Sam's switch to a is missing.
+    const start = () => {
+      const onChange = jest.fn();
+      const stop = subscribeBet('abc123', onChange);
+      betListener().next(betSnap(stored, false));
+      votesListener().next(voteSnap({ sam: { voterId: 'sam', name: 'Sam', optionId: 'b', at: { seconds: 1, nanoseconds: 0 } } }, true));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(ids(onChange.mock.calls[0])).toEqual(['jack:a', 'sam:b']);
+      return { onChange, stop };
+    };
+
+    test('no server vote snapshot in time: one Lite read, then the merged fresh picks', async () => {
+      liteGetDocs.mockResolvedValueOnce(liteSnap({
+        sam: { voterId: 'sam', name: 'Sam', optionId: 'a', at: at(5) },
+        maya: { voterId: 'maya', name: 'Maya', optionId: 'b', at: at(6) },
+      }));
+      const { onChange } = start();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS - 1);
+      expect(liteGetDocs).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(liteGetDocs).toHaveBeenCalledTimes(1);
+      expect(liteGetDocs.mock.calls[0][0]).toEqual({ lite: true, path: 'bets/abc123/votes' });
+      expect(liteGetFirestore).toHaveBeenCalledWith(app);
+      // The bet was already confirmed: only the votes are read.
+      expect(runTransaction).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(ids(onChange.mock.calls[1])).toEqual(['jack:a', 'sam:a', 'maya:b']);
+      expect(onChange.mock.calls[1][0].votes.find((vote) => vote.voterId === 'maya').at).toBe(6000);
+      expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+      // Confirmed now: a stale cache vote snapshot changes nothing.
+      votesListener().next(voteSnap({}, true));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 5);
+      expect(liteGetDocs).toHaveBeenCalledTimes(1);
+    });
+
+    test('both stuck: the bet and the votes are read, and reported once', async () => {
+      liteGetDocs.mockResolvedValueOnce(liteSnap({ maya: { voterId: 'maya', name: 'Maya', optionId: 'a', at: at(6) } }));
+      const onChange = jest.fn();
+      subscribeBet('abc123', onChange);
+      betListener().next(betSnap(JSON.parse(JSON.stringify(stored)), true));
+      votesListener().next(voteSnap({}, true));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      stored = { ...stored, status: 'closed' };
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(liteGetDocs).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange.mock.calls[1][0].status).toBe('closed');
+      expect(ids(onChange.mock.calls[1])).toEqual(['jack:a', 'sam:b', 'maya:a']);
+      expect(onChange.mock.calls[1][2]).toEqual({ fromCache: false });
+    });
+
+    test('a server vote snapshot before the timer: no Lite read', async () => {
+      const { onChange } = start();
+      votesListener().next(voteSnap({ sam: { voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 5, nanoseconds: 0 } } }, false));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS * 2);
+      expect(liteGetDocs).not.toHaveBeenCalled();
+    });
+
+    test('a denied Lite read: the rules have no per-voter docs, and the votes stay as they were', async () => {
+      liteGetDocs.mockRejectedValueOnce(denied());
+      const { onChange } = start();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(liteGetDocs).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      // Learned: the next subscribeBet opens no votes listener.
+      listeners = [];
+      subscribeBet('abc123', jest.fn());
+      expect(votesListener()).toBeUndefined();
+    });
+
+    test('a Lite read that fails otherwise changes no votes', async () => {
+      liteGetDocs.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 'unavailable' }));
+      const { onChange } = start();
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(liteGetDocs).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      // Still unconfirmed: a later cache snapshot still counts.
+      votesListener().next(voteSnap({}, true));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(ids(onChange.mock.calls[1])).toEqual(['jack:a', 'sam:b']);
+      listeners = [];
+      subscribeBet('abc123', jest.fn());
+      expect(votesListener()).toBeDefined();
+    });
+
+    test('vote docs already known to be denied: no Lite read', async () => {
+      const onChange = jest.fn();
+      subscribeBet('abc123', onChange);
+      votesListener().error(denied());
+      betListener().next(betSnap(JSON.parse(JSON.stringify(stored)), true));
+      await jest.advanceTimersByTimeAsync(STALE_BET_FRESH_READ_MS);
+      expect(runTransaction).toHaveBeenCalledTimes(1);
+      expect(liteGetDocs).not.toHaveBeenCalled();
+    });
   });
 
   test('subscribeMyBets merges each bet\'s vote docs and closes listeners with the list', () => {

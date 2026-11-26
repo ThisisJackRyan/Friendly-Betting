@@ -18,6 +18,15 @@ import { hydrateBet, subscribeBet } from './api';
 // away. If the server has not answered by then, or the listener errors before
 // anything loaded, one fresh listener is opened silently with its own grace
 // period; only a second miss or error counts as a load failure.
+//
+// Once the server has confirmed the bet (meta.fromCache false, which
+// subscribeBet's fresh read also reports), snapshots served from the cache
+// never replace it: a resubscribe's first snapshot comes from the cache and
+// can be older than what is on screen. The bet stays until the server answers
+// again. A cache snapshot with this device's own pending write
+// (meta.hasPendingWrites) is still shown, without counting as a server
+// confirmation. A bet only ever loaded from the cache still shows cache data,
+// so the app works offline.
 export const CACHE_MISS_GRACE_MS = 4000;
 
 export function useLiveBet(code) {
@@ -42,6 +51,8 @@ export function useLiveBet(code) {
     // The one silent retry before the first load, used up for this code.
     let retried = false;
     let gaveUp = false;
+    // The server confirmed the bet (or that it is gone) for this code.
+    let confirmed = false;
 
     setBet(undefined);
     setFailed(false);
@@ -82,9 +93,14 @@ export function useLiveBet(code) {
       const token = {};
       current = token;
       latest += 1;
+      // The last bet this listener reported. subscribeBet reports the same
+      // object again when only the server confirmed it.
+      let lastNext;
       const stop = subscribeBet(code, (next, err, meta) => {
         if (!active || current !== token) return;
-        if (!next && !err && meta?.fromCache) {
+        // This device's own write, not yet on the server.
+        const pending = Boolean(meta?.hasPendingWrites);
+        if (!next && !err && meta?.fromCache && !pending) {
           // Not in the local cache yet. Keep the loader up and give the
           // server a moment to answer before calling it a failure.
           if (loaded) return;
@@ -97,6 +113,12 @@ export function useLiveBet(code) {
           missed();
           return;
         }
+        // Cache data never replaces what the server confirmed, unless it
+        // carries a pending write.
+        if (meta?.fromCache && confirmed && !pending) return;
+        if (meta && !meta.fromCache) confirmed = true;
+        if (next === lastNext) return;
+        lastNext = next;
         if (!next) {
           // Gone on the server: an authoritative answer, like a loaded bet.
           // Drop any pending hydrate of the old bet.
