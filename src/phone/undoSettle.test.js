@@ -1,4 +1,4 @@
-import { canUndoSettle, settledAtMs, timestampMs, undoHoldMs, undoRemainingMs } from './undoSettle';
+import { canUndoSettle, settledAtMs, timestampMs, undoHoldMs, undoRemainingMs } from './undoSettle.js';
 
 const NOW = 1_800_000_000_000;
 const stamp = (ms) => ({ toMillis: () => ms });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { undoRemainingMs } from './undoSettle';
+import { undoRemainingMs } from './undoSettle.js';
 
 // The creator's Undo under a fresh reveal, with a seconds countdown. Gone
 // once the window runs out (undoSettle.js); the rules hold the same line.

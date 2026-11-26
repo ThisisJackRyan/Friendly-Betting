@@ -1,0 +1,45 @@
+name: CI
+
+# Lives at ci/github-workflows/ci.yml until someone with GitHub's workflow scope moves it to
+# .github/workflows/ci.yml (the token that wrote it lacks that scope).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Jest
+        run: CI=1 npx jest --watchAll=false
+      - name: App build (Vite)
+        run: npm run mobile:build
+
+  # macOS has a case-insensitive filesystem, so this catches imports that only
+  # resolve to the right file on Linux (e.g. './UndoSettle' vs undoSettle.js).
+  mobile-build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: App build (Vite)
+        run: npm run mobile:build
