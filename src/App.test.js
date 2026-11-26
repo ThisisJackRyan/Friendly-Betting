@@ -137,9 +137,10 @@ test('my bets is a tab with an empty state', () => {
     expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
     expect(screen.getByText(/no bets yet/i)).toBeInTheDocument();
     expect(screen.getByText(/start one and text the link/i)).toBeInTheDocument();
-    const logout = screen.getByRole('button', { name: 'Log out' });
-    expect(logout).toHaveClass('logout-link');
-    expect(logout).not.toHaveClass('cta');
+    // Account (Log out, Delete account) is behind the header's person icon.
+    expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
+    const header = document.querySelector('.app-header');
+    expect(within(header).getByRole('button', { name: 'Account' })).toHaveClass('account-button');
     expect(screen.getByRole('link', { name: /create a bet/i })).toHaveAttribute('href', '/new');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(nav).getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/new');

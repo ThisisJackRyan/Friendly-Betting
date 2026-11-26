@@ -145,3 +145,58 @@ test('the delete dialog on My bets stays on screen', async ({ page }) => {
   await expect(dialog).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('the Account sheet, Log out? and the Delete account page stay on screen, and Back returns to My bets', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await mockSignedIn(page);
+  await page.goto('/bets');
+  const icon = page.getByRole('button', { name: 'Account', exact: true });
+  await expectOnScreen(page, icon);
+  // Nothing under the bets any more.
+  await expect(page.getByRole('button', { name: 'Log out', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Delete account', exact: true })).toHaveCount(0);
+
+  // Measured once the slide in is over.
+  const settled = (locator) => locator.evaluate((node) => Promise.all(
+    node.ownerDocument.getAnimations().map((animation) => animation.finished.catch(() => {})),
+  ));
+  await icon.click();
+  const sheet = page.getByRole('dialog', { name: 'Account' });
+  await settled(sheet);
+  const logOut = sheet.getByRole('button', { name: 'Log out', exact: true });
+  const remove = sheet.getByRole('button', { name: 'Delete account', exact: true });
+  await expectOnScreen(page, remove);
+  expect((await logOut.boundingBox()).height).toBeGreaterThanOrEqual(56);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(icon).toBeFocused();
+
+  await icon.click();
+  await logOut.click();
+  const confirm = page.getByRole('dialog', { name: 'Log out?' });
+  await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await expectOnScreen(page, confirm.getByRole('button', { name: 'Cancel', exact: true }));
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(confirm).toHaveCount(0);
+
+  await remove.click();
+  await expect(page).toHaveURL(/\/account\/delete$/);
+  await expect(sheet).toHaveCount(0);
+  const red = page.getByRole('button', { name: 'Delete account', exact: true });
+  await settled(red);
+  await expectOnScreen(page, red);
+  await red.click();
+  await expect(page.getByRole('dialog', { name: 'Delete your account?' }).getByRole('button', { name: 'Keep it' })).toBeFocused();
+  await page.getByRole('button', { name: 'Keep it' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(/\/bets$/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the Delete account page sends a visitor who is not signed in to My bets', async ({ page }) => {
+  await page.goto('/account/delete');
+  await expect(page).toHaveURL(/\/bets$/);
+  await expect(page.getByRole('button', { name: 'Account', exact: true })).toHaveCount(0);
+});

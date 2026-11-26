@@ -59,6 +59,7 @@ const AppShell = ({ children }) => {
                   : 'The clubhouse'
           }
           createActive={createActive}
+          account={betsActive}
           onHomeClick={cancelCreateEntry}
           onActionClick={createActive ? cancelCreateEntry : onCreateClick}
         />
