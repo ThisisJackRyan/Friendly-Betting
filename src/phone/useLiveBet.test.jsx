@@ -114,6 +114,98 @@ test('a first-load cache miss keeps the loader, then the server hit shows the be
   expect(result.current.failed).toBe(false);
 });
 
+// subscribeBet's one fresh read (STALE_BET_FRESH_READ_MS, 3s) on a listener
+// stuck on the cache reports { fromCache: false }: an authoritative load.
+test('subscribeBet\'s fresh read after a stale cache loads the bet, with no retry or failure', () => {
+  jest.useFakeTimers();
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  act(() => jest.advanceTimersByTime(3000));
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  act(() => jest.advanceTimersByTime(CACHE_MISS_GRACE_MS * 3));
+  expect(feeds).toHaveLength(1);
+  expect(feeds[0].unsubscribe).not.toHaveBeenCalled();
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  expect(result.current.failed).toBe(false);
+  // A later cache-only miss never blanks it.
+  act(() => feeds[0].onChange(null, undefined, cacheMiss));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+});
+
+test('a stale cached bet replaced by the fresh read shows the fresh picks', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+  expect(result.current.failed).toBe(false);
+});
+
+test('a bet the server confirmed is not replaced by a resubscribe\'s stale cache snapshot', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  const shown = result.current.bet;
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  act(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(feeds).toHaveLength(2);
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+  act(() => feeds[1].onChange(null, undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+  act(() => feeds[1].onChange(v2({ votes: [1, 2, 3] }), undefined, { fromCache: false }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+  // Still confirmed: later cache data is ignored again.
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+});
+
+test('after the server confirmed the bet, this device\'s own pending write from the cache is shown; plain stale cache is not', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: false }));
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+  act(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(feeds).toHaveLength(2);
+  const shown = result.current.bet;
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true, hasPendingWrites: false }));
+  expect(result.current.bet).toBe(shown);
+  // A pick just cast here, while Watch is stalled (bet doc or vote docs).
+  act(() => feeds[1].onChange(v2({ votes: [1, 2, 3] }), undefined, { fromCache: true, hasPendingWrites: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+  // Still confirmed: plain stale cache stays ignored.
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2, 3] });
+});
+
+test('a pending write from the cache does not count as a server confirmation', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, { fromCache: true, hasPendingWrites: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1] });
+  // Never confirmed: later cache data still shows (offline).
+  act(() => feeds[0].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+});
+
+test('a bet confirmed by a same-object report (subscribeBet, no data change) is then kept over stale cache', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  const cached = v2({ votes: [1, 2] });
+  act(() => feeds[0].onChange(cached, undefined, { fromCache: true }));
+  const shown = result.current.bet;
+  act(() => feeds[0].onChange(cached, undefined, { fromCache: false }));
+  expect(result.current.bet).toBe(shown);
+  act(() => window.dispatchEvent(new Event('online')));
+  act(() => feeds[1].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toBe(shown);
+});
+
+test('a bet only ever loaded from the cache still shows newer cache data (offline)', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, { fromCache: true }));
+  act(() => window.dispatchEvent(new Event('online')));
+  act(() => feeds[1].onChange(v2({ votes: [1, 2] }), undefined, { fromCache: true }));
+  expect(result.current.bet).toMatchObject({ votes: [1, 2] });
+});
+
 test('a first-load cache miss then a server miss is gone, not a load failure', () => {
   jest.useFakeTimers();
   const { result } = renderHook(() => useLiveBet('aaa111'));
@@ -264,6 +356,14 @@ test('a cache miss after a loaded bet is ignored, and a server miss then shows g
   expect(result.current.bet).toMatchObject({ votes: [1] });
   expect(result.current.failed).toBe(false);
   act(() => feeds[0].onChange(null, undefined, serverMiss));
+  expect(result.current.bet).toBeNull();
+  expect(result.current.failed).toBe(false);
+});
+
+test('a miss from the cache with this device\'s own pending delete clears a server-confirmed bet', () => {
+  const { result } = renderHook(() => useLiveBet('aaa111'));
+  act(() => feeds[0].onChange(v2({ votes: [1] }), undefined, serverMiss));
+  act(() => feeds[0].onChange(null, undefined, { fromCache: true, hasPendingWrites: true }));
   expect(result.current.bet).toBeNull();
   expect(result.current.failed).toBe(false);
 });
