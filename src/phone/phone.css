@@ -2555,9 +2555,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (min-width: 768px) and (max-width: 1150px) {
-  /* Wide enough for the 19px wordmark with a 12px inset inside the nav padding, like the nav items. */
+  /* Wide enough for the 19px wordmark (with its 0.15em word space) to sit 12px inside the nav item edges on both sides. */
   .app-nav {
-    width: 200px;
+    width: 204px;
     padding: 24px 12px 18px;
   }
   .brand {
@@ -3876,6 +3876,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .vote-header .brand {
     font-size: 18px;
     gap: 6px;
+    word-spacing: 0.1em;
   }
   .header-brand .brand-symbol,
   .vote-header .brand-symbol {
@@ -3886,12 +3887,14 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .vote-header {
     padding-left: 16px;
     padding-right: 16px;
+    gap: 10px;
   }
 }
 
-/* 1151 to 1499px: the sidebar wordmark is wider than the brand link's padded box, so trim the link's right padding only (left stays aligned with the tabs). */
+/* 1151 to 1499px: the 20px wordmark nearly fills the 174px nav column, so give the brand link 5px on each side to split the spare room evenly. */
 @media (min-width: 1151px) and (max-width: 1499px) {
   .nav-brand {
-    padding-right: 4px;
+    padding-left: 5px;
+    padding-right: 5px;
   }
 }
