@@ -9,6 +9,8 @@ test.each([
   ['friendlybetting://b/abc123', '/b/abc123'],
   ['friendlybetting://new/over-under', '/new/over-under'],
   ['friendlybetting:///bets', '/bets'],
+  ['friendlybetting://account/delete', '/account/delete'],
+  ['https://www.friendly-bets.com/account/delete', '/account/delete'],
 ])('opens supported link %s inside the shared app', (url, path) => {
   expect(appPathFromUrl(url)).toBe(path);
 });
@@ -22,6 +24,7 @@ test.each([
   'javascript:alert(1)',
   'friendlybetting://b/a%2fb',
   'friendlybetting://unknown',
+  'friendlybetting://account/delete/now',
   'not a url',
 ])('rejects unrelated or unsafe links: %s', (url) => {
   expect(appPathFromUrl(url)).toBeNull();

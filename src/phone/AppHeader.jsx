@@ -4,11 +4,13 @@ import Link from '../platform/Link';
 import { FiList, FiPlus } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 import ResultsMenu from './ResultsMenu';
+import AccountMenu from './AccountMenu';
 
 export default function AppHeader({
   className = '',
   location,
   createActive = false,
+  account = false,
   onHomeClick,
   onActionClick,
 }) {
@@ -27,6 +29,7 @@ export default function AppHeader({
         {createActive ? 'My bets' : 'New bet'}
         {createActive ? <FiList aria-hidden="true" /> : <FiPlus aria-hidden="true" />}
       </Link>
+      {account && <AccountMenu />}
     </header>
   );
 }

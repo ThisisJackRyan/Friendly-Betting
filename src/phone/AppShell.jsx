@@ -185,6 +185,7 @@ const AppShell = ({ children }) => {
                   : undefined
           }
           createActive={createActive}
+          account={betsActive}
           onHomeClick={cancelCreateEntry}
           onActionClick={createActive ? cancelCreateEntry : onCreateClick}
         />

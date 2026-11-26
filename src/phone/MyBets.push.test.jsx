@@ -2,7 +2,10 @@ import { act, render, screen } from '@testing-library/react';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { Preferences } from '@capacitor/preferences';
+import userEvent from '@testing-library/user-event';
+import { within } from '@testing-library/react';
 import MyBets, { MyBetsList } from './MyBets';
+import AccountMenu from './AccountMenu';
 import { subscribeMyBets } from './api';
 
 jest.mock('next/navigation');
@@ -59,24 +62,61 @@ async function settle() {
   }
 }
 
-test('the Notifications row sits in the account area, above Delete account and an unchanged Log out', async () => {
-  render(<MyBetsList user={creator} />);
-  await settle();
-  const row = screen.getByText('Notifications').closest('.push-row');
-  const remove = screen.getByRole('button', { name: 'Delete account' });
-  const logout = screen.getByRole('button', { name: 'Log out' });
-  expect(row.nextElementSibling).toBe(remove);
-  expect(remove.nextElementSibling).toBe(logout);
-  expect(logout).toHaveClass('logout-link');
-  expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
-});
-
-test('flag off: no row and no plugin calls on My bets', async () => {
-  delete process.env.NEXT_PUBLIC_PUSH_ENABLED;
+test('My bets has no Notifications row of its own', async () => {
   render(<MyBetsList user={creator} />);
   await settle();
   expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
+  expect(FirebaseMessaging.checkPermissions).not.toHaveBeenCalled();
+});
+
+test('a member’s Account sheet: Notifications first, unchanged, then Log out, then Delete account', async () => {
+  mockIdentity.user = creator;
+  render(<AccountMenu />);
+  await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+  await settle();
+  const sheet = screen.getByRole('dialog', { name: 'Account' });
+  const row = within(sheet).getByText('Notifications').closest('.push-row');
+  expect(row.parentElement.firstElementChild).toBe(row);
+  expect(within(row).getByRole('switch', { name: 'Notifications' })).toBeInTheDocument();
+  const logout = within(sheet).getByRole('button', { name: 'Log out' });
+  expect(row.nextElementSibling).toBe(logout);
+  expect(logout.parentElement.nextElementSibling).toBe(within(sheet).getByRole('button', { name: 'Delete account' }));
+  expect(FirebaseMessaging.requestPermissions).not.toHaveBeenCalled();
+});
+
+test('an anonymous app user with push on gets the icon; their sheet is the title and Notifications only', async () => {
+  mockIdentity.user = anon;
+  render(<AccountMenu />);
+  await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+  await settle();
+  const sheet = screen.getByRole('dialog', { name: 'Account' });
+  expect(within(sheet).getByRole('heading', { name: 'Account' })).toBeInTheDocument();
+  expect(within(sheet).getByRole('switch', { name: 'Notifications' })).toBeInTheDocument();
+  expect(within(sheet).queryAllByRole('button')).toHaveLength(0);
+  expect(within(sheet).queryByText(/Signed in as/)).toBeNull();
+  expect(Preferences.get).toHaveBeenCalledWith({ key: 'fb.pushPref.anon-1' });
+});
+
+test('flag off: an anonymous app user gets no Account icon and no plugin calls', async () => {
+  delete process.env.NEXT_PUBLIC_PUSH_ENABLED;
+  mockIdentity.user = anon;
+  render(<AccountMenu />);
+  await settle();
+  expect(screen.queryByRole('button', { name: 'Account' })).not.toBeInTheDocument();
+  expect(FirebaseMessaging.checkPermissions).not.toHaveBeenCalled();
+  expect(Preferences.get).not.toHaveBeenCalled();
+});
+
+test('flag off: the sheet has no Notifications row and no plugin calls', async () => {
+  delete process.env.NEXT_PUBLIC_PUSH_ENABLED;
+  mockIdentity.user = creator;
+  render(<AccountMenu />);
+  await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+  await settle();
+  const sheet = screen.getByRole('dialog', { name: 'Account' });
+  expect(within(sheet).queryByText('Notifications')).not.toBeInTheDocument();
+  expect(within(sheet).getByRole('button', { name: 'Log out' })).toBeInTheDocument();
   expect(FirebaseMessaging.checkPermissions).not.toHaveBeenCalled();
   expect(Preferences.get).not.toHaveBeenCalled();
 });

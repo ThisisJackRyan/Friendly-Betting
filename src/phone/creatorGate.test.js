@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MyBets from './MyBets';
+import AccountMenu from './AccountMenu';
 import TallyScreen from './TallyScreen';
 import { settleBet, subscribeBet, subscribeMyBets } from './api';
 import { sendPhoneCode, signOutCreator, verifyPhoneCode } from './creatorAuth';
@@ -109,9 +110,7 @@ test('my bets skips the phone gate when a creator session exists', () => {
       jest.advanceTimersByTime(450);
     });
     expect(screen.getByRole('heading', { name: 'My bets' })).toBeInTheDocument();
-    const logout = screen.getByRole('button', { name: 'Log out' });
-    expect(logout).toHaveClass('logout-link');
-    expect(logout).not.toHaveClass('cta');
+    expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
     expect(subscribeMyBets).toHaveBeenCalledWith('creator-1', expect.any(Function));
   } finally {
     jest.useRealTimers();
@@ -217,7 +216,7 @@ test('a closed person check on the phone gate quietly puts the send button back'
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
-test('log out drops the creator session and the phone gate returns', async () => {
+test('log out (from the Account sheet) drops the creator session and the phone gate returns', async () => {
   mockIdentity.user = {
     uid: 'creator-1',
     phoneNumber: '+15551234567',
@@ -225,16 +224,19 @@ test('log out drops the creator session and the phone gate returns', async () =>
   };
   const view = render(
     <div className="phone">
+      <AccountMenu />
       <MyBets />
     </div>,
   );
-  const logout = await screen.findByRole('button', { name: 'Log out' });
-  expect(logout).toHaveClass('logout-link');
-  expect(logout).not.toHaveClass('cta');
+  expect(await screen.findByRole('heading', { name: 'My bets' })).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Phone' })).not.toBeInTheDocument();
 
-  await userEvent.click(logout);
+  await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Log out' }));
+  const confirm = screen.getByRole('dialog', { name: 'Log out?' });
+  await userEvent.click(within(confirm).getByRole('button', { name: 'Log out' }));
   expect(signOutCreator).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
   mockIdentity.user = {
     uid: 'anon-after',
@@ -243,19 +245,23 @@ test('log out drops the creator session and the phone gate returns', async () =>
   };
   view.rerender(
     <div className="phone">
+      <AccountMenu />
       <MyBets />
     </div>,
   );
 
   expect(screen.getByRole('heading', { name: 'Phone' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Send code' })).toBeInTheDocument();
+  // An anonymous web visitor: no Account icon.
+  expect(screen.queryByRole('button', { name: 'Account' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Log out' })).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'My bets' })).not.toBeInTheDocument();
 
   const css = fs.readFileSync(path.join(__dirname, 'phone.css'), 'utf8');
-  const rule = css.slice(css.indexOf('.logout-link'), css.indexOf('.logout-link') + 280);
+  const rule = css.slice(css.indexOf('.account-delete-row {'), css.indexOf('.account-delete-row {') + 400);
   expect(rule).toContain('color: var(--muted)');
   expect(rule).not.toContain('#007a45');
+  expect(rule).not.toContain('var(--danger)');
 });
 
 function renderTally() {

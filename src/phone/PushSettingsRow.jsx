@@ -12,7 +12,7 @@ import {
 } from './pushOptIn';
 import { PUSH_COPY } from './pushCopy';
 
-// The quiet Notifications row on My bets, above Log out (docs/PUSH.md).
+// The Notifications row in the Account sheet, above Log out (docs/PUSH.md).
 // Renders nothing, and calls no plugin, with push off or on the web.
 //
 // - Permission granted: the toggle registers (on) or unregisters (off).

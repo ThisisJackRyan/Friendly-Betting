@@ -110,3 +110,34 @@ test('a stale index that cannot walk back still reaches the tab', async () => {
   await tap('Home');
   await waitFor(() => expect(where()).toBe('/'), { timeout: 2000 });
 });
+
+describe('the Delete account page in the app', () => {
+  const { backToBets, cameFromBets, openDeleteAccountPage, __resetAccountNavForTests } = require('../src/phone/accountNav');
+  beforeEach(() => __resetAccountNavForTests());
+
+  test('Sign in again from My bets pops back, so My bets is one entry when the page opens again', async () => {
+    await start('/bets');
+    act(() => openDeleteAccountPage(router));
+    await settle('/account/delete', 1);
+    act(() => backToBets(router, cameFromBets()));
+    await settle('/bets', 0);
+    act(() => openDeleteAccountPage(router));
+    await settle('/account/delete', 1);
+  });
+
+  test('Sign in again from a deep link puts My bets in the page entry', async () => {
+    await start('/account/delete');
+    act(() => backToBets(router, cameFromBets()));
+    await settle('/bets', 0);
+    act(() => openDeleteAccountPage(router));
+    await settle('/account/delete', 1);
+  });
+
+  test('deleted, they land on Home as the first entry, with no My bets behind it', async () => {
+    await start('/bets');
+    act(() => openDeleteAccountPage(router));
+    await settle('/account/delete', 1);
+    act(() => router.replace('/'));
+    await settle('/', 0);
+  });
+});
