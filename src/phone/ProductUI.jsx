@@ -7,8 +7,7 @@ export function Brand({ className = '' }) {
     <span className={`brand ${className}`}>
       <svg className="brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <rect width="32" height="32" rx="10" fill="currentColor" />
-        <path d="M10 8h14v5h-9v3h7v5h-7v5h-5V8Z" fill="var(--brand-letter, #fff)" />
-        <circle cx="24" cy="25" r="3" fill="var(--brand-letter, #fff)" />
+        <path d="M9 7h14v5h-9v3h7v5h-7v5H9V7Z" fill="var(--brand-letter, #fff)" />
       </svg>
       <span>
         friendly<span className="brand-period">.</span>

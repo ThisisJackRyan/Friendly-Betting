@@ -49,8 +49,8 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   const text = drawn(calls);
   // The brand goes letter by letter, for its tight spacing.
   expect(text.slice(0, 9).join('')).toBe('friendly.');
-  // The symbol: a white tile, then the green F and its dot.
-  expect(calls.filter(([op]) => op === 'fill')).toEqual([['fill', '#ffffff'], ['fill', '#007a45'], ['fill', '#007a45']]);
+  // The symbol: a white tile, then the green F.
+  expect(calls.filter(([op]) => op === 'fill')).toEqual([['fill', '#ffffff'], ['fill', '#007a45']]);
   expect(text).toEqual(expect.arrayContaining(['Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'Stakes: $20', 'friendly-bets.com']));
   expect(doc.fonts.load).toHaveBeenCalledWith('800 40px Manrope');
   const headline = calls.find((call) => call[1] === 'Maya won.');
