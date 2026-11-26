@@ -197,7 +197,9 @@ describe('buildWinnerCard layout', () => {
     expect(card.lines.map((line) => line.text)).toEqual([
       'Chiefs cover -3?', 'Chiefs -3 won', 'Maya won.', 'The only one who called it. Time for', 'everyone else to pay up.', 'Stakes: $20',
     ]);
-    expect(card.brand).toMatchObject({ text: CARD_BRAND, period: '.' });
+    expect(card.brand).toMatchObject({ text: CARD_BRAND });
+    expect(card.brand).not.toHaveProperty('period');
+    expect(card.brand.spacing).toBeCloseTo(-1.12);
     expect(card.footer.text).toBe('friendly-bets.com');
     expect(card.rule).not.toBeNull();
     const ys = card.lines.map((line) => line.y);

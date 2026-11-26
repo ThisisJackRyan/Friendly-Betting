@@ -72,7 +72,7 @@ function renderHome() {
   );
 }
 
-test('opens the clubhouse with a primary creation action and shortcuts for each bet type', () => {
+test('renders Home with a primary creation action and shortcuts for each bet type', () => {
   renderHome();
   expect(screen.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /A little rivalry/ })).toBeInTheDocument();

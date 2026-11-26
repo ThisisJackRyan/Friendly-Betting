@@ -4,7 +4,7 @@ import EntitlementSync from '../src/phone/EntitlementSync';
 
 export const metadata = {
   title: 'Friendly Bets',
-  description: 'A little rivalry. A lot of good times. Make a friendly bet, text your friends, and settle the score.',
+  description: 'Start a bet with friends, text the link to the group, and they pick a side in one tap. No app or account needed.',
   applicationName: 'Friendly',
   manifest: '/manifest.json',
   icons: {

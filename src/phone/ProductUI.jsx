@@ -9,9 +9,7 @@ export function Brand({ className = '' }) {
         <rect width="32" height="32" rx="10" fill="currentColor" />
         <path d="M9 7h14v5h-9v2h6v5h-6v6H9V7Z" fill="var(--brand-letter, #fff)" />
       </svg>
-      <span>
-        friendly<span className="brand-period">.</span>
-      </span>
+      <span>Friendly Bets</span>
     </span>
   );
 }

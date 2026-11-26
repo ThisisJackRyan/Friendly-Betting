@@ -47,9 +47,7 @@ function drawBrand(ctx, brand) {
   ctx.font = brand.font;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = brand.color;
-  const end = drawSpaced(ctx, brand.text, brand.x + brand.symbol * 1.3, brand.y + brand.symbol / 2, brand.spacing);
-  ctx.fillStyle = brand.periodColor;
-  ctx.fillText(brand.period, end, brand.y + brand.symbol / 2);
+  drawSpaced(ctx, brand.text, brand.x + brand.symbol * 1.3, brand.y + brand.symbol / 2, brand.spacing);
   ctx.textBaseline = 'alphabetic';
 }
 
