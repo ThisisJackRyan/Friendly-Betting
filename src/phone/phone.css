@@ -1212,15 +1212,13 @@ button:focus-visible {
   letter-spacing: -1.4px;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 .brand-symbol {
   width: 33px;
   height: 33px;
   flex: none;
   color: var(--accent);
-}
-.brand-period {
-  color: #7ea26a;
 }
 .nav-brand {
   display: none;
@@ -2438,6 +2436,15 @@ html[data-arrive='home'] .landing-body.screen-fade {
     padding: 0 10px;
     margin-bottom: 45px;
   }
+  .nav-brand .brand {
+    font-size: 20px;
+    gap: 7px;
+    letter-spacing: -1px;
+  }
+  .nav-brand .brand-symbol {
+    width: 29px;
+    height: 29px;
+  }
   .app-nav .tab {
     flex: none;
     flex-direction: row;
@@ -2558,6 +2565,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .brand-symbol {
     width: 29px;
     height: 29px;
+  }
+  .nav-brand {
+    padding: 0;
   }
   .route-content > .phone > .landing-body,
   .route-content > .phone > .scroll {
