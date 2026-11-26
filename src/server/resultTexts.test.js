@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import { createHash } from 'crypto';
-import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
+import { CLOSED_TEXT_COPY } from '../phone/closedCopy';
 import { buildSettlement } from '../phone/settlement';
 import { fakeDb } from './testing/fakeDb';
 import {
@@ -35,9 +35,10 @@ function settle(bet, winnerId) {
 }
 
 const link = 'https://www.friendly-bets.com/t/abc123';
-const wonText = `Friendly Bets: "Who is late" is settled. Yes won, and you called it. See the final tally: ${link}`;
-const lostText = `Friendly Bets: "Who is late" is settled. Yes won. Better luck on the next one. See the final tally: ${link}`;
-const calledOffText = `Friendly Bets: "Who is late" was called off, so nobody won this one. ${link}`;
+// openBet has no stake, so no Stakes block. Winners and losers get the same text.
+const settledText = `Bet settled:\nWho is late\n\nWinning pick:\nYes\n\nSee who called it:\n${link}?s=settled`;
+const noWonText = settledText.replace('Winning pick:\nYes', 'Winning pick:\nNo');
+const calledOffText = `Bet called off:\nWho is late\n\nNobody won this one.\n\nSee the bet:\n${link}?s=off`;
 
 describe('saveVoterNumber', () => {
   test('stores the number privately under its hash with the server-side vote', async () => {
@@ -171,42 +172,42 @@ describe('deliverResultTexts', () => {
     expect(db.paths('privateResultTexts/')).toHaveLength(2);
   });
 
-  test('a settled bet texts each number once with its own outcome, then deletes it', async () => {
+  test('a settled bet texts each number once, winners and losers alike, then deletes it', async () => {
     const db = await seeded(settle(openBet(), 'a'));
     const sendSms = jest.fn(async () => {});
     expect(await deliverResultTexts({ db, code: 'abc123', sendSms })).toEqual({ sent: 2, failed: 0 });
     expect(sendSms).toHaveBeenCalledTimes(2);
-    expect(sendSms).toHaveBeenCalledWith('+12025550143', wonText);
-    expect(sendSms).toHaveBeenCalledWith('+12025550188', lostText);
+    expect(sendSms).toHaveBeenCalledWith('+12025550143', settledText);
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', settledText);
     expect(db.paths('privateResultTexts/')).toEqual([]);
   });
 
-  test('a voter who switched sides gets the outcome for their current pick', async () => {
+  test('a voter who switched sides still gets the settled text', async () => {
     const db = await seeded(openBet(), { sam: '2025550188' });
     expect(db.data(`${NUMBERS}/${sha('+12025550188')}`).optionId).toBe('b');
     const switched = openBet({ votes: [{ voterId: 'jack', optionId: 'a' }, { voterId: 'sam', optionId: 'a' }] });
     await db.doc('bets/abc123').set(settle(switched, 'a'));
     const sendSms = jest.fn(async () => {});
     await deliverResultTexts({ db, code: 'abc123', sendSms });
-    expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText);
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', settledText);
   });
 
-  test('without a settlement snapshot the current vote decides the outcome', async () => {
+  test('without a settlement snapshot the winning option names the side', async () => {
     const bet = openBet({ status: 'closed', winnerId: 'b' });
     const db = await seeded(bet);
     const sendSms = jest.fn(async () => {});
     await deliverResultTexts({ db, code: 'abc123', sendSms });
-    expect(sendSms).toHaveBeenCalledWith('+12025550143', lostText.replace('Yes won', 'No won'));
-    expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText.replace('Yes won', 'No won'));
+    expect(sendSms).toHaveBeenCalledWith('+12025550143', noWonText);
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', noWonText);
   });
 
-  test('without a settlement snapshot a vote doc decides the outcome over the array', async () => {
+  test('without a settlement snapshot a vote doc pick still gets the settled text', async () => {
     const bet = openBet({ status: 'closed', winnerId: 'a' });
     const db = await seeded(bet, { sam: '2025550188' });
     await db.doc('bets/abc123/votes/sam').set({ voterId: 'sam', name: 'Sam', optionId: 'a', at: { seconds: 6, nanoseconds: 0 } });
     const sendSms = jest.fn(async () => {});
     await deliverResultTexts({ db, code: 'abc123', sendSms });
-    expect(sendSms).toHaveBeenCalledWith('+12025550188', wonText);
+    expect(sendSms).toHaveBeenCalledWith('+12025550188', settledText);
   });
 
   test('running again, or concurrently, never sends a duplicate', async () => {
@@ -290,7 +291,7 @@ describe('deliverResultTexts', () => {
       // The second settle's own call, past its window, sends the new result.
       const later = await deliverResultTexts({ db, code: 'abc123', sendSms, now: () => clock + 40000, wait: jest.fn() });
       expect(later).toEqual({ sent: 2, failed: 0 });
-      expect(sendSms.mock.calls.map(([, body]) => body)).toContain(lostText.replace('Yes won', 'No won'));
+      expect(sendSms.mock.calls.map(([, body]) => body)).toContain(noWonText);
     });
 
     test('repeat calls for the same settle return at once while one run waits; only that run sends', async () => {
@@ -351,27 +352,66 @@ describe('deliverResultTexts', () => {
 describe('buildResultSms', () => {
   const settled = settle(openBet(), 'a');
 
-  test('fills the winner, loser and called-off templates exactly', () => {
-    expect(buildResultSms({ bet: settled, won: true, code: 'abc123' })).toBe(wonText);
-    expect(buildResultSms({ bet: settled, won: false, code: 'abc123' })).toBe(lostText);
+  test('fills the settled and called-off templates exactly, the same for winners and losers', () => {
+    expect(buildResultSms({ bet: settled, code: 'abc123' })).toBe(settledText);
+    expect(buildResultSms({ bet: settled, won: false, code: 'abc123' })).toBe(settledText);
     expect(buildResultSms({ bet: openBet(), calledOff: true, code: 'abc123' })).toBe(calledOffText);
   });
 
-  test('the templates are straight-quoted GSM-7 with no emoji', () => {
-    Object.values(RESULT_TEXT_COPY.sms).forEach((template) => {
-      expect(template).not.toMatch(/[‘-‟…]/);
+  test('settled with stakes, exactly', () => {
+    const bet = settle(openBet({ stake: '$20 pot' }), 'a');
+    expect(buildResultSms({ bet, code: 'abc123' })).toBe(
+      `Bet settled:\nWho is late\n\nWinning pick:\nYes\n\nStakes:\n$20 pot\n\nSee who called it:\n${link}?s=settled`,
+    );
+  });
+
+  test.each([
+    ['empty', ''],
+    ['whitespace-only', ' \n\t '],
+  ])('%s stakes drop the Stakes block, not the Bragging rights default', (_label, stake) => {
+    const bet = settle(openBet({ stake }), 'a');
+    expect(bet.settlement.stake).toBe('Bragging rights');
+    expect(buildResultSms({ bet, code: 'abc123' })).toBe(settledText);
+  });
+
+  test('a Bragging rights chip the creator picked stays', () => {
+    const bet = settle(openBet({ stake: 'Bragging rights' }), 'a');
+    expect(buildResultSms({ bet, code: 'abc123' })).toContain('\n\nStakes:\nBragging rights\n\n');
+  });
+
+  test('question, side and stakes are trimmed and collapsed; the link is alone on the last line', () => {
+    const bet = settle(openBet({
+      question: '  Who   is\nlate  ', stake: ' Lunch \n on Sam ',
+      options: [{ id: 'a', label: '  Sam   again ' }, { id: 'b', label: 'No' }],
+    }), 'a');
+    const body = buildResultSms({ bet, code: 'abc123', origin: 'https://example.com' });
+    expect(body).toBe('Bet settled:\nWho is late\n\nWinning pick:\nSam again\n\nStakes:\nLunch on Sam\n\nSee who called it:\nhttps://example.com/t/abc123?s=settled');
+    expect(body.endsWith('\n')).toBe(false);
+  });
+
+  test('the template lines are straight-quoted GSM-7 with no emoji', () => {
+    Object.values(CLOSED_TEXT_COPY).forEach((template) => {
+      expect(template).not.toMatch(/[‘-‟…·]/);
       expect(template).not.toMatch(/\p{Extended_Pictographic}/u);
       expect(toGsm7(template)).toBe(template);
     });
   });
 
-  test('sanitizes curly quotes, dashes, ellipses, odd spaces and emoji', () => {
-    expect(toGsm7('“Big” game — Sam’s call… 🏈 tonight  ')).toBe(
+  test('sanitizes curly quotes, dashes, ellipses, odd spaces and emoji in user text; the output is all GSM-7', () => {
+    expect(toGsm7('“Big” game — Sam’s call… 🏈 tonight  ')).toBe(
       '"Big" game - Sam\'s call... tonight',
     );
-    const bet = settle(openBet({ question: '‘Who’s late?’ 😂', options: [{ id: 'a', label: 'Me – again' }, { id: 'b', label: 'No' }] }), 'a');
-    expect(buildResultSms({ bet, won: true, code: 'abc123' })).toBe(
-      `Friendly Bets: "'Who's late?'" is settled. Me - again won, and you called it. See the final tally: ${link}`,
+    const bet = settle(openBet({
+      question: '‘Who’s late?’ 😂', stake: 'Café — “round”',
+      options: [{ id: 'a', label: 'Me – again' }, { id: 'b', label: 'No' }],
+    }), 'a');
+    const body = buildResultSms({ bet, code: 'abc123' });
+    expect(body).toBe(
+      `Bet settled:\n'Who's late?'\n\nWinning pick:\nMe - again\n\nStakes:\nCafé - "round"\n\nSee who called it:\n${link}?s=settled`,
+    );
+    expect(body.split('\n').map(toGsm7).join('\n')).toBe(body);
+    expect(buildResultSms({ bet, calledOff: true, code: 'abc123' })).toBe(
+      `Bet called off:\n'Who's late?'\n\nNobody won this one.\n\nSee the bet:\n${link}?s=off`,
     );
   });
 
@@ -380,31 +420,15 @@ describe('buildResultSms', () => {
     expect(toGsm7('Zoë á ç ő Łódź 中文')).toBe('Zoe a c o odz');
   });
 
-  test('long titles are cut with ... to fit one 160-septet segment', () => {
-    const bet = settle(openBet({ question: `Will ${'the very long title '.repeat(10)}end` }), 'a');
-    const body = buildResultSms({ bet, won: false, code: 'abc123' });
-    expect(gsm7Septets(body)).toBeLessThanOrEqual(160);
-    expect(gsm7Septets(body)).toBeGreaterThan(150);
-    expect(body).toMatch(/^Friendly Bets: "Will the very long.*\.\.\." is settled\. Yes won\./);
-    expect(body.endsWith(link)).toBe(true);
+  test('a long question goes out whole, as a multi-part text, never cut', () => {
+    const question = `Will ${'the very long title '.repeat(10)}end`;
+    const body = buildResultSms({ bet: settle(openBet({ question }), 'a'), code: 'abc123' });
+    expect(body).toContain(`\n${question}\n`);
+    expect(body).not.toContain('...');
+    expect(gsm7Septets(body)).toBeGreaterThan(160);
   });
 
   test('extension characters count as two septets', () => {
     expect(gsm7Septets('a{b}€')).toBe(8);
-    // 30 plain chars fit the title room; the same 30 as braces (60 septets) don't.
-    const plain = buildResultSms({ bet: settle(openBet({ question: 'x'.repeat(30) }), 'a'), won: true, code: 'abc123' });
-    const braces = buildResultSms({ bet: settle(openBet({ question: '{'.repeat(30) }), 'a'), won: true, code: 'abc123' });
-    expect(plain).toContain(`"${'x'.repeat(30)}"`);
-    expect(braces).toContain('..."');
-    expect(gsm7Septets(braces)).toBeLessThanOrEqual(160);
-  });
-
-  test('a side label too long for one segment is sent whole as multi-part', () => {
-    const side = 'S'.repeat(150);
-    const bet = settle(openBet({ question: 'Short', options: [{ id: 'a', label: side }, { id: 'b', label: 'No' }] }), 'a');
-    const body = buildResultSms({ bet, won: true, code: 'abc123' });
-    expect(body).toContain('"Short"');
-    expect(body).toContain(side);
-    expect(gsm7Septets(body)).toBeGreaterThan(160);
   });
 });

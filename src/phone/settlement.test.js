@@ -59,12 +59,61 @@ test('over-under outcomes keep the line, and prop option names are not mistaken 
   expect(prop.settlement.optionLabel).toBe('Alex');
 });
 
-test('settled sharing includes the result and deep link instead of a fresh invitation', () => {
-  expect(formatResultMessage(settled(), 'https://example.com/b/abc123')).toBe([
-    'FRIENDLY · Closed · Jack & Maya won the $20 pot',
-    'Will Jack break 90?', 'Winning pick: Yes', 'At stake: $20 pot',
-    'Bragging rights, secured.', 'The final word: https://example.com/b/abc123',
-  ].join('\n'));
+test('settled sharing is the settled text with the ?s=settled link alone on the last line', () => {
+  expect(formatResultMessage(settled(), 'https://example.com/b/abc123')).toBe(
+    'Bet settled:\nWill Jack break 90?\n\nWinning pick:\nYes\n\nStakes:\n$20 pot\n\nSee who called it:\nhttps://example.com/b/abc123?s=settled',
+  );
+});
+
+test.each([
+  ['empty', ''],
+  ['whitespace-only', '  \n\t '],
+  ['missing', undefined],
+])('a bet with %s stakes drops the Stakes block, not "Bragging rights"', (_label, stake) => {
+  const result = settled({ ...bet, stake });
+  expect(result.settlement.stake).toBe('Bragging rights');
+  expect(formatResultMessage(result, 'https://example.com/b/abc123')).toBe(
+    'Bet settled:\nWill Jack break 90?\n\nWinning pick:\nYes\n\nSee who called it:\nhttps://example.com/b/abc123?s=settled',
+  );
+});
+
+test('a creator who picked the Bragging rights chip keeps it as the stakes', () => {
+  expect(formatResultMessage(settled({ ...bet, stake: 'Bragging rights' }), 'u')).toContain('\n\nStakes:\nBragging rights\n\n');
+});
+
+test('question, side and stakes are trimmed with their whitespace collapsed; the side is as written', () => {
+  const messy = {
+    ...bet,
+    question: '  Will   Jack\nbreak\t90?  ',
+    stake: ' $20 \n pot ',
+    options: [{ id: 'yes', label: '  Jack   (obviously) ' }, { id: 'no', label: 'No' }],
+  };
+  expect(formatResultMessage(settled(messy), ' https://example.com/b/abc123 ')).toBe(
+    'Bet settled:\nWill Jack break 90?\n\nWinning pick:\nJack (obviously)\n\nStakes:\n$20 pot\n\nSee who called it:\nhttps://example.com/b/abc123?s=settled',
+  );
+});
+
+test('a called-off bet shares the called-off text with ?s=off', () => {
+  expect(formatResultMessage({ ...bet, status: 'closed', calledOff: true }, 'https://example.com/b/abc123')).toBe(
+    'Bet called off:\nWill Jack break 90?\n\nNobody won this one.\n\nSee the bet:\nhttps://example.com/b/abc123?s=off',
+  );
+});
+
+test('a closed bet with no readable result keeps the picks-closed line, now with Friendly Bets', () => {
+  expect(formatResultMessage({ ...bet, status: 'closed', winnerId: 'missing' }, 'https://example.com/b/abc123')).toBe(
+    'Friendly Bets · Picks are closed.\nWill Jack break 90?\nResult to come: https://example.com/b/abc123',
+  );
+});
+
+test('the settled and called-off texts have no old header, stats or trailing newline', () => {
+  for (const text of [
+    formatResultMessage(settled(), 'https://example.com/b/abc123'),
+    formatResultMessage({ ...bet, calledOff: true }, 'https://example.com/b/abc123'),
+  ]) {
+    expect(text).not.toMatch(/FRIENDLY|Closed|won the|Bragging rights, secured|The final word|\d+ (picks|votes)/);
+    expect(text.endsWith('\n')).toBe(false);
+    expect(text.split('\n').at(-1)).toMatch(/^https:\/\/example\.com\/b\/abc123\?s=(settled|off)$/);
+  }
 });
 
 test('legacy settled bets still render but do not create historical notification spam', () => {

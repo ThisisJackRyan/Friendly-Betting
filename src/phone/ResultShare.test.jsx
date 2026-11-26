@@ -26,7 +26,7 @@ const open = {
 };
 const settledBet = { ...open, status: 'closed', winnerId: 'a', settledAt: 1, settlement: buildSettlement(open, 'a') };
 const png = new Blob(['png'], { type: 'image/png' });
-const withText = { text: expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/) };
+const withText = { text: expect.stringMatching(/^Bet settled:\nChiefs cover -3\?\n\nWinning pick:\nChiefs -3\n/) };
 
 beforeEach(() => {
   shareMessage.mockClear();
@@ -169,7 +169,7 @@ test('while the image is on its way both buttons wait', async () => {
 test('Share the result still sends the text', async () => {
   render(<ResultShare bet={settledBet} code="abc123" />);
   await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
-  expect(shareMessage).toHaveBeenCalledWith(expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/));
+  expect(shareMessage).toHaveBeenCalledWith(expect.stringMatching(/^Bet settled:\nChiefs cover -3\?\n\nWinning pick:\nChiefs -3\n/));
   expect(shareImage).not.toHaveBeenCalled();
 });
 
@@ -195,7 +195,7 @@ describe('in the app', () => {
     await userEvent.click(imageButton());
     await screen.findByRole('status');
     expect(Filesystem.writeFile).toHaveBeenCalledWith({ path: 'friendly-result.png', data: btoa('png'), directory: 'CACHE' });
-    expect(Share.share).toHaveBeenCalledWith({ title: 'FRIENDLY', files: [CACHE_URI], dialogTitle: 'Share as image' });
+    expect(Share.share).toHaveBeenCalledWith({ title: 'Friendly Bets', files: [CACHE_URI], dialogTitle: 'Share as image' });
     expect(navigator.share || jest.fn()).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('The group chat gets the final word.');
   });
@@ -216,7 +216,7 @@ describe('in the app', () => {
     await screen.findByRole('status');
     expect(Share.share).toHaveBeenCalledTimes(2);
     expect(Share.share.mock.calls[1][0]).toEqual({
-      title: 'FRIENDLY', text: expect.stringMatching(/^FRIENDLY · Closed · Maya won\n/), dialogTitle: 'Text the crew',
+      title: 'Friendly Bets', text: expect.stringMatching(/^Bet settled:\nChiefs cover -3\?\n\nWinning pick:\nChiefs -3\n/), dialogTitle: 'Text the crew',
     });
     expect(shareMessage).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent('The group chat gets the final word.');

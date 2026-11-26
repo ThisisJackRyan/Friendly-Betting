@@ -68,3 +68,38 @@ test.each([
 test.each(['', '   ', null, undefined])('an empty question %p gives no lines', (question) => {
   expect(layoutQuestion(question, WIDTH).lines).toEqual([]);
 });
+
+describe('layoutWithSuffix (the settled hero)', () => {
+  const { layoutWithSuffix } = require('./previewCardLayout');
+  const HERO = { sizes: [92, 80, 70, 62], maxLines: 2 };
+
+  test('a short side stays whole on one line at the largest size', () => {
+    expect(layoutWithSuffix('Yes', ' won.', WIDTH, HERO)).toMatchObject({ fontSize: 92, lines: ['Yes won.'] });
+  });
+
+  test('a side that fits in two lines is balanced, uncut, with no orphan', () => {
+    const layout = layoutWithSuffix('Sam crosses the line before noon', ' won.', WIDTH, HERO);
+    expect(layout.lines.length).toBeLessThanOrEqual(2);
+    expect(layout.lines.join(' ')).toBe('Sam crosses the line before noon won.');
+    expect(isOrphan(layout.lines)).toBe(false);
+    expect(fits(layout)).toBe(true);
+  });
+
+  test('a side past two lines is cut with … before " won."', () => {
+    const side = 'Sam finishes strong, crosses the line before noon, and somehow still has the legs to dance at the after party';
+    const layout = layoutWithSuffix(side, ' won.', WIDTH, HERO);
+    expect(layout.fontSize).toBe(62);
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[1]).toMatch(/[^\s,]… won\.$/);
+    expect(isOrphan(layout.lines)).toBe(false);
+    expect(fits(layout)).toBe(true);
+    expect(side.startsWith(layout.lines.join(' ').replace(/… won\.$/, ''))).toBe(true);
+  });
+
+  test('one endless word is cut by letters', () => {
+    const layout = layoutWithSuffix('S'.repeat(200), ' won.', WIDTH, HERO);
+    expect(layout.lines.length).toBeLessThanOrEqual(2);
+    expect(layout.lines.at(-1)).toMatch(/S… won\.$/);
+    expect(fits(layout)).toBe(true);
+  });
+});

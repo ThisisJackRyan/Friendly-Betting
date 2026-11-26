@@ -4,10 +4,18 @@
 import { readFileSync } from 'node:fs';
 import { ImageResponse } from 'next/og';
 import Image from '../../app/b/[code]/opengraph-image';
-import { previewQuestion } from './betPreview';
+import { previewBet } from './betPreview';
+import { previewCard } from './previewCard';
 import { FALLBACK_CACHE, FONT_PATHS, QUESTION_CACHE } from './previewCard';
 
-jest.mock('./betPreview', () => ({ previewQuestion: jest.fn() }));
+jest.mock('./betPreview', () => ({ previewBet: jest.fn() }));
+// The route reads one preview ({ question, status, side }); these tests set
+// the question, and the closed-card tests below the status.
+const previewQuestion = {
+  mockResolvedValue: (question) => previewBet.mockResolvedValue({ question, status: 'open', side: '' }),
+  mockRejectedValue: (err) => previewBet.mockRejectedValue(err),
+  mockReset: () => previewBet.mockReset(),
+};
 // Wraps the real next/og ImageResponse so a test can make it throw once and
 // still check the headers next/og itself sets.
 jest.mock('next/og', () => {
@@ -63,5 +71,28 @@ test('Manrope 800 and 600 load from their static paths', async () => {
   fonts.forEach((font) => {
     expect(font.data.length).toBeGreaterThan(0);
     expect(Buffer.compare(font.data, readFileSync(FONT_PATHS[font.weight]))).toBe(0);
+  });
+});
+
+describe('closed cards', () => {
+  const QUESTION = 'Will Sam finish the marathon?';
+  const element = () => ImageResponse.mock.calls.at(-1)[0];
+
+  test.each([
+    ['settled', { status: 'settled', side: 'Yes' }],
+    ['calledOff', { status: 'calledOff', side: '' }],
+    ['closed', { status: 'closed', side: '' }],
+  ])('a %s bet renders its closed card with the minutes-long cache', async (_label, state) => {
+    previewBet.mockResolvedValue({ question: QUESTION, ...state });
+    const res = await render();
+    expect(JSON.stringify(element())).toBe(JSON.stringify(previewCard(QUESTION, state)));
+    expect(JSON.stringify(element())).not.toBe(JSON.stringify(previewCard(QUESTION)));
+    expect(res.headers.get('cache-control')).toBe(QUESTION_CACHE);
+  });
+
+  test('the card follows the bet, not the URL: an open bet is the open card whatever ?s= says', async () => {
+    previewBet.mockResolvedValue({ question: QUESTION, status: 'open', side: '' });
+    await Image({ params: Promise.resolve({ code: 'abc123' }), searchParams: Promise.resolve({ s: 'settled' }) });
+    expect(JSON.stringify(element())).toBe(JSON.stringify(previewCard(QUESTION)));
   });
 });

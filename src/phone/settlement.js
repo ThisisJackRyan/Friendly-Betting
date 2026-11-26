@@ -1,4 +1,5 @@
-import { isSettled } from './betStatus';
+import { isCalledOff, isSettled } from './betStatus';
+import { formatCalledOffText, formatSettledText } from './closedCopy';
 import { optionVoteLabel, questionOf } from './model';
 import { settledAtMs } from './undoSettle.js';
 
@@ -56,17 +57,34 @@ export function resultOneLiner(result) {
   return result.winners.length ? 'Bragging rights, secured.' : 'The plot twist wins this round.';
 }
 
+// The winning side's label as the creator wrote it: the snapshot's, or for
+// an older settle without one, the winning option's. '' when unknown.
+export function winningSide(bet) {
+  if (bet?.settlement?.optionLabel) return bet.settlement.optionLabel;
+  const option = (bet?.options || []).find((item) => item.id === bet?.winnerId);
+  return option ? optionVoteLabel(bet, option) : '';
+}
+
+// The stake to show in a result text: the snapshot's, unless the creator
+// set none. The snapshot fills an empty stake with "Bragging rights", so
+// "no stakes" is read from the bet itself (as the reveal does).
+export function sharedStake(bet, result) {
+  return String(bet?.stake || '').trim() ? result.stake : '';
+}
+
+// The text for Share the result. Called off and settled get their closed
+// templates (closedCopy.js); a closed bet with no readable result keeps the
+// short picks-closed line.
 export function formatResultMessage(bet, url) {
+  if (isCalledOff(bet)) return formatCalledOffText({ question: questionOf(bet), url });
   const result = settlementOf(bet);
-  if (!result) return `FRIENDLY · Picks are closed.\n${questionOf(bet)}\nResult to come: ${url}`;
-  return [
-    `FRIENDLY · Closed · ${resultHeadline(result)}`,
-    result.question,
-    `Winning pick: ${result.optionLabel}`,
-    `At stake: ${result.stake}`,
-    resultOneLiner(result),
-    `The final word: ${url}`,
-  ].join('\n');
+  if (!result) return `Friendly Bets · Picks are closed.\n${questionOf(bet)}\nResult to come: ${url}`;
+  return formatSettledText({
+    question: result.question,
+    side: result.optionLabel,
+    stake: sharedStake(bet, result),
+    url,
+  });
 }
 
 export function notificationFor(bet, voterId) {
