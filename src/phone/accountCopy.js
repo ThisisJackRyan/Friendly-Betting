@@ -11,7 +11,7 @@ export const ACCOUNT_COPY = {
   logOutBody: 'Sign back in with your number anytime.',
   logOutConfirm: 'Log out',
   logOutCancel: 'Cancel',
-  logOutError: 'Could not log out. Try again.',
+  logOutError: 'Couldn’t log out. Try again.',
   back: 'Back',
   pageTitle: 'Delete account',
   pageButton: 'Delete account',

@@ -188,7 +188,7 @@ describe('log out', () => {
     signOutCreator.mockRejectedValue(new Error('network'));
     render(<MyBetsList user={user} />);
     await act(() => logOut().catch(() => {}));
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not log out. Try again.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t log out. Try again.');
   });
 });
 
