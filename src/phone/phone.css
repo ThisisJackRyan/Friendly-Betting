@@ -1185,16 +1185,9 @@ button:focus-visible {
   display: none;
   text-decoration: none;
 }
-.header-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 12px;
-}
 .header-action {
   display: inline-flex;
+  margin-left: auto;
   gap: 14px;
   align-items: center;
   justify-content: center;
@@ -1697,27 +1690,6 @@ button:focus-visible {
   color: #6b7662;
   padding-top: 6px;
   max-width: 22ch;
-}
-.home-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 4px;
-  font-size: 10px;
-  color: var(--muted);
-}
-.home-footer > span,
-.home-footer > a {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.home-footer > a {
-  min-height: 36px;
-  text-decoration: none;
-  font-weight: 700;
-  color: var(--accent);
 }
 html[data-arrive='home'] .landing-body.screen-fade {
   animation: none;
@@ -2591,12 +2563,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .route-content > .phone > .scroll {
     padding: 28px;
   }
-  .header-note {
-    display: none;
-  }
-  .header-action {
-    margin-left: auto;
-  }
   .home-hero {
     grid-template-columns: 1fr;
   }
@@ -2667,7 +2633,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
     display: block;
   }
   .header-location,
-  .header-note,
   .header-action {
     display: none;
   }
@@ -2827,11 +2792,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
     max-width: none;
     font-size: 11px;
     padding-top: 5px;
-  }
-  .home-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
   }
   .nav-row {
     padding-top: calc(6px + env(safe-area-inset-top));
@@ -3215,13 +3175,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .result-notice-title { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 800; }
 .notice-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: auto; }
 .header-results:focus-visible, .result-inbox a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-@media (min-width: 768px) and (max-width: 1150px) {
-  .app-header .results-menu { margin-left: auto; }
-  .app-header .results-menu ~ .header-action { margin-left: 0; }
-}
-@media (max-width: 767px) {
-  .app-header .results-menu { margin-left: auto; }
-}
+.app-header .results-menu { margin-left: auto; }
+.app-header .results-menu ~ .header-action { margin-left: 0; }
 
 /* Who picked each side, under its bar. */
 .voter-list {
