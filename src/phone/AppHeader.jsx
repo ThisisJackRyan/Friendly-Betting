@@ -7,7 +7,7 @@ import ResultsMenu from './ResultsMenu';
 
 export default function AppHeader({
   className = '',
-  location = 'The clubhouse',
+  location,
   createActive = false,
   onHomeClick,
   onActionClick,
@@ -17,11 +17,7 @@ export default function AppHeader({
       <Link href="/" className="header-brand" aria-label="Friendly home" onClick={onHomeClick}>
         <Brand />
       </Link>
-      <span className="header-location">{location}</span>
-      <span className="header-note">
-        <span className="live-dot" />
-        Good friends. Friendly bets.
-      </span>
+      {location ? <span className="header-location">{location}</span> : null}
       <ResultsMenu />
       <Link
         className="header-action"
