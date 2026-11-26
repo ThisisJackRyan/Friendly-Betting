@@ -67,6 +67,18 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   expect(headline[4]).toMatch(/^800 100px Manrope, /);
 });
 
+test('the brand opens its word space by wordSpacing before Bets', async () => {
+  const { doc, calls } = fakeDoc({ fonts: { load: jest.fn(async () => []) } });
+  await renderWinnerCard(settledBet, null, doc);
+  const { brand } = buildWinnerCard(settledBet, { measure: (t) => Array.from(t).length * 20 });
+  const letters = calls.filter(([op]) => op === 'fillText').slice(0, 13);
+  const [, char, x] = letters[9];
+  expect(char).toBe('B');
+  const withoutWordSpacing = brand.x + brand.symbol * 1.3 + 9 * (20 + brand.spacing);
+  expect(brand.wordSpacing).toBeGreaterThan(0);
+  expect(x).toBeCloseTo(withoutWordSpacing + brand.wordSpacing);
+});
+
 test('still draws when the font fails to load, in the fallback fonts', async () => {
   const { doc, calls } = fakeDoc({ fonts: { load: jest.fn(async () => { throw new Error('offline'); }) } });
   const blob = await renderWinnerCard(settledBet, null, doc);

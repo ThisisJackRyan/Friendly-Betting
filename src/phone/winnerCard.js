@@ -183,6 +183,8 @@ export function buildWinnerCard(bet, { measure, viewerId = null }) {
     // The app's Brand (ProductUI.jsx): the F symbol, then "Friendly Bets".
     brand: {
       x: pad, y: pad, symbol: 66, text: CARD_BRAND, font: font(800, BRAND_SIZE), spacing: BRAND_SIZE * -0.02,
+      // Matches the app wordmark's 0.15em word space.
+      wordSpacing: BRAND_SIZE * 0.15,
       color: CARD_COLORS.ink, letter: CARD_COLORS.background,
     },
     footer: { text: new URL(PROD_ORIGIN).host.replace(/^www\./, ''), font: font(700, 32), color: CARD_COLORS.soft, x: pad, y: height - pad },
