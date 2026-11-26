@@ -11,7 +11,7 @@ import { settlementOf } from './settlement';
 export const CARD = { width: 1080, height: 1350, pad: 96 };
 export const CARD_COLORS = { background: '#007a45', ink: '#ffffff', soft: '#deecd5', rule: '#ffffff35', accentSoft: '#a6c9a9' };
 export const CARD_FONT_FAMILY = 'Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-export const CARD_BRAND = 'friendly';
+export const CARD_BRAND = 'Friendly Bets';
 export const CARD_FILENAME = 'friendly-result.png';
 
 const font = (weight, size) => `${weight} ${size}px ${CARD_FONT_FAMILY}`;
@@ -178,10 +178,10 @@ export function buildWinnerCard(bet, { measure, viewerId = null }) {
     height,
     background: CARD_COLORS.background,
     text,
-    // The app's Brand (ProductUI.jsx): the F symbol, then "friendly."
+    // The app's Brand (ProductUI.jsx): the F symbol, then "Friendly Bets".
     brand: {
-      x: pad, y: pad, symbol: 66, text: CARD_BRAND, period: '.', font: font(800, 56), spacing: -2.8,
-      color: CARD_COLORS.ink, letter: CARD_COLORS.background, periodColor: CARD_COLORS.accentSoft,
+      x: pad, y: pad, symbol: 66, text: CARD_BRAND, font: font(800, 56), spacing: -2.8,
+      color: CARD_COLORS.ink, letter: CARD_COLORS.background,
     },
     footer: { text: new URL(PROD_ORIGIN).host.replace(/^www\./, ''), font: font(700, 32), color: CARD_COLORS.soft, x: pad, y: height - pad },
     rule,
