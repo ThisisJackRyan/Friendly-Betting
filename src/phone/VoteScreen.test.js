@@ -310,7 +310,7 @@ test('the creator previews, confirms, and gets the committed result immediately'
   expect(screen.getByRole('link', { name: 'Start a bet' })).toHaveAttribute('href', '/new');
   expect(screen.queryByRole('button', { name: 'Close & settle' })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Share the result' }));
-  expect(shareMessage).toHaveBeenCalledWith(expect.stringContaining('Closed · Sam won the $20 pot'));
+  expect(shareMessage).toHaveBeenCalledWith(expect.stringContaining('Winning pick:\nNo\n\nStakes:\n$20 pot\n'));
   expect(shareMessage).toHaveBeenCalledWith(expect.not.stringContaining('Make your call'));
 });
 
@@ -369,7 +369,7 @@ test('result sharing falls back to copyable final-result text', async () => {
   renderAt('/b/abc123', <VoteScreen />);
   await userEvent.click(await screen.findByRole('button', { name: 'Share the result' }));
   expect(await screen.findByText('Copy this into the group chat.')).toBeInTheDocument();
-  expect(document.querySelector('.manual-message')).toHaveTextContent('Closed · Jack won the $20 pot');
+  expect(document.querySelector('.manual-message')).toHaveTextContent('Bet settled: Who is late Winning pick: Yes Stakes: $20 pot');
 });
 
 describe('text me who won', () => {

@@ -42,7 +42,7 @@ test('shares the PNG as a file when the browser can share files', async () => {
   shareSheet();
   await expect(shareImage(png())).resolves.toBe('shared');
   const [{ files, title }] = navigator.share.mock.calls[0];
-  expect(title).toBe('FRIENDLY');
+  expect(title).toBe('Friendly Bets');
   expect(files).toHaveLength(1);
   expect(files[0]).toBeInstanceOf(File);
   expect(files[0].name).toBe('friendly-result.png');
@@ -88,14 +88,14 @@ test('no share sheet at all downloads the PNG and frees the URL later', async ()
 });
 
 describe('in the app', () => {
-  const MESSAGE = 'FRIENDLY · Closed · Maya won';
+  const MESSAGE = 'Bet settled:\nChiefs cover -3?\n\nWinning pick:\nChiefs -3\n\nSee who called it:\nhttps://example.com/b/abc123?s=settled';
   beforeEach(() => isNativeApp.mockReturnValue(true));
 
   test('writes the PNG to the cache folder and shares its file:// URI through the native sheet', async () => {
     await expect(shareImage(new Blob(['png'], { type: 'image/png' }), { text: MESSAGE })).resolves.toBe('shared');
     expect(Filesystem.writeFile).toHaveBeenCalledWith({ path: 'friendly-result.png', data: btoa('png'), directory: 'CACHE' });
     expect(Share.share).toHaveBeenCalledTimes(1);
-    expect(Share.share).toHaveBeenCalledWith({ title: 'FRIENDLY', files: [CACHE_URI], dialogTitle: 'Share as image' });
+    expect(Share.share).toHaveBeenCalledWith({ title: 'Friendly Bets', files: [CACHE_URI], dialogTitle: 'Share as image' });
     expect(clicked).toEqual([]);
   });
 
@@ -120,7 +120,7 @@ describe('in the app', () => {
     setUp();
     await expect(shareImage(png(), { text: MESSAGE })).resolves.toBe('shared');
     const textShare = Share.share.mock.calls.at(-1)[0];
-    expect(textShare).toEqual({ title: 'FRIENDLY', text: MESSAGE, dialogTitle: 'Text the crew' });
+    expect(textShare).toEqual({ title: 'Friendly Bets', text: MESSAGE, dialogTitle: 'Text the crew' });
     expect(textShare.files).toBeUndefined();
     expect(clicked).toEqual([]);
   });

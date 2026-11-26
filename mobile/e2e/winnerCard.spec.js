@@ -168,7 +168,7 @@ test('in the app with no web view share sheet, Share as image hands the native s
   expect(bytes.subarray(1, 4).toString()).toBe('PNG');
   expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1080, 1350]);
   expect(shares).toEqual([{
-    title: 'FRIENDLY', files: ['file:///data/user/0/com.friendlybetting.app/cache/friendly-result.png'], dialogTitle: 'Share as image',
+    title: 'Friendly Bets', files: ['file:///data/user/0/com.friendlybetting.app/cache/friendly-result.png'], dialogTitle: 'Share as image',
   }]);
 });
 
@@ -182,7 +182,7 @@ test('in the app, a native image share that fails sends the result text instead'
   const shares = await page.evaluate(() => window.nativeShares);
   expect(shares).toHaveLength(2);
   expect(shares[1].files).toBeUndefined();
-  expect(shares[1].text).toMatch(/^FRIENDLY · Closed · .* won the \$20 pot/);
+  expect(shares[1].text).toMatch(/^Bet settled:\nWho takes the win\?\n\nWinning pick:\nBears\n\nStakes:\n\$20 pot\n\nSee who called it:\n\S+\/b\/crew123\?s=settled$/);
 });
 
 for (const [state, route] of ['called-off', 'called-off-flag'].flatMap((name) => [[name, '/t/crew123'], [name, '/b/crew123']])) {

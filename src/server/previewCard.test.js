@@ -54,3 +54,43 @@ test('the fallback card is the app icon and the name only', () => {
   expect(card.props.style).toMatchObject({ background: '#ffffff', color: '#1a1a1a' });
   expect(JSON.stringify(stylesOf(card)).toLowerCase()).not.toMatch(/#007a45|#a6c9a9|#deecd5|green/);
 });
+
+describe('closed cards', () => {
+  const leavesOf = (card) => nodesWithText(card).map((node) => ({ text: node.props.children, style: node.props.style }));
+
+  test('settled: "{side} won." in brand green, the question in ink under it at about half size, the name', () => {
+    const leaves = leavesOf(previewCard(QUESTION, { status: 'settled', side: 'Yes' }));
+    expect(leaves.map((leaf) => leaf.text)).toEqual(['Yes won.', 'Will Sam actually finish the marathon', 'before the end of next spring?', 'Friendly Bets']);
+    expect(leaves[0].style.color).toBe(BRAND_ACCENT);
+    expect(leaves[1].style.color).toBe('#1a1a1a');
+    expect(leaves[1].style.fontSize).toBe(Math.round(leaves[0].style.fontSize / 2));
+    expect(leaves[3].style.color).toBe('#1a1a1a');
+  });
+
+  test('called off and picks in: dark hero, the question, a muted note, and no green', () => {
+    for (const [status, hero, note] of [['calledOff', 'Called off.', 'Nobody won this one.'], ['closed', 'Picks are in.', 'Waiting on the result.']]) {
+      const card = previewCard(QUESTION, { status });
+      const leaves = leavesOf(card);
+      expect(leaves[0]).toMatchObject({ text: hero, style: { color: '#1a1a1a' } });
+      expect(leaves.at(-2)).toMatchObject({ text: note, style: { color: CARD_COLORS.muted } });
+      expect(leaves.at(-1).text).toBe('Friendly Bets');
+      expect(textOf(card)).toContain('marathon');
+      expect(JSON.stringify(stylesOf(card)).toLowerCase()).not.toMatch(/#007a45|green/);
+    }
+  });
+
+  test('a long side is cut with an ellipsis before " won." in at most two lines', () => {
+    const side = 'Sam finishes strong, crosses the line before noon, and somehow still has the legs to dance at the after party';
+    const hero = leavesOf(previewCard(QUESTION, { status: 'settled', side })).filter((leaf) => leaf.style.color === BRAND_ACCENT);
+    expect(hero.length).toBeLessThanOrEqual(2);
+    expect(hero.at(-1).text).toMatch(/… won\.$/);
+    expect(hero.map((leaf) => leaf.text).join(' ')).toMatch(/^Sam finishes strong/);
+  });
+
+  test('an open status, an unknown status, or settled with no side is the open card', () => {
+    const open = JSON.stringify(previewCard(QUESTION));
+    expect(JSON.stringify(previewCard(QUESTION, { status: 'open' }))).toBe(open);
+    expect(JSON.stringify(previewCard(QUESTION, { status: 'nope' }))).toBe(open);
+    expect(JSON.stringify(previewCard(QUESTION, { status: 'settled', side: '  ' }))).toBe(open);
+  });
+});

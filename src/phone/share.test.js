@@ -20,9 +20,9 @@ test('builds an iMessage body link on iPhone and a standard sms link elsewhere',
 test('native share uses the platform sheet and keeps winner/stake copy intact', async () => {
   isNativeApp.mockReturnValue(true);
   Share.share.mockResolvedValue({});
-  const text = 'FRIENDLY · Closed · Jack won the $20 pot';
+  const text = 'Bet settled:\nWill Jack break 90?\n\nWinning pick:\nYes\n\nStakes:\n$20 pot\n\nSee who called it:\nhttps://example.com/b/abc123?s=settled';
   await expect(shareMessage(text)).resolves.toBe('shared');
-  expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ text, title: 'FRIENDLY' }));
+  expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ text, title: 'Friendly Bets' }));
 });
 
 test('dismissing native sharing does not open an SMS composer', async () => {

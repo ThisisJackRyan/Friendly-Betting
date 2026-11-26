@@ -502,7 +502,7 @@ describe('a settle with no Undo (already saved, from a stale screen)', () => {
     await tap(screen.getByRole('button', { name: 'Share the result' }));
     expect(shareCalls).toHaveLength(1);
     expect(shareCalls[0].inClick).toBe(true);
-    expect(shareCalls[0].text).toContain('Winning pick: No');
+    expect(shareCalls[0].text).toContain('Winning pick:\nNo\n');
   });
 
   test('leaving the tally during the ad: no thank-you, no reveal, nothing left behind', async () => {

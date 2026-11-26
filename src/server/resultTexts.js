@@ -1,8 +1,9 @@
 import { createHash } from 'crypto';
-import { RESULT_TEXT_COPY } from '../phone/resultTextCopy';
+import { formatCalledOffText, formatSettledText } from '../phone/closedCopy';
 import { normalizeE164 } from '../phone/resultTexts';
 import { isCalledOff, isFinished, isSettled } from '../phone/betStatus';
-import { optionVoteLabel, questionOf } from '../phone/model';
+import { questionOf } from '../phone/model';
+import { winningSide } from '../phone/settlement';
 import { settledAtMs, undoHoldMs } from '../phone/undoSettle.js';
 import { PROD_ORIGIN } from '../platform/runtime';
 import { readBetWithVotes } from './betVotes';
@@ -10,7 +11,6 @@ import { readBetWithVotes } from './betVotes';
 // Numbers live outside the public bet doc, so they can never reach the tally,
 // share card, OG image, or any client read. Admin SDK only; rules deny all.
 export const DEFAULT_ORIGIN = PROD_ORIGIN;
-const SEGMENT = 160;
 export const MAX_NUMBERS_PER_BET = 50;
 
 const GSM7_BASIC = new Set(
@@ -66,43 +66,21 @@ export function gsm7Septets(text) {
   return count;
 }
 
-function fill(template, values) {
-  return template.replace(/\{(title|side|link)\}/g, (_match, key) => values[key]);
-}
-
-function winningSide(bet) {
-  if (bet.settlement?.optionLabel) return bet.settlement.optionLabel;
-  const option = (bet.options || []).find((item) => item.id === bet.winnerId);
-  return option ? optionVoteLabel(bet, option) : '';
-}
-
-export function buildResultSms({ bet, won, calledOff, code, origin = DEFAULT_ORIGIN }) {
-  const template = calledOff
-    ? RESULT_TEXT_COPY.sms.calledOff
-    : won
-      ? RESULT_TEXT_COPY.sms.won
-      : RESULT_TEXT_COPY.sms.lost;
-  const title = toGsm7(bet.settlement?.question || questionOf(bet));
-  const side = toGsm7(winningSide(bet));
-  const link = `${origin}/t/${code}`;
-  const full = fill(template, { title, side, link });
-  if (gsm7Septets(full) <= SEGMENT) return full;
-  // One segment is cheaper and arrives as one bubble, so shorten the title
-  // first. If a very long side label still won't fit with an empty title, send
-  // the full text as a multi-part SMS rather than drop the result.
-  for (let length = title.length - 1; length >= 0; length -= 1) {
-    const short = `${title.slice(0, length).trimEnd()}...`;
-    const body = fill(template, { title: short, side, link });
-    if (gsm7Septets(body) <= SEGMENT) return body;
-  }
-  return full;
-}
-
-export function voterWon(bet, voterId, storedOptionId) {
-  const recipient = (bet.settlement?.recipients || []).find((item) => item.voterId === voterId);
-  if (recipient) return Boolean(recipient.won);
-  const vote = (bet.votes || []).find((item) => item.voterId === voterId);
-  return (vote?.optionId || storedOptionId) === bet.winnerId;
+// One text for everyone on the bet, winners and losers alike: the settled
+// or called-off template (src/phone/closedCopy.js) with the question, side
+// and stakes made GSM-7. No shortening to one 160-septet segment: the
+// multi-line template and its link already fill most of one, and phones show
+// a multi-part text as one bubble, so the question goes out whole.
+export function buildResultSms({ bet, calledOff, code, origin = DEFAULT_ORIGIN }) {
+  const question = bet.settlement?.question || questionOf(bet);
+  const url = `${origin}/t/${code}`;
+  if (calledOff) return formatCalledOffText({ question, url, clean: toGsm7 });
+  // The snapshot fills an empty stake with "Bragging rights"; only a stake
+  // the creator set goes in the text.
+  const stake = String(bet.stake || '').trim() ? (bet.settlement?.stake || bet.stake) : '';
+  return formatSettledText({
+    question, side: winningSide(bet), stake, url, clean: toGsm7,
+  });
 }
 
 export async function saveVoterNumber({ db, code, uid, phone, now = Date.now() }) {
@@ -195,13 +173,7 @@ async function deliver({
       return current.data();
     });
     if (!claimed?.e164) continue;
-    const body = buildResultSms({
-      bet,
-      won: !calledOff && voterWon(bet, claimed.voterId, claimed.optionId),
-      calledOff,
-      code,
-      origin,
-    });
+    const body = buildResultSms({ bet, calledOff, code, origin });
     try {
       await sendSms(claimed.e164, body);
       sent += 1;

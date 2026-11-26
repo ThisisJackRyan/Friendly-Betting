@@ -23,7 +23,7 @@ async function shareSheet(text) {
   if (isNativeApp()) {
     try {
       const { Share } = await import('@capacitor/share');
-      await Share.share({ title: 'FRIENDLY', text, dialogTitle: 'Text the crew' });
+      await Share.share({ title: 'Friendly Bets', text, dialogTitle: 'Text the crew' });
       return 'shared';
     } catch (err) {
       if (/cancel|dismiss|abort/i.test(`${err?.code || ''} ${err?.message || ''}`)) return 'aborted';
