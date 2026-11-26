@@ -30,20 +30,23 @@ export default function DeleteAccountPage() {
   const user = useIdentity();
   const router = useRouter();
   const member = isCreator(user);
+  // Set once the page is on its way out after signing out (deleted, or Sign
+  // in again), so the redirect below does not race the page's own trip.
+  const leaving = useRef(false);
 
   useEffect(() => {
     document.title = `${ACCOUNT_COPY.pageTitle} · Friendly`;
   }, []);
 
   useEffect(() => {
-    if (user && !member) router.replace('/bets');
+    if (user && !member && !leaving.current) router.replace('/bets');
   }, [user, member, router]);
 
   if (!member) return <div className="phone delete-account-page" />;
-  return <DeleteAccountBody key={user.uid} uid={user.uid} />;
+  return <DeleteAccountBody key={user.uid} uid={user.uid} leaving={leaving} />;
 }
 
-function DeleteAccountBody({ uid }) {
+function DeleteAccountBody({ uid, leaving }) {
   const router = useRouter();
   const [fromMyBets] = useState(cameFromBets);
   const entitlementState = useEntitlementState();
@@ -87,6 +90,7 @@ function DeleteAccountBody({ uid }) {
     }
     // The account is gone on the server. Everything from here is best effort.
     await clearLocalAccountData(uid);
+    leaving.current = true;
     try {
       await signOutCreator();
     } catch {
@@ -95,16 +99,21 @@ function DeleteAccountBody({ uid }) {
     router.replace('/');
   };
 
-  // Signing out sends them to My bets (this page is members only), which
-  // shows phone sign-in and sends them back here once they are in.
+  // Signing out sends them to My bets, which shows phone sign-in and sends
+  // them back here once they are in. Pushed from My bets, this pops back to
+  // it, so My bets stays one entry once the page is pushed again.
   const reauth = async () => {
     markDeleteAccountResume(uid);
+    leaving.current = true;
     try {
       await signOutCreator();
     } catch {
+      leaving.current = false;
       clearDeleteAccountResume();
       if (alive.current) setAccount({ busy: false, error: DELETE_ACCOUNT_COPY.error, reauth: false });
+      return;
     }
+    backToBets(router, fromMyBets);
   };
 
   return (

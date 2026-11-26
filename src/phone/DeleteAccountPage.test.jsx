@@ -42,9 +42,9 @@ beforeEach(() => {
   clearLocalAccountData.mockClear();
   signOutCreator.mockReset();
   signOutCreator.mockResolvedValue();
-  navigation.push.mockClear();
-  navigation.replace.mockClear();
-  navigation.back.mockClear();
+  navigation.push.mockReset();
+  navigation.replace.mockReset();
+  navigation.back.mockReset();
   sessionStorage.clear();
   __resetAccountNavForTests();
   useEntitlementState.mockImplementation(jest.requireActual('./useEntitlement').useEntitlementState);
@@ -168,10 +168,12 @@ describe('the Delete your account? confirm', () => {
     expect(deleteAccount).not.toHaveBeenCalled();
   });
 
-  test('busy, then on success clears local data, signs out and goes home', async () => {
+  test('busy, then on success clears local data, signs out and goes home, not to My bets', async () => {
     let finish;
+    let signedOut;
     deleteAccount.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    render(<DeleteAccountPage />);
+    signOutCreator.mockImplementation(() => new Promise((resolve) => { signedOut = resolve; }));
+    const view = render(<DeleteAccountPage />);
     const dialog = await openDialog();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
     expect(within(dialog).getByRole('button', { name: 'Deleting…' })).toBeDisabled();
@@ -179,8 +181,16 @@ describe('the Delete your account? confirm', () => {
     await act(async () => finish());
     expect(clearLocalAccountData).toHaveBeenCalledWith('creator');
     expect(signOutCreator).toHaveBeenCalledTimes(1);
-    expect(navigation.replace).toHaveBeenCalledWith('/');
     expect(clearLocalAccountData.mock.invocationCallOrder[0]).toBeLessThan(signOutCreator.mock.invocationCallOrder[0]);
+    // Auth goes signed out before the trip home: the page must not send them to My bets.
+    mockIdentity.user = { uid: 'anon-after', isAnonymous: true, providerData: [] };
+    view.rerender(<DeleteAccountPage />);
+    expect(navigation.replace).not.toHaveBeenCalled();
+    await act(async () => signedOut());
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(navigation.back).not.toHaveBeenCalled();
   });
 
   test('a server error shows the error copy and keeps them signed in', async () => {
@@ -226,7 +236,53 @@ describe('the Delete your account? confirm', () => {
     expect(JSON.parse(sessionStorage.getItem(RESUME_KEY)).uid).toBe('creator');
     expect(signOutCreator).toHaveBeenCalledTimes(1);
     expect(clearLocalAccountData).not.toHaveBeenCalled();
+    // Opened by a deep link: My bets takes this entry's place.
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).toHaveBeenCalledWith('/bets');
+  });
+
+  test('Sign in again that fails to sign out keeps them on the page with the error', async () => {
+    deleteAccount.mockRejectedValue(Object.assign(new Error('x'), { code: 'requires-recent-login' }));
+    signOutCreator.mockRejectedValue(new Error('x'));
+    render(<DeleteAccountPage />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Sign in again' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Couldn’t delete your account. Try again.');
+    expect(sessionStorage.getItem(RESUME_KEY)).toBeNull();
     expect(navigation.replace).not.toHaveBeenCalled();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  test('Sign in again from My bets leaves My bets in history once', async () => {
+    // A web-style history: push adds, replace swaps the top, back pops.
+    const stack = ['/', '/bets'];
+    navigation.push.mockImplementation((path) => stack.push(path));
+    navigation.replace.mockImplementation((path) => { stack[stack.length - 1] = path; });
+    navigation.back.mockImplementation(() => stack.pop());
+    window.history.pushState({}, '', '/account/delete');
+    openDeleteAccountPage(navigation);
+    expect(stack).toEqual(['/', '/bets', '/account/delete']);
+
+    deleteAccount.mockRejectedValue(Object.assign(new Error('x'), { code: 'requires-recent-login' }));
+    let signedOut;
+    signOutCreator.mockImplementation(() => new Promise((resolve) => { signedOut = resolve; }));
+    const view = render(<DeleteAccountPage />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete account' }));
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Sign in again' }));
+    // Auth goes signed out before the sign out call returns.
+    mockIdentity.user = { uid: 'anon-after', isAnonymous: true, providerData: [] };
+    view.rerender(<DeleteAccountPage />);
+    await act(async () => signedOut());
+    expect(navigation.back).toHaveBeenCalledTimes(1);
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(stack).toEqual(['/', '/bets']);
+
+    // Signed back in, My bets sends them on to the page (MyBets.jsx).
+    openDeleteAccountPage(navigation);
+    expect(stack).toEqual(['/', '/bets', '/account/delete']);
+    expect(stack.filter((path) => path === '/bets')).toHaveLength(1);
   });
 
   test('back from sign-in, the confirm opens again, once', () => {
