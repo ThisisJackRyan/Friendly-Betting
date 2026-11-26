@@ -97,7 +97,7 @@ function SettlePicker({ bet, voterId, saving, onPick, onCancel }) {
       ))}
       {preview && <>
         <ResultCard bet={preview} voterId={voterId} preview />
-        <p className="field-hint">This locks the result. Friends get the final word when they open Friendly Bets where they made their pick.</p>
+        <p className="field-hint">This locks the result. Friends see who won next time they open the bet.</p>
         <button type="button" className="cta press" disabled={saving} onClick={() => onPick(picked)}>{saving ? 'Settling…' : 'Settle & notify'}</button>
       </>}
       <button type="button" className="text-link" disabled={saving} onClick={onCancel}>Not yet</button>

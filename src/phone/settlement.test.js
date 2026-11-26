@@ -101,8 +101,15 @@ test('a called-off bet shares the called-off text with ?s=off', () => {
 
 test('a closed bet with no readable result keeps the picks-closed line, now with Friendly Bets', () => {
   expect(formatResultMessage({ ...bet, status: 'closed', winnerId: 'missing' }, 'https://example.com/b/abc123')).toBe(
-    'Friendly Bets · Picks are closed.\nWill Jack break 90?\nResult to come: https://example.com/b/abc123',
+    'Friendly Bets: Picks are closed.\nWill Jack break 90?\nResult to come: https://example.com/b/abc123',
   );
+});
+
+test('the picks-closed text has a colon, no middle dot, and is GSM-7 only', () => {
+  const text = formatResultMessage({ ...bet, status: 'closed', winnerId: 'missing' }, 'https://example.com/b/abc123');
+  expect(text.startsWith('Friendly Bets: Picks are closed.\n')).toBe(true);
+  expect(text).not.toContain('\u00b7');
+  expect(text).toMatch(/^[A-Za-z0-9 \n.,:?!'"()\/@&%+=_\-]*$/);
 });
 
 test('the settled and called-off texts have no old header, stats or trailing newline', () => {

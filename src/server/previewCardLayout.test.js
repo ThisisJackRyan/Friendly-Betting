@@ -96,6 +96,17 @@ describe('layoutWithSuffix (the settled hero)', () => {
     expect(side.startsWith(layout.lines.join(' ').replace(/… won\.$/, ''))).toBe(true);
   });
 
+  test('the cut is one U+2026 at a word boundary, with no space or comma before it', () => {
+    const side = 'Sam finishes strong, crosses the line before noon, and somehow still has the legs to dance at the after party';
+    const text = layoutWithSuffix(side, ' won.', WIDTH, HERO).lines.join(' ');
+    expect(text).toBe('Sam finishes strong, crosses the line before noon, and… won.');
+    expect(text.match(/\u2026/g)).toHaveLength(1);
+    expect(text).not.toContain('...');
+    const head = text.replace(/\u2026 won\.$/, '');
+    expect(head).not.toMatch(/[\s.,;:!?-]$/);
+    expect(side.split(' ').slice(0, head.split(' ').length).join(' ')).toBe(head);
+  });
+
   test('one endless word is cut by letters', () => {
     const layout = layoutWithSuffix('S'.repeat(200), ' won.', WIDTH, HERO);
     expect(layout.lines.length).toBeLessThanOrEqual(2);

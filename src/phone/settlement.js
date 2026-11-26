@@ -78,7 +78,7 @@ export function sharedStake(bet, result) {
 export function formatResultMessage(bet, url) {
   if (isCalledOff(bet)) return formatCalledOffText({ question: questionOf(bet), url });
   const result = settlementOf(bet);
-  if (!result) return `Friendly Bets · Picks are closed.\n${questionOf(bet)}\nResult to come: ${url}`;
+  if (!result) return `Friendly Bets: Picks are closed.\n${questionOf(bet)}\nResult to come: ${url}`;
   return formatSettledText({
     question: result.question,
     side: result.optionLabel,
