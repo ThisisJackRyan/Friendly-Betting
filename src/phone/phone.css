@@ -1172,16 +1172,9 @@ button:focus-visible {
   display: none;
   text-decoration: none;
 }
-.header-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 12px;
-}
 .header-action {
   display: inline-flex;
+  margin-left: auto;
   gap: 14px;
   align-items: center;
   justify-content: center;
@@ -1204,8 +1197,10 @@ button:focus-visible {
   color: var(--ink);
   font-size: 27px;
   letter-spacing: -1.4px;
+  word-spacing: 0.15em;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 .brand-symbol {
   width: 33px;
@@ -1213,20 +1208,19 @@ button:focus-visible {
   flex: none;
   color: var(--accent);
 }
-.brand-period {
-  color: #7ea26a;
-}
 .nav-brand {
   display: none;
   text-decoration: none;
 }
 .app-nav {
+  position: relative;
   box-shadow: none;
   border-top: 1px solid var(--line);
   background: var(--raised);
   padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
 }
 .tab {
+  position: relative;
   gap: 4px;
   min-height: 58px;
   font-weight: 700;
@@ -1234,9 +1228,32 @@ button:focus-visible {
   border-radius: 12px;
 }
 .tab.active {
-  background: var(--wash);
   box-shadow: none;
   color: var(--accent);
+}
+/* Before the pill is placed (cold load, pre-hydration), the active tab keeps
+   its own highlight. It drops off as soon as the pill shows, so never two. */
+.app-nav:not(:has(.tab-pill[data-shown])) .tab.active {
+  background: var(--wash);
+}
+/* The active tab's pill. AppShell sets the vars from the active tab's box. */
+.tab-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pill-w, 0px);
+  height: var(--pill-h, 0px);
+  transform: translate(var(--pill-x, 0px), var(--pill-y, 0px));
+  border-radius: 12px;
+  background: var(--wash);
+  pointer-events: none;
+  visibility: hidden;
+}
+.tab-pill[data-shown] {
+  visibility: visible;
+}
+.tab-pill[data-ready] {
+  transition: transform 250ms ease-out;
 }
 .tab:hover {
   color: var(--accent);
@@ -1659,27 +1676,6 @@ button:focus-visible {
   color: #6b7662;
   padding-top: 6px;
   max-width: 22ch;
-}
-.home-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 4px;
-  font-size: 10px;
-  color: var(--muted);
-}
-.home-footer > span,
-.home-footer > a {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.home-footer > a {
-  min-height: 36px;
-  text-decoration: none;
-  font-weight: 700;
-  color: var(--accent);
 }
 html[data-arrive='home'] .landing-body.screen-fade {
   animation: none;
@@ -2424,6 +2420,15 @@ html[data-arrive='home'] .landing-body.screen-fade {
     padding: 0 10px;
     margin-bottom: 45px;
   }
+  .nav-brand .brand {
+    font-size: 20px;
+    gap: 7px;
+    letter-spacing: -0.02em;
+  }
+  .nav-brand .brand-symbol {
+    width: 29px;
+    height: 29px;
+  }
   .app-nav .tab {
     flex: none;
     flex-direction: row;
@@ -2432,6 +2437,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
     min-height: 48px;
     padding: 0 15px;
     font-size: 13px;
+    border-radius: 9px;
+  }
+  .tab-pill {
     border-radius: 9px;
   }
   .app-nav .tab svg {
@@ -2530,8 +2538,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (min-width: 768px) and (max-width: 1150px) {
+  /* Wide enough for the 19px wordmark (with its 0.15em word space) to sit 12px inside the nav item edges on both sides. */
   .app-nav {
-    width: 176px;
+    width: 204px;
     padding: 24px 12px 18px;
   }
   .brand {
@@ -2542,15 +2551,17 @@ html[data-arrive='home'] .landing-body.screen-fade {
     width: 29px;
     height: 29px;
   }
+  .nav-brand {
+    padding: 0 12px;
+  }
+  .nav-brand .brand {
+    font-size: 19px;
+    gap: 6px;
+    letter-spacing: -0.02em;
+  }
   .route-content > .phone > .landing-body,
   .route-content > .phone > .scroll {
     padding: 28px;
-  }
-  .header-note {
-    display: none;
-  }
-  .header-action {
-    margin-left: auto;
   }
   .home-hero {
     grid-template-columns: 1fr;
@@ -2622,7 +2633,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
     display: block;
   }
   .header-location,
-  .header-note,
   .header-action {
     display: none;
   }
@@ -2782,11 +2792,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
     max-width: none;
     font-size: 11px;
     padding-top: 5px;
-  }
-  .home-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
   }
   .nav-row {
     padding-top: calc(6px + env(safe-area-inset-top));
@@ -3014,6 +3019,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .choice,
   .secondary,
   .tab,
+  .tab-pill,
+  .tab-pill[data-ready],
   .field input,
   .field textarea {
     animation: none;
@@ -3168,13 +3175,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
 .result-notice-title { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 800; }
 .notice-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: auto; }
 .header-results:focus-visible, .result-inbox a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-@media (min-width: 768px) and (max-width: 1150px) {
-  .app-header .results-menu { margin-left: auto; }
-  .app-header .results-menu ~ .header-action { margin-left: 0; }
-}
-@media (max-width: 767px) {
-  .app-header .results-menu { margin-left: auto; }
-}
+.app-header .results-menu { margin-left: auto; }
+.app-header .results-menu ~ .header-action { margin-left: 0; }
 
 /* Who picked each side, under its bar. */
 .voter-list {
@@ -3994,3 +3996,52 @@ html[data-arrive='home'] .landing-body.screen-fade {
 }
 .delete-account-button:focus-visible,
 .delete-account-never:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* Phone headers: the Friendly Bets wordmark and the Results button share one row. */
+@media (max-width: 400px) {
+  .header-brand .brand,
+  .vote-header .brand {
+    font-size: 20px;
+    gap: 7px;
+    letter-spacing: -0.02em;
+  }
+  .header-brand .brand-symbol,
+  .vote-header .brand-symbol {
+    width: 29px;
+    height: 29px;
+  }
+  .app-header {
+    gap: 12px;
+  }
+  .header-results {
+    gap: 6px;
+    padding: 0 10px;
+  }
+}
+@media (max-width: 359px) {
+  .header-brand .brand,
+  .vote-header .brand {
+    font-size: 18px;
+    gap: 6px;
+    word-spacing: 0.1em;
+  }
+  .header-brand .brand-symbol,
+  .vote-header .brand-symbol {
+    width: 26px;
+    height: 26px;
+  }
+  .app-header,
+  .vote-header {
+    padding-left: 16px;
+    padding-right: 16px;
+    gap: 10px;
+  }
+}
+
+/* 1151 to 1499px: the 20px wordmark nearly fills the 174px nav column, so give the brand link 5px on each side to split the spare room evenly. */
+@media (min-width: 1151px) and (max-width: 1499px) {
+  .nav-brand {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+}

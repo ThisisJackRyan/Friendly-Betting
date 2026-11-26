@@ -3,13 +3,11 @@
 import { useEffect, useRef } from 'react';
 import Link from '../platform/Link';
 import {
-  FiArrowRight,
   FiArrowUpRight,
   FiBarChart2,
   FiCheckCircle,
   FiGrid,
   FiLink,
-  FiMessageCircle,
   FiPlus,
   FiTrendingUp,
 } from 'react-icons/fi';
@@ -149,16 +147,6 @@ const Landing = ({ quiet = false }) => {
           ))}
         </div>
       </section>
-      <footer className="home-footer">
-        <span>
-          <FiMessageCircle aria-hidden="true" />
-          Made for your group chat.
-        </span>
-        <Link href="/bets">
-          Back for more? View your bets
-          <FiArrowRight aria-hidden="true" />
-        </Link>
-      </footer>
     </div>
   );
 

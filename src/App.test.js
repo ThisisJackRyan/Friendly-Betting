@@ -72,7 +72,7 @@ function renderHome() {
   );
 }
 
-test('opens the clubhouse with a primary creation action and shortcuts for each bet type', () => {
+test('renders Home with a primary creation action and shortcuts for each bet type', () => {
   renderHome();
   expect(screen.getByRole('heading', { name: 'Good times. Better stakes.' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /A little rivalry/ })).toBeInTheDocument();
@@ -91,6 +91,13 @@ test('opens the clubhouse with a primary creation action and shortcuts for each 
     '/new/prop',
   );
   expect(screen.getByText('Example bet')).toBeInTheDocument();
+  // No eyebrows or filler lines on Home (CLAUDE.md UI copy rules).
+  expect(screen.queryByText(/Back for more/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Made for your group chat/)).not.toBeInTheDocument();
+  expect(document.querySelector('.home-footer')).not.toBeInTheDocument();
+  expect(screen.queryByText('The clubhouse')).not.toBeInTheDocument();
+  expect(document.querySelector('.app-header .header-location')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Good friends\. Friendly bets\./)).not.toBeInTheDocument();
   expect(screen.queryByText(/group chat has spoken/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/weekend plans/i)).not.toBeInTheDocument();
   expect(document.querySelector('.example-ticket .ticket-top')).not.toBeInTheDocument();

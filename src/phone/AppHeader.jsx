@@ -8,7 +8,7 @@ import AccountMenu, { useAccountIcon } from './AccountMenu';
 
 export default function AppHeader({
   className = '',
-  location = 'The clubhouse',
+  location,
   createActive = false,
   account = false,
   onHomeClick,
@@ -18,14 +18,10 @@ export default function AppHeader({
   const accountIcon = useAccountIcon().show && account;
   return (
     <header className={`app-header ${className}`}>
-      <Link href="/" className="header-brand" aria-label="Friendly home" onClick={onHomeClick}>
+      <Link href="/" className="header-brand" aria-label="Friendly Bets home" onClick={onHomeClick}>
         <Brand />
       </Link>
-      <span className="header-location">{location}</span>
-      <span className="header-note">
-        <span className="live-dot" />
-        Good friends. Friendly bets.
-      </span>
+      {location ? <span className="header-location">{location}</span> : null}
       <ResultsMenu compact={accountIcon} />
       <Link
         className="header-action"

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ResultsMenu from './ResultsMenu';
+import ResultsMenu, { unreadBadge } from './ResultsMenu';
 import AppHeader from './AppHeader';
 import { subscribeBet } from './api';
 import { useIdentity } from './identity';
@@ -15,6 +15,13 @@ jest.mock('./identity', () => ({ useIdentity: jest.fn() }));
 
 const root = path.join(__dirname, '..', '..');
 const source = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('unreadBadge caps the visible count at 9+', () => {
+  expect(unreadBadge(1)).toBe('1 new');
+  expect(unreadBadge(9)).toBe('9 new');
+  expect(unreadBadge(10)).toBe('9+ new');
+  expect(unreadBadge(25)).toBe('9+ new');
+});
 
 let uid;
 let publish;

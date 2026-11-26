@@ -18,6 +18,8 @@ export const bellLabel = (count) => {
   return count >= 10 ? 'Results, 9 or more new' : `Results, ${count} new`;
 };
 
+export const unreadBadge = (count) => `${count > 9 ? '9+' : count} new`;
+
 // The Results inbox, opened from a header button. It sits in the header row
 // instead of floating, so it never covers the screen's own buttons.
 function ResultInbox({ uid, compact }) {
@@ -100,7 +102,7 @@ function ResultInbox({ uid, compact }) {
         )}
         <FiBell aria-hidden="true" />
         Results
-        {unread.length > 0 && <span>{unread.length} new</span>}
+        {unread.length > 0 && <span>{unreadBadge(unread.length)}</span>}
       </button>
       {open && (
         <section

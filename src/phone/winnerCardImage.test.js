@@ -49,7 +49,8 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   expect(calls[0]).toEqual(['fillRect', 0, 0, 1080, 1350]);
   const text = drawn(calls);
   // The brand goes letter by letter, for its tight spacing.
-  expect(text.slice(0, 9).join('')).toBe('friendly.');
+  expect(text.slice(0, 13).join('')).toBe('Friendly Bets');
+  expect(text[13]).not.toBe('.');
   // The symbol: a white tile, then the green F.
   expect(calls.filter(([op]) => op === 'fill')).toEqual([['fill', '#ffffff'], ['fill', '#007a45']]);
   // The F matches app/icon.svg's, point for point, and has no dot (no arc).
@@ -64,6 +65,18 @@ test('draws the card at 1080x1350 and returns a PNG blob', async () => {
   expect(doc.fonts.load).toHaveBeenCalledWith('800 40px Manrope');
   const headline = calls.find((call) => call[1] === 'Maya won.');
   expect(headline[4]).toMatch(/^800 100px Manrope, /);
+});
+
+test('the brand opens its word space by wordSpacing before Bets', async () => {
+  const { doc, calls } = fakeDoc({ fonts: { load: jest.fn(async () => []) } });
+  await renderWinnerCard(settledBet, null, doc);
+  const { brand } = buildWinnerCard(settledBet, { measure: (t) => Array.from(t).length * 20 });
+  const letters = calls.filter(([op]) => op === 'fillText').slice(0, 13);
+  const [, char, x] = letters[9];
+  expect(char).toBe('B');
+  const withoutWordSpacing = brand.x + brand.symbol * 1.3 + 9 * (20 + brand.spacing);
+  expect(brand.wordSpacing).toBeGreaterThan(0);
+  expect(x).toBeCloseTo(withoutWordSpacing + brand.wordSpacing);
 });
 
 test('still draws when the font fails to load, in the fallback fonts', async () => {
@@ -114,7 +127,7 @@ test('drawWinnerCard draws the rule only when there is one', () => {
   };
   const card = {
     width: 10, height: 10, background: '#000', lines: [], rule: null,
-    brand: { text: 'f', period: '.', font: 'x', color: '#fff', letter: '#000', periodColor: '#fff', x: 0, y: 0, symbol: 32, spacing: 1 },
+    brand: { text: 'f', font: 'x', color: '#fff', letter: '#000', x: 0, y: 0, symbol: 32, spacing: 1 },
     footer: { text: 'f', font: 'x', color: '#fff', x: 0, y: 0 },
   };
   drawWinnerCard(ctx, card);
@@ -140,7 +153,7 @@ test('a right-to-left line is set rtl from the right edge; left-to-right lines s
       { text: hebrew, x: 96, y: 400, font: 'x', color: '#fff' },
       { text: 'Stakes: $20', x: 96, y: 500, font: 'x', color: '#fff' },
     ],
-    brand: { text: 'f', period: '.', font: 'x', color: '#fff', letter: '#000', periodColor: '#fff', x: 0, y: 0, symbol: 32, spacing: 1 },
+    brand: { text: 'f', font: 'x', color: '#fff', letter: '#000', x: 0, y: 0, symbol: 32, spacing: 1 },
     footer: { text: 'friendly-bets.com', font: 'x', color: '#fff', x: 96, y: 1254 },
   };
   drawWinnerCard(ctx, card);
