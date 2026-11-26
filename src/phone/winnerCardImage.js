@@ -36,12 +36,9 @@ function drawSymbol(ctx, { x, y, symbol: size, color, letter }) {
   ctx.fill();
   ctx.fillStyle = letter;
   ctx.beginPath();
-  [[10, 8], [24, 8], [24, 13], [15, 13], [15, 16], [22, 16], [22, 21], [15, 21], [15, 26], [10, 26]]
+  [[9, 7], [23, 7], [23, 12], [14, 12], [14, 14], [20, 14], [20, 19], [14, 19], [14, 25], [9, 25]]
     .forEach(([ux, uy], index) => ctx[index ? 'lineTo' : 'moveTo'](...at(ux, uy)));
   ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(...at(24, 25), 3 * unit, 0, Math.PI * 2);
   ctx.fill();
 }
 

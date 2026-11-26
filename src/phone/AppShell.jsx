@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from '../platform/Link';
 import { usePathname, useRouter } from '../platform/navigation';
-import { FiArrowUpRight, FiHome, FiList, FiPlus, FiMessageCircle } from 'react-icons/fi';
+import { FiHome, FiList, FiPlus } from 'react-icons/fi';
 import { Brand } from './ProductUI';
 import { useCreateChrome } from './createChrome';
 import { SLIDE_MS } from './createMotion';
@@ -123,21 +123,6 @@ const AppShell = ({ children }) => {
           <FiPlus size={22} aria-hidden="true" />
           <span>Create</span>
         </Link>
-        <div className="nav-bottom">
-          <div className="nav-note">
-            <FiMessageCircle size={24} aria-hidden="true" />
-            <strong>Better with your people.</strong>
-            <p>
-              One link. A few friends.
-              <br />A story worth settling.
-            </p>
-            <Link href="/#how-it-works" onClick={cancelCreateEntry}>
-              How it works
-              <FiArrowUpRight aria-hidden="true" />
-            </Link>
-          </div>
-          <span className="nav-footnote">A little rivalry goes a long way.</span>
-        </div>
       </nav>
     </div>
   );

@@ -1220,9 +1220,6 @@ button:focus-visible {
   display: none;
   text-decoration: none;
 }
-.nav-bottom {
-  display: none;
-}
 .app-nav {
   box-shadow: none;
   border-top: 1px solid var(--line);
@@ -1318,22 +1315,11 @@ button:focus-visible {
   margin: 0 auto;
   padding: 36px;
 }
-.home-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
 .home-heading h1 {
   font-size: 27px;
   font-weight: 800;
   letter-spacing: -1px;
   line-height: 1.3;
-}
-.home-heading-note {
-  font-size: 11px;
-  color: var(--muted);
-  padding-bottom: 4px;
 }
 .home-hero {
   display: grid;
@@ -1548,10 +1534,6 @@ button:focus-visible {
   color: #5f6582;
 }
 .section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
   margin-bottom: 20px;
 }
 .section-heading h2,
@@ -1561,11 +1543,6 @@ button:focus-visible {
   letter-spacing: -0.7px;
   line-height: 1.4;
   margin-top: 5px;
-}
-.section-heading > span {
-  font-size: 11px;
-  color: var(--muted);
-  padding-bottom: 5px;
 }
 .starter-grid {
   display: grid;
@@ -2460,47 +2437,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .app-nav .tab svg {
     width: 18px;
   }
-  .nav-bottom {
-    display: block;
-    margin-top: auto;
-    padding-top: 32px;
-  }
-  .nav-note {
-    background: #f1f4e9;
-    border: 1px solid #e8eddf;
-    border-radius: 13px;
-    padding: 18px 15px;
-    color: #536d43;
-  }
-  .nav-note strong {
-    display: block;
-    margin: 13px 0 8px;
-    font-size: 11px;
-    line-height: 1.6;
-  }
-  .nav-note p {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.8;
-    color: #5f6d52;
-  }
-  .nav-note a {
-    min-height: 34px;
-    margin-top: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 10px;
-    font-weight: 800;
-    text-decoration: none;
-  }
-  .nav-footnote {
-    display: block;
-    margin: 20px 0 0;
-    color: #65725b;
-    font-size: 8px;
-    text-align: center;
-  }
   .app-shell .route-content > .create-flow,
   .app-shell .route-content > .tally-screen {
     max-width: 720px;
@@ -2610,9 +2546,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .route-content > .phone > .scroll {
     padding: 28px;
   }
-  .header-note,
-  .home-heading-note,
-  .section-heading > span {
+  .header-note {
     display: none;
   }
   .header-action {
@@ -2715,9 +2649,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
     font-size: 23px;
     letter-spacing: -0.8px;
   }
-  .home-heading-note {
-    display: none;
-  }
   .home-hero {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -2791,9 +2722,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
   .section-heading {
     margin-bottom: 16px;
-  }
-  .section-heading > span {
-    display: none;
   }
   .section-heading h2,
   .how-heading h2 {
@@ -3049,9 +2977,6 @@ html[data-arrive='home'] .landing-body.screen-fade {
   }
 }
 @media (max-height: 700px) and (min-width: 768px) {
-  .nav-note {
-    display: none;
-  }
   .app-shell .route-content > .create-flow,
   .app-shell .route-content > .tally-screen {
     margin-top: 18px;
