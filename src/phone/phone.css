@@ -1237,12 +1237,14 @@ button:focus-visible {
   display: none;
 }
 .app-nav {
+  position: relative;
   box-shadow: none;
   border-top: 1px solid var(--line);
   background: var(--raised);
   padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
 }
 .tab {
+  position: relative;
   gap: 4px;
   min-height: 58px;
   font-weight: 700;
@@ -1250,9 +1252,27 @@ button:focus-visible {
   border-radius: 12px;
 }
 .tab.active {
-  background: var(--wash);
   box-shadow: none;
   color: var(--accent);
+}
+/* The active tab's pill. AppShell sets the vars from the active tab's box. */
+.tab-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pill-w, 0px);
+  height: var(--pill-h, 0px);
+  transform: translate(var(--pill-x, 0px), var(--pill-y, 0px));
+  border-radius: 12px;
+  background: var(--wash);
+  pointer-events: none;
+  visibility: hidden;
+}
+.tab-pill[data-shown] {
+  visibility: visible;
+}
+.tab-pill[data-ready] {
+  transition: transform 250ms ease-out;
 }
 .tab:hover {
   color: var(--accent);
@@ -2474,6 +2494,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
     font-size: 13px;
     border-radius: 9px;
   }
+  .tab-pill {
+    border-radius: 9px;
+  }
   .app-nav .tab svg {
     width: 18px;
   }
@@ -3106,6 +3129,8 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .choice,
   .secondary,
   .tab,
+  .tab-pill,
+  .tab-pill[data-ready],
   .field input,
   .field textarea {
     animation: none;
