@@ -3,7 +3,7 @@ import { optionVoteLabel, questionOf } from '../phone/model';
 import { PUSH_NOTIFICATION_COPY } from '../phone/pushCopy';
 import { PUSH_CHANNEL_ID, pushEnabled } from '../phone/pushConfig';
 import { settlementOf } from '../phone/settlement';
-import { settledAtMs, undoHoldMs } from '../phone/undoSettle';
+import { settledAtMs, undoHoldMs } from '../phone/undoSettle.js';
 import { cleanName, voteAtMs } from '../phone/votes';
 import { readBetWithVotes } from './betVotes';
 import { validCode } from './http';
