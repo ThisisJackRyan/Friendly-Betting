@@ -1197,6 +1197,7 @@ button:focus-visible {
   color: var(--ink);
   font-size: 27px;
   letter-spacing: -1.4px;
+  word-spacing: 0.15em;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;

@@ -200,6 +200,7 @@ describe('buildWinnerCard layout', () => {
     expect(card.brand).toMatchObject({ text: CARD_BRAND });
     expect(card.brand).not.toHaveProperty('period');
     expect(card.brand.spacing).toBeCloseTo(-1.12);
+    expect(card.brand.wordSpacing).toBeCloseTo(8.4);
     expect(card.footer.text).toBe('friendly-bets.com');
     expect(card.rule).not.toBeNull();
     const ys = card.lines.map((line) => line.y);

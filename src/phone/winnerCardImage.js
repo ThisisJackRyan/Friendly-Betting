@@ -16,11 +16,12 @@ async function fontsReady(doc) {
 }
 
 // Draws `text` a letter at a time, `spacing` apart; returns where it ended.
-function drawSpaced(ctx, text, x, y, spacing) {
+function drawSpaced(ctx, text, x, y, spacing, wordSpacing = 0) {
   let left = x;
   Array.from(text).forEach((char) => {
     ctx.fillText(char, left, y);
     left += ctx.measureText(char).width + spacing;
+    if (char === ' ') left += wordSpacing;
   });
   return left;
 }
@@ -47,7 +48,7 @@ function drawBrand(ctx, brand) {
   ctx.font = brand.font;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = brand.color;
-  drawSpaced(ctx, brand.text, brand.x + brand.symbol * 1.3, brand.y + brand.symbol / 2, brand.spacing);
+  drawSpaced(ctx, brand.text, brand.x + brand.symbol * 1.3, brand.y + brand.symbol / 2, brand.spacing, brand.wordSpacing);
   ctx.textBaseline = 'alphabetic';
 }
 
