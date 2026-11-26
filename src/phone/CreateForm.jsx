@@ -707,7 +707,7 @@ const CreateForm = () => {
             busy={phone.busy}
             check={stepNumber === step ? <PersonCheck containerRef={phone.containerRef} /> : null}
           />
-          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
+          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} detail={phone.errorDetail} /> : null}
         </>
       );
       cta = <SendButton busy={phone.busy} ready={phone.readyPhone} onSend={onSendCode} />;
@@ -728,7 +728,7 @@ const CreateForm = () => {
             busy={phone.busy}
             error={stepNumber === step ? phone.error : ''}
           />
-          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} /> : null}
+          {stepNumber === step ? <PhoneAlert error={phone.error} code={phone.errorCode} detail={phone.errorDetail} /> : null}
         </>
       );
       cta = (
