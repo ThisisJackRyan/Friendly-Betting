@@ -2570,8 +2570,9 @@ html[data-arrive='home'] .landing-body.screen-fade {
     padding: 0;
   }
   .nav-brand .brand {
+    font-size: 19px;
     gap: 6px;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.02em;
   }
   .route-content > .phone > .landing-body,
   .route-content > .phone > .scroll {
@@ -3883,5 +3884,12 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .vote-header {
     padding-left: 16px;
     padding-right: 16px;
+  }
+}
+
+/* 1151 to 1499px: the sidebar wordmark is wider than the brand link's padded box, so trim the link's right padding only (left stays aligned with the tabs). */
+@media (min-width: 1151px) and (max-width: 1499px) {
+  .nav-brand {
+    padding-right: 4px;
   }
 }
