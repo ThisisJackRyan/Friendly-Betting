@@ -3853,7 +3853,7 @@ html[data-arrive='home'] .landing-body.screen-fade {
   .app-header .account-button { margin-left: auto; }
   .app-header .results-menu ~ .account-button { margin-left: 0; }
 }
-/* Bell-only Results: at 400px and under, with the Account icon in the header,
+/* Bell-only Results: at 449px and under, with the Account icon in the header,
    Results is a 44px bell with the unread count in a pill on its corner. The
    word and the "N new" text stay in the button, hidden here; its aria-label
    names it. */
